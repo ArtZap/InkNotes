@@ -856,6 +856,7 @@ private fun CreateNotebookDialog(onDismiss: () -> Unit, onCreate: (String, PageB
     var cover by remember { mutableStateOf(Notebook.COVERS.random()) }
     var art by remember { mutableStateOf(CoverArt.entries.random()) }
     var plastic by remember { mutableStateOf(PlasticKind.entries.random()) }
+    var more by remember { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Новая тетрадь") },
@@ -867,18 +868,30 @@ private fun CreateNotebookDialog(onDismiss: () -> Unit, onCreate: (String, PageB
                     label = { Text("Название") },
                     singleLine = true,
                 )
-                PaperSizeChoices(format, landscape, onFormat = { format = it }, onLandscape = { landscape = it })
-                Text("Фон страниц")
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    // Photo backgrounds are set from inside the notebook ("Фон").
-                    for (t in PaperKind.entries - PaperKind.PHOTO) {
-                        PaperPreview(kind = t, dark = darkUi, color = null, photo = null, selected = t == template, lines = lines, aspect = PageSize(format, landscape).let { it.widthMm / it.heightMm }, onClick = { template = t })
-                    }
-                }
-                if (template != PaperKind.BLANK) LinesSlider(lines, onChange = { lines = it })
-                Text("Обложка")
+                Text("Цвет тетради")
                 CoverChoices(cover) { cover = it }
                 CoverArtChoices(cover, art, plastic, { art = it }, { plastic = it })
+                // Paper, format and ruling: most notebooks keep the defaults, so they wait behind a button.
+                TextButton(onClick = { more = !more }, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 0.dp)) {
+                    Text(if (more) "Скрыть дополнительные настройки ▴" else "Дополнительные настройки ▾")
+                }
+                if (!more) {
+                    Text(
+                        "${format.title}, ${if (landscape) "альбомная" else "книжная"} · ${template.title}",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 13.sp,
+                    )
+                } else {
+                    PaperSizeChoices(format, landscape, onFormat = { format = it }, onLandscape = { landscape = it })
+                    Text("Фон страниц")
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        // Photo backgrounds are set from inside the notebook ("Фон").
+                        for (t in PaperKind.entries - PaperKind.PHOTO) {
+                            PaperPreview(kind = t, dark = darkUi, color = null, photo = null, selected = t == template, lines = lines, aspect = PageSize(format, landscape).let { it.widthMm / it.heightMm }, onClick = { template = t })
+                        }
+                    }
+                    if (template != PaperKind.BLANK) LinesSlider(lines, onChange = { lines = it })
+                }
             }
         },
         confirmButton = {

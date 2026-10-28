@@ -465,7 +465,13 @@ class EditorController(
 
     // ----------------------------------------------------------------- tools
 
+    /** The pen button stands for the pen kinds and the fountain pen: the one chosen last. */
+    var penIsFountain by mutableStateOf(tool == Tool.FOUNTAIN)
+        private set
+
     fun selectTool(t: Tool) {
+        if (t == Tool.PEN) penIsFountain = false
+        if (t == Tool.FOUNTAIN) penIsFountain = true
         if (t == Tool.PEN || t == Tool.FOUNTAIN || t == Tool.HIGHLIGHTER || t == Tool.NEON || t == Tool.SPOILER) lastInkTool = t
         tool = t
         pickingColor = false

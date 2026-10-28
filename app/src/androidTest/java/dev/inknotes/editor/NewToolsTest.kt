@@ -82,14 +82,14 @@ class NewToolsTest {
         val hinge = Stamps.place(stamp("Шарнир"), 700f, 400f, Stamps.SIZE, Color.BLACK, 2.8f)
         doc.edit(strokes = force.strokes + hinge.strokes, fills = force.fills + hinge.fills)
         view.tool = Tool.PEN
-        // On the shaft of the force: first just the shaft, then the stamp it is part of, not the hinge.
-        tap(300f, 380f)
-        assertEquals(1, selectionCount)
+        // On the shaft of the force: first the whole stamp (not the hinge), then just the shaft.
         tap(300f, 380f)
         assertEquals(force.strokes.size + force.fills.size, selectionCount)
-        // Once more: back to the one line.
         tap(300f, 380f)
         assertEquals(1, selectionCount)
+        // Once more: the whole stamp again.
+        tap(300f, 380f)
+        assertEquals(force.strokes.size + force.fills.size, selectionCount)
         // Empty paper lets go.
         tap(500f, 900f)
         assertEquals(0, selectionCount)
@@ -101,19 +101,20 @@ class NewToolsTest {
         doc.edit(strokes = table + line(100f, 1100f, 400f))
         view.tool = Tool.PEN
         val b = PageEdits.bounds(table[0])!!
-        // One line of the table, then the whole table on a second tap.
-        tap(b.centerX(), b.centerY())
-        assertEquals(1, selectionCount)
+        // The whole table, then one line of it on a second tap.
         tap(b.centerX(), b.centerY())
         assertEquals(table.size, selectionCount)
         save("tap-table.png")
-        // A third tap on another line narrows the selection to that line.
+        tap(b.centerX(), b.centerY())
+        assertEquals(1, selectionCount)
+        // Another line of the table, not selected: the table again.
         val other = PageEdits.bounds(table[table.size - 1])!!
         tap(other.centerX(), other.centerY())
-        assertEquals(1, selectionCount)
-        // Another line of the table outside the selection's frame: it alone.
+        assertEquals(table.size, selectionCount)
+        // Let go, then a line far off: just it.
         tap(500f, 900f)
-        tap(b.centerX(), b.centerY())
+        assertEquals(0, selectionCount)
+        tap(250f, 1100f)
         assertEquals(1, selectionCount)
     }
 
@@ -289,12 +290,12 @@ class NewToolsTest {
         assertEquals(1, selectionCount)
         // The pen moves a selection with the lasso (with a pen tool it writes).
         view.tool = Tool.LASSO
-        // The top corner dragged up and right.
-        trace(listOf(500f to 400f, 560f to 300f))
+        // The top corner dragged up and right (to no angle near a multiple of 15°).
+        trace(listOf(500f to 400f, 555f to 335f))
         val pts = Magnet.polyline(doc.strokes[0])!!
         assertEquals(8, pts.size)
-        assertEquals(560f, pts[2], 1f)
-        assertEquals(300f, pts[3], 1f)
+        assertEquals(555f, pts[2], 1f)
+        assertEquals(335f, pts[3], 1f)
         assertEquals(300f, pts[0], 0.5f)
         // The closed corner moves both its ends.
         trace(listOf(300f to 700f, 250f to 750f))
@@ -302,6 +303,88 @@ class NewToolsTest {
         assertEquals(250f, p2[0], 1f)
         assertEquals(250f, p2[6], 1f)
         save("corner.png")
+    }
+
+    @Test
+    fun aDraggedCornerSticksToAMultipleOf15Degrees() = onMain {
+        val line = Magnet.restroke(template(), floatArrayOf(200f, 600f, 500f, 610f))
+        doc.edit(strokes = listOf(line))
+        view.tool = Tool.LASSO
+        tap(350f, 605f)
+        // The end dragged to 3° off level: it goes level.
+        trace(listOf(500f to 610f, 520f to 660f, 500f to 615.7f))
+        val pts = Magnet.polyline(doc.strokes[0])!!
+        assertEquals(600f, pts[3], 0.5f)
+        // 3° off 45° up: onto 45°.
+        trace(listOf(500f to 600f, 420f to 391f))
+        val q = Magnet.polyline(doc.strokes[0])!!
+        assertEquals(q[2] - 200f, 600f - q[3], 1f)
+    }
+
+    @Test
+    fun anArcHasItsEndsAndOneBendPoint() = onMain {
+        // A half circle as the recogniser draws it.
+        val pts = FloatArray(65 * 2) { i ->
+            val a = Math.PI * (i / 2) / 64
+            if (i % 2 == 0) (500 - 200 * kotlin.math.cos(a)).toFloat() else (600 - 200 * kotlin.math.sin(a)).toFloat()
+        }
+        val arc = Magnet.restroke(template(), pts)
+        doc.edit(strokes = listOf(arc))
+        val h = Magnet.arc(arc)!!
+        assertEquals(6, h.size)
+        assertEquals(500f, h[2], 2f)
+        assertEquals(400f, h[3], 2f)
+        view.tool = Tool.LASSO
+        tap(300f, 600f)
+        assertEquals(1, selectionCount)
+        // The bend point pulled down: a flatter arc through it, the ends where they were.
+        trace(listOf(h[2] to h[3], 500f to 500f))
+        val bent = doc.strokes[0]
+        val h2 = Magnet.arc(bent)!!
+        assertEquals(300f, h2[0], 1f)
+        assertEquals(700f, h2[4], 1f)
+        assertEquals(500f, h2[3], 2f)
+        save("arc-bent.png")
+    }
+
+    @Test
+    fun aCurveHasPointsAtItsEndsAndBends() = onMain {
+        // An S: two bends the other way round each.
+        val pts = FloatArray(81 * 2) { i ->
+            val t = (i / 2) / 80f
+            if (i % 2 == 0) 200f + 600f * t else 600f + 120f * kotlin.math.sin(t * 2 * Math.PI).toFloat()
+        }
+        val s = Magnet.restroke(template(), pts)
+        val keys = Magnet.curve(s)!!
+        assertEquals(8, keys.size)
+        assertEquals(350f, keys[2], 15f)
+        assertEquals(720f, keys[3], 5f)
+        assertEquals(650f, keys[4], 15f)
+        assertEquals(480f, keys[5], 5f)
+        // Drawn again through its points, it stays near where it was.
+        val again = Magnet.curveThrough(keys)
+        for (i in again.indices step 2) {
+            val x = again[i]
+            val y = 600f + 120f * kotlin.math.sin((x - 200f) / 600f * 2 * Math.PI).toFloat()
+            assertEquals(y, again[i + 1], 30f)
+        }
+    }
+
+    @Test
+    fun aSideHandleStretchesOneWay() = onMain {
+        val box = Magnet.restroke(template(), floatArrayOf(300f, 500f, 500f, 500f, 500f, 600f, 300f, 600f, 300f, 500f))
+        doc.edit(strokes = listOf(box))
+        view.tool = Tool.LASSO
+        tap(400f, 500f)
+        val r = PageEdits.bounds(doc.strokes[0])!!
+        // The right side's handle pulled right: twice as wide, as tall as before.
+        val pad = r.right + 6f
+        trace(listOf(pad to r.centerY(), pad + (r.right - r.left) to r.centerY()))
+        val after = PageEdits.bounds(doc.strokes[0])!!
+        assertEquals(r.height(), after.height(), 1f)
+        assertEquals(r.width() * 2, after.width(), 8f)
+        // An even line keeps the pen's width however it is resized.
+        assertEquals(2.8f, doc.strokes[0].stroke.brush.size, 0.01f)
     }
 
     // ---------------------------------------------------------- magnet
@@ -375,7 +458,6 @@ class NewToolsTest {
         doc.edit(strokes = table)
         view.tool = Tool.PEN
         val b = PageEdits.bounds(table[0])!!
-        tap(b.centerX(), b.centerY())
         tap(b.centerX(), b.centerY())
         assertTrue(view.selectionIsTable())
         val before = Tables.grid(doc.strokes)!!

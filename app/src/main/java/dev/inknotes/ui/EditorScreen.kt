@@ -305,6 +305,10 @@ private fun TopRow(
             verticalAlignment = Alignment.CenterVertically,
         ) {
         val gap = if (compact) 0.dp else 12.dp
+        // Tools used now and then: up here, so the tool bar below has room for colours.
+        IconAction(InkIcons.Spoiler, "Маркер подсказок: прячет текст, касание пальцем открывает", { c.selectTool(Tool.SPOILER) }, selected = c.tool == Tool.SPOILER)
+        IconAction(InkIcons.Laser, "Указка: след гаснет сам", { c.selectTool(Tool.LASER) }, selected = c.tool == Tool.LASER)
+        Spacer(Modifier.width(gap))
         if (!compact) {
             IconAction(InkIcons.Picture, "Вставить картинку", onInsertImage, enabled = !c.importingImage)
             IconAction(InkIcons.Table, "Вставить таблицу", onInsertTable)
@@ -590,7 +594,18 @@ private fun ToolRow(c: EditorController, onPickColor: () -> Unit, onHatchSetting
     val selection = c.selectionCount > 0
     val tools: @Composable () -> Unit = {
         for ((t, icon, label) in TOOLS) {
-            IconAction(icon, label, { c.selectTool(t) }, selected = c.tool == t)
+            if (t == Tool.PEN) {
+                // One button for the pen, pencil, dashes and the fountain pen (chosen in its menu).
+                val fountain = c.penIsFountain
+                IconAction(
+                    if (fountain) InkIcons.Fountain else icon,
+                    if (fountain) "Перьевая ручка" else label,
+                    { c.selectTool(if (fountain) Tool.FOUNTAIN else Tool.PEN) },
+                    selected = c.tool == Tool.PEN || c.tool == Tool.FOUNTAIN,
+                )
+            } else {
+                IconAction(icon, label, { c.selectTool(t) }, selected = c.tool == t)
+            }
         }
     }
     val divider: @Composable () -> Unit = {
@@ -735,22 +750,32 @@ private fun SelectionOptions(c: EditorController, onPickColor: () -> Unit, onHat
 
 private val PEN_KINDS = listOf(InkKind.PEN to "Ручка", InkKind.PENCIL to "Карандаш", InkKind.DASHED to "Пунктир")
 
-/** Pen, pencil or dashes for the pen tool. */
+/** Pen, pencil, dashes or the fountain pen for the pen button. */
 @Composable
 private fun PenKindButton(c: EditorController) {
     Box {
         var open by remember { mutableStateOf(false) }
-        TextButton(onClick = { open = true }) { Text((PEN_KINDS.firstOrNull { it.first == c.penKind }?.second ?: "Ручка") + " ▾") }
+        val fountain = c.tool == Tool.FOUNTAIN
+        val title = if (fountain) "Перо" else PEN_KINDS.firstOrNull { it.first == c.penKind }?.second ?: "Ручка"
+        TextButton(onClick = { open = true }) { Text("$title ▾") }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            for ((kind, title) in PEN_KINDS) {
+            for ((kind, name) in PEN_KINDS) {
                 DropdownMenuItem(
-                    text = { Text((if (kind == c.penKind) "✓ " else "") + title) },
+                    text = { Text((if (!fountain && kind == c.penKind) "✓ " else "") + name) },
                     onClick = {
                         c.selectPenKind(kind)
+                        c.selectTool(Tool.PEN)
                         open = false
                     },
                 )
             }
+            DropdownMenuItem(
+                text = { Text((if (fountain) "✓ " else "") + "Перо") },
+                onClick = {
+                    c.selectTool(Tool.FOUNTAIN)
+                    open = false
+                },
+            )
         }
     }
 }
@@ -765,7 +790,7 @@ private fun InkOptions(c: EditorController, onPickColor: () -> Unit, tool: Tool 
         Tool.SPOILER -> c.spoilerColor
         else -> c.penColor
     }
-    if (tool == Tool.PEN) PenKindButton(c)
+    if (tool == Tool.PEN || tool == Tool.FOUNTAIN) PenKindButton(c)
     // The slider first: it stays on screen however many recent colours there are.
     SizeSlider(c, tool)
     Spacer(Modifier.width(4.dp))
@@ -819,7 +844,7 @@ private fun SizeSlider(c: EditorController, tool: Tool = c.tool) {
                 drawCircle(ink, d / 2)
             }
         }
-        androidx.compose.material3.Slider(
+        InkSlider(
             value = value.coerceIn(range.min, range.max),
             onValueChange = { c.selectSize(it) },
             valueRange = range.min..range.max,
@@ -867,14 +892,11 @@ private fun sameRgb(a: Int, b: Int) = (a and 0xFFFFFF) == (b and 0xFFFFFF)
 
 private val TOOLS = listOf(
     Triple(Tool.PEN, InkIcons.Pen, "Ручка"),
-    Triple(Tool.FOUNTAIN, InkIcons.Fountain, "Перьевая ручка"),
     Triple(Tool.HIGHLIGHTER, InkIcons.Highlighter, "Маркер"),
-    Triple(Tool.SPOILER, InkIcons.Spoiler, "Маркер подсказок: прячет текст, касание пальцем открывает"),
     Triple(Tool.NEON, InkIcons.Neon, "Неон"),
     Triple(Tool.ERASER, InkIcons.Eraser, "Ластик"),
     Triple(Tool.LASSO, InkIcons.Lasso, "Лассо: выделить и двигать"),
     Triple(Tool.AREA, InkIcons.Area, "Область: заштриховать"),
-    Triple(Tool.LASER, InkIcons.Laser, "Указка: след гаснет сам"),
 )
 
 @Composable
@@ -1017,7 +1039,7 @@ private fun ThemeBackgrounds(c: EditorController, darkTheme: Boolean, onPickPhot
 fun LinesSlider(value: Float, onChange: (Float) -> Unit, onDone: () -> Unit = {}) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("Линии фона: ${Math.round(value * 100)}%", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(140.dp))
-        androidx.compose.material3.Slider(
+        InkSlider(
             value = value,
             onValueChange = onChange,
             onValueChangeFinished = onDone,

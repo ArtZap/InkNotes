@@ -39,6 +39,25 @@ class ShapeRecognizerTest {
     private fun kind(pts: List<P>) = ShapeRecognizer.recognize(pts)?.kind
 
     @Test
+    fun aSlightlyTiltedShapeIsLevelled() {
+        // A rectangle drawn 3° off level comes out level; one 10° off keeps its tilt.
+        fun rect(deg: Double): ShapeRecognizer.Shape {
+            val a = Math.toRadians(deg)
+            val corners = listOf(0f to 0f, 300f to 0f, 300f to 150f, 0f to 150f, 0f to 0f).map { (x, y) ->
+                P((x * cos(a) - y * kotlin.math.sin(a)).toFloat() + 200f, (x * kotlin.math.sin(a) + y * cos(a)).toFloat() + 200f)
+            }
+            return ShapeRecognizer.Shape(Kind.RECTANGLE, listOf(corners))
+        }
+        val level = ShapeRecognizer.level(rect(3.0)).paths[0]
+        assertEquals(level[0].y, level[1].y, 0.01f)
+        val tilted = ShapeRecognizer.level(rect(10.0)).paths[0]
+        assertTrue(abs(tilted[0].y - tilted[1].y) > 40f)
+        // A circle is left alone.
+        val circle = ShapeRecognizer.Shape(Kind.CIRCLE, listOf(listOf(P(0f, 0f), P(10f, 1f))))
+        assertTrue(ShapeRecognizer.level(circle) === circle)
+    }
+
+    @Test
     fun straightLine() = assertEquals(Kind.LINE, kind(scribble(P(100f, 100f), P(500f, 160f))))
 
     @Test

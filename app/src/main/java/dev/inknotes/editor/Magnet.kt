@@ -90,8 +90,252 @@ object Magnet {
         }
     }
 
-    /** Connection points of [s]: the corners and ends of its pieces. */
+    private val arcs = WeakHashMap<PageStroke, FloatArray>()
+    private val notArc: MutableSet<PageStroke> = java.util.Collections.newSetFromMap(WeakHashMap())
+
+    /**
+     * A circular arc the app drew (a recognised arc, or one reshaped): its two ends and the
+     * point halfway along (x, y pairs); null for anything else.
+     */
+    fun arc(s: PageStroke): FloatArray? {
+        arcs[s]?.let { return it }
+        if (s in notArc || s.kind == InkKind.HIGHLIGHTER || s.kind == InkKind.SPOILER) return null
+        val found = findArc(s)
+        if (found == null) notArc += s else arcs[s] = found
+        return found
+    }
+
+    private fun findArc(s: PageStroke): FloatArray? {
+        val inputs = s.stroke.inputs
+        val n = inputs.size
+        if (n < MIN_ARC_INPUTS || n > MAX_INPUTS) return null
+        val xs = FloatArray(n)
+        val ys = FloatArray(n)
+        val p = StrokeInput()
+        var pMin = Float.MAX_VALUE
+        var pMax = -Float.MAX_VALUE
+        for (i in 0 until n) {
+            inputs.populate(i, p)
+            xs[i] = p.x
+            ys[i] = p.y
+            pMin = minOf(pMin, p.pressure)
+            pMax = maxOf(pMax, p.pressure)
+        }
+        if (pMax - pMin > 0.001f) return null
+        val m = n / 2
+        if (hypot(xs[0] - xs[n - 1], ys[0] - ys[n - 1]) < 2f) return null
+        val c = center(xs[0], ys[0], xs[m], ys[m], xs[n - 1], ys[n - 1]) ?: return null
+        val r = hypot(xs[0] - c[0], ys[0] - c[1])
+        if (r > MAX_ARC_RADIUS) return null
+        val tolerance = maxOf(ARC_TOLERANCE, r * 0.01f)
+        for (i in 0 until n) if (kotlin.math.abs(hypot(xs[i] - c[0], ys[i] - c[1]) - r) > tolerance) return null
+        // Not three points of a polyline that happen to lie on a circle: curved all along.
+        val q = n / 4
+        if (PageEdits.distanceToSegment(xs[q], ys[q], xs[0], ys[0], xs[m], ys[m]) < ARC_TOLERANCE) return null
+        return floatArrayOf(xs[0], ys[0], xs[m], ys[m], xs[n - 1], ys[n - 1])
+    }
+
+    private val curves = WeakHashMap<PageStroke, FloatArray>()
+    private val notCurve: MutableSet<PageStroke> = java.util.Collections.newSetFromMap(WeakHashMap())
+
+    /**
+     * A smooth open curve the app drew, not an arc: its ends and the top of each bend
+     * (x, y pairs), the points [curveThrough] draws it through again; null for anything else.
+     */
+    fun curve(s: PageStroke): FloatArray? {
+        curves[s]?.let { return it }
+        if (s in notCurve || s.kind == InkKind.HIGHLIGHTER || s.kind == InkKind.SPOILER || arc(s) != null) return null
+        val found = findCurve(s)
+        if (found == null) notCurve += s else curves[s] = found
+        return found
+    }
+
+    private fun findCurve(s: PageStroke): FloatArray? {
+        val inputs = s.stroke.inputs
+        val n = inputs.size
+        if (n < MIN_ARC_INPUTS || n > MAX_INPUTS) return null
+        val xs = FloatArray(n)
+        val ys = FloatArray(n)
+        val p = StrokeInput()
+        var pMin = Float.MAX_VALUE
+        var pMax = -Float.MAX_VALUE
+        for (i in 0 until n) {
+            inputs.populate(i, p)
+            xs[i] = p.x
+            ys[i] = p.y
+            pMin = minOf(pMin, p.pressure)
+            pMax = maxOf(pMax, p.pressure)
+        }
+        if (pMax - pMin > 0.001f) return null
+        if (hypot(xs[0] - xs[n - 1], ys[0] - ys[n - 1]) < 2f) return null
+        val keep = BooleanArray(n)
+        keep[0] = true
+        keep[n - 1] = true
+        rdp(xs, ys, 0, n - 1, EPSILON, keep)
+        val idx = (0 until n).filter { keep[it] }
+        if (idx.size < MIN_CURVE_CORNERS) return null
+        // Turns at the corners: all gentle for a curve, a sharp one is a corner of straight pieces.
+        val turns = FloatArray(idx.size)
+        for (k in 1 until idx.size - 1) {
+            val a = idx[k - 1]
+            val b = idx[k]
+            val c = idx[k + 1]
+            val t = wrap(kotlin.math.atan2(ys[c] - ys[b], xs[c] - xs[b]) - kotlin.math.atan2(ys[b] - ys[a], xs[b] - xs[a]))
+            if (kotlin.math.abs(t) > MAX_CURVE_TURN) return null
+            turns[k] = t
+        }
+        // Bends: runs of corners turning the same way; each gives the point farthest from its chord.
+        val keys = ArrayList<Float>()
+        keys += xs[0]
+        keys += ys[0]
+        var start = 0
+        var sign = 0f
+        fun bend(from: Int, to: Int) {
+            val a = idx[from]
+            val b = idx[to]
+            var best = -1f
+            var at = -1
+            for (i in a + 1 until b) {
+                val d = PageEdits.distanceToSegment(xs[i], ys[i], xs[a], ys[a], xs[b], ys[b])
+                if (d > best) {
+                    best = d
+                    at = i
+                }
+            }
+            if (at >= 0 && best > ARC_TOLERANCE) {
+                keys += xs[at]
+                keys += ys[at]
+            }
+        }
+        for (k in 1 until idx.size - 1) {
+            if (kotlin.math.abs(turns[k]) < STRAIGHT_TURN) continue
+            val sg = kotlin.math.sign(turns[k])
+            if (sign != 0f && sg != sign) {
+                // The curve turns the other way from here: a new bend starts.
+                bend(start, k)
+                start = k
+            }
+            sign = sg
+        }
+        bend(start, idx.size - 1)
+        keys += xs[n - 1]
+        keys += ys[n - 1]
+        if (keys.size < 6 || keys.size > MAX_CURVE_KEYS * 2) return null
+        return keys.toFloatArray()
+    }
+
+    private fun wrap(a: Float): Float {
+        val twoPi = (2 * Math.PI).toFloat()
+        var x = a % twoPi
+        if (x > Math.PI) x -= twoPi
+        if (x < -Math.PI) x += twoPi
+        return x
+    }
+
+    /** A smooth line through [keys] (x, y pairs): a centripetal Catmull-Rom spline, sampled. */
+    fun curveThrough(keys: FloatArray): FloatArray {
+        val m = keys.size / 2
+        if (m < 3) return keys
+        fun x(i: Int) = keys[i.coerceIn(0, m - 1) * 2]
+        fun y(i: Int) = keys[i.coerceIn(0, m - 1) * 2 + 1]
+        val out = ArrayList<Float>()
+        out += x(0)
+        out += y(0)
+        for (i in 0 until m - 1) {
+            // Ends: a mirrored point beyond them, so the line leaves the end smoothly.
+            val p0x = if (i == 0) 2 * x(0) - x(1) else x(i - 1)
+            val p0y = if (i == 0) 2 * y(0) - y(1) else y(i - 1)
+            val p3x = if (i == m - 2) 2 * x(m - 1) - x(m - 2) else x(i + 2)
+            val p3y = if (i == m - 2) 2 * y(m - 1) - y(m - 2) else y(i + 2)
+            val p1x = x(i)
+            val p1y = y(i)
+            val p2x = x(i + 1)
+            val p2y = y(i + 1)
+            fun knot(ax: Float, ay: Float, bx: Float, by: Float) = kotlin.math.sqrt(hypot(bx - ax, by - ay)).coerceAtLeast(1e-3f)
+            val t1 = knot(p0x, p0y, p1x, p1y)
+            val t2 = t1 + knot(p1x, p1y, p2x, p2y)
+            val t3 = t2 + knot(p2x, p2y, p3x, p3y)
+            for (k in 1..CURVE_SAMPLES) {
+                val t = t1 + (t2 - t1) * k / CURVE_SAMPLES
+                fun lerp(a: Float, b: Float, ta: Float, tb: Float) = if (tb - ta < 1e-6f) a else (a * (tb - t) + b * (t - ta)) / (tb - ta)
+                val a1x = lerp(p0x, p1x, 0f, t1)
+                val a1y = lerp(p0y, p1y, 0f, t1)
+                val a2x = lerp(p1x, p2x, t1, t2)
+                val a2y = lerp(p1y, p2y, t1, t2)
+                val a3x = lerp(p2x, p3x, t2, t3)
+                val a3y = lerp(p2y, p3y, t2, t3)
+                val b1x = lerp(a1x, a2x, 0f, t2)
+                val b1y = lerp(a1y, a2y, 0f, t2)
+                val b2x = lerp(a2x, a3x, t1, t3)
+                val b2y = lerp(a2y, a3y, t1, t3)
+                out += lerp(b1x, b2x, t1, t2)
+                out += lerp(b1y, b2y, t1, t2)
+            }
+        }
+        return out.toFloatArray()
+    }
+
+    /** Centre of the circle through three points, or null when they are (almost) on a line. */
+    private fun center(ax: Float, ay: Float, bx: Float, by: Float, cx: Float, cy: Float): FloatArray? {
+        val d = 2 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by))
+        val span = maxOf(hypot(bx - ax, by - ay), hypot(cx - ax, cy - ay))
+        if (kotlin.math.abs(d) < 1e-3f * span * span) return null
+        val a2 = ax * ax + ay * ay
+        val b2 = bx * bx + by * by
+        val c2 = cx * cx + cy * cy
+        return floatArrayOf(
+            (a2 * (by - cy) + b2 * (cy - ay) + c2 * (ay - by)) / d,
+            (a2 * (cx - bx) + b2 * (ax - cx) + c2 * (bx - ax)) / d,
+        )
+    }
+
+    /**
+     * Points along the circular arc from the first point of [h] through the second to the
+     * third (x, y pairs); a straight line when the three are in a row.
+     */
+    fun arcThrough(h: FloatArray): FloatArray {
+        val c = center(h[0], h[1], h[2], h[3], h[4], h[5])
+        if (c == null || hypot(h[0] - c[0], h[1] - c[1]) > MAX_ARC_RADIUS) return floatArrayOf(h[0], h[1], h[4], h[5])
+        val r = hypot(h[0] - c[0], h[1] - c[1])
+        val twoPi = (2 * Math.PI).toFloat()
+        fun ccw(from: Float, to: Float) = ((to - from) % twoPi + twoPi) % twoPi
+        val a0 = kotlin.math.atan2(h[1] - c[1], h[0] - c[0])
+        val am = kotlin.math.atan2(h[3] - c[1], h[2] - c[0])
+        val a1 = kotlin.math.atan2(h[5] - c[1], h[4] - c[0])
+        // The way round from the first end to the other that passes the middle point.
+        val sweep = ccw(a0, a1).let { if (ccw(a0, am) < it) it else it - twoPi }
+        val out = FloatArray((ARC_SEGMENTS + 1) * 2)
+        for (k in 0..ARC_SEGMENTS) {
+            val a = a0 + sweep * k / ARC_SEGMENTS
+            out[k * 2] = c[0] + r * kotlin.math.cos(a)
+            out[k * 2 + 1] = c[1] + r * kotlin.math.sin(a)
+        }
+        // Exactly through the ends, whatever the rounding.
+        out[0] = h[0]
+        out[1] = h[1]
+        out[out.size - 2] = h[4]
+        out[out.size - 1] = h[5]
+        return out
+    }
+
+    /**
+     * ([x], [y]) moved onto the nearest line from ([fromX], [fromY]) at a multiple of 15°,
+     * when it is within a few degrees of one; null otherwise.
+     */
+    fun level(x: Float, y: Float, fromX: Float, fromY: Float): FloatArray? {
+        val d = hypot(x - fromX, y - fromY)
+        if (d < 1f) return null
+        val step = Math.toRadians(LEVEL_STEP_DEGREES.toDouble())
+        val a = kotlin.math.atan2((y - fromY).toDouble(), (x - fromX).toDouble())
+        val snapped = Math.round(a / step) * step
+        if (kotlin.math.abs(snapped - a) > Math.toRadians(LEVEL_TOLERANCE_DEGREES.toDouble())) return null
+        return floatArrayOf(fromX + d * kotlin.math.cos(snapped).toFloat(), fromY + d * kotlin.math.sin(snapped).toFloat())
+    }
+
+    /** Connection points of [s]: the corners and ends of its pieces, the ends of an arc. */
     fun points(s: PageStroke): FloatArray? {
+        arc(s)?.let { return floatArrayOf(it[0], it[1], it[4], it[5]) }
+        curve(s)?.let { return floatArrayOf(it[0], it[1], it[it.size - 2], it[it.size - 1]) }
         val pl = polyline(s) ?: return null
         val closed = pl.size >= 6 && hypot(pl[0] - pl[pl.size - 2], pl[1] - pl[pl.size - 1]) < 0.5f
         return if (closed) pl.copyOf(pl.size - 2) else pl
@@ -154,7 +398,7 @@ object Magnet {
                 val b = PageCache.strokeBounds(s) ?: continue
                 if (!RectF.intersects(b, area)) continue
             }
-            val pl = polyline(s) ?: continue
+            val pl = polyline(s) ?: arc(s)?.let(::arcThrough) ?: curve(s)?.let(::curveThrough) ?: continue
             lines += pl
             points(s)?.let { for (v in it) pts += v }
         }
@@ -180,6 +424,19 @@ object Magnet {
     }
 
     private const val STEP = 2f
+    private const val MIN_ARC_INPUTS = 12
+    private const val MIN_CURVE_CORNERS = 6
+    private const val MAX_CURVE_KEYS = 12
+    private const val CURVE_SAMPLES = 16
+
+    /** Turns (radians) at the corners of a curve: at most ~35°, under ~2° is straight on. */
+    private const val MAX_CURVE_TURN = 0.6f
+    private const val STRAIGHT_TURN = 0.035f
+    private const val MAX_ARC_RADIUS = 20_000f
+    private const val ARC_TOLERANCE = 0.6f
+    private const val ARC_SEGMENTS = 64
+    private const val LEVEL_STEP_DEGREES = 15f
+    private const val LEVEL_TOLERANCE_DEGREES = 4f
     private const val EPSILON = 0.6f
     private const val MAX_CORNERS = 16
     private const val MAX_INPUTS = 4000

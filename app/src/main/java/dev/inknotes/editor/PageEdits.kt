@@ -225,14 +225,20 @@ object PageEdits {
              * Scale by [k] around ([ax], [ay]), then turn by [degrees] around ([cx], [cy]),
              * then move by ([dx], [dy]) — the order the editor previews a drag in.
              */
-            fun of(k: Float, ax: Float, ay: Float, degrees: Float, cx: Float, cy: Float, dx: Float, dy: Float) = Transform(
+            fun of(k: Float, ax: Float, ay: Float, degrees: Float, cx: Float, cy: Float, dx: Float, dy: Float) =
+                of(k, k, ax, ay, degrees, cx, cy, dx, dy)
+
+            /** As [of] with the width times [kx] and the height times [ky]; lines get the smaller one. */
+            fun of(kx: Float, ky: Float, ax: Float, ay: Float, degrees: Float, cx: Float, cy: Float, dx: Float, dy: Float) = Transform(
                 Matrix().apply {
-                    setScale(k, k, ax, ay)
+                    setScale(kx, ky, ax, ay)
                     postRotate(degrees, cx, cy)
                     postTranslate(dx, dy)
                 },
-                k,
+                min(kx, ky),
                 degrees,
+                kx,
+                ky,
             )
         }
     }
@@ -243,7 +249,7 @@ object PageEdits {
 
     fun translate(img: PageImage, dx: Float, dy: Float): PageImage = transform(img, Transform.translation(dx, dy))
 
-    /** Line widths scale too, so a resized stamp or table keeps its proportions. */
+    /** Handwriting's width scales too; even lines (stamps, tables, shapes) keep theirs. */
     fun transform(s: PageStroke, t: Transform): PageStroke {
         val inputs = s.stroke.inputs
         val batch = MutableStrokeInputBatch()
@@ -263,7 +269,8 @@ object PageEdits {
             )
             batch.add(p)
         }
-        val brush = if (t.scale == 1f) {
+        // Even lines (stamps, tables, shapes) keep the pen's width at any size; handwriting grows.
+        val brush = if (t.scale == 1f || s.kind == InkKind.LINE) {
             s.stroke.brush
         } else {
             InkBrushes.create(s.kind, s.stroke.brush.colorIntArgb, (s.stroke.brush.size * t.scale).coerceIn(MIN_BRUSH, MAX_BRUSH))

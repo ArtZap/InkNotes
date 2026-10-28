@@ -22,7 +22,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -230,7 +229,7 @@ private fun SettingSlider(
 ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(label, Modifier.width(130.dp))
-        Slider(
+        InkSlider(
             value = current.coerceIn(range),
             onValueChange = onChange,
             valueRange = range,

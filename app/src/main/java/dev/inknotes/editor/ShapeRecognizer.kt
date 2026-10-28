@@ -31,6 +31,36 @@ object ShapeRecognizer {
     private const val PENTAGRAM_TURN = 1.95f // exterior turn ~112°+ (a regular pentagram turns 144°)
     private const val ARC_MIN_SWEEP = 0.5f // ~30°
     private const val ARC_MAX_SWEEP = 5.9f // ~340°
+    private const val LEVEL_TOLERANCE = 0.07f // ~4°
+
+    /**
+     * A shape of straight pieces turned a little so its longest side lies at a multiple of
+     * 15° (level, upright, 45°…) when it was drawn within a few degrees of one; round shapes
+     * and others as they are.
+     */
+    fun level(shape: Shape): Shape {
+        if (shape.kind == Kind.CIRCLE || shape.kind == Kind.ELLIPSE || shape.kind == Kind.ARC || shape.kind == Kind.HEART) return shape
+        val path = shape.paths.firstOrNull() ?: return shape
+        var longest = 0f
+        var angle = 0f
+        for (i in 1 until path.size) {
+            val d = dist(path[i - 1], path[i])
+            if (d > longest) {
+                longest = d
+                angle = atan2(path[i].y - path[i - 1].y, path[i].x - path[i - 1].x)
+            }
+        }
+        if (longest < MIN_LENGTH) return shape
+        val step = (PI / 12).toFloat()
+        val turn = Math.round(angle / step) * step - angle
+        if (abs(turn) > LEVEL_TOLERANCE || abs(turn) < 1e-4f) return shape
+        val cx = path.map { it.x }.average().toFloat()
+        val cy = path.map { it.y }.average().toFloat()
+        val c = cos(turn)
+        val sn = sin(turn)
+        fun turned(p: P) = P(cx + (p.x - cx) * c - (p.y - cy) * sn, cy + (p.x - cx) * sn + (p.y - cy) * c)
+        return Shape(shape.kind, shape.paths.map { it.map(::turned) })
+    }
 
     fun recognize(input: List<P>): Shape? {
         if (input.size < 2) return null

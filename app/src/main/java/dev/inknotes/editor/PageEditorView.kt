@@ -54,6 +54,12 @@ enum class Tool { PEN, FOUNTAIN, HIGHLIGHTER, ERASER, LASSO, AREA, NEON, LASER, 
 
 enum class EraserMode { WHOLE, PARTIAL }
 
+/** Which way a selection handle resizes: in proportion, or only wider or taller. */
+private enum class Axis { BOTH, X, Y }
+
+/** What the handles of a shape being reshaped stand for: an arc, a smooth curve, or corners. */
+private enum class Line { ARC, CURVE, PIECES }
+
 /**
  * All pages of a notebook stacked vertically and scrolled continuously. Elements of a page
  * live in that page's coordinates (an A4 page is [PAGE_W] wide, a unit is the same size on
@@ -261,7 +267,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
     private val cache = PageCache { pageLayer.invalidate() }
 
     /** The selection is being dragged, resized or turned. */
-    private val dragging get() = moveDx != 0f || moveDy != 0f || moveK != 1f || moveAngle != 0f || vertexPoints != null
+    private val dragging get() = moveDx != 0f || moveDy != 0f || moveKx != 1f || moveKy != 1f || moveAngle != 0f || vertexPoints != null
 
     /** Highlighter passes over text become level bands behind the letters. */
     var straightHighlighter = true
@@ -272,16 +278,19 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
     private var moveStartY = 0f
     private var moveDx = 0f
 
-    // Resizing the selection with its corner handle: scale [moveK] around the anchor;
+    // Resizing the selection with its corner handle, or stretching it with a side handle
+    // ([resizeAxis]): width times [moveKx], height times [moveKy] around the anchor;
     // turning it with the handle above the frame: [moveAngle] degrees around the pivot.
     private var resizing = false
+    private var resizeAxis = Axis.BOTH
     private var rotating = false
 
     /** A move that has not yet gone past the touch slop: lifting now is a tap on the selection. */
     private var moveTravelled = false
     private var moveDownAt = 0L
     private var moveByFinger = false
-    private var moveK = 1f
+    private var moveKx = 1f
+    private var moveKy = 1f
     private var moveAngle = 0f
     // Not "pivotX": inside the page layer (a View) that name is the layer's own pivot.
     private var turnX = 0f
@@ -297,6 +306,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
     private var vertexPoints: FloatArray? = null
     private var vertexStart = FloatArray(0)
     private var vertexClosed = false
+    private var vertexLine = Line.PIECES
 
     // Magnet while moving or drawing: connection points of what moves and what they stick to.
     private var moveAnchors = FloatArray(0)
@@ -696,6 +706,16 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         return s.takeIf { Magnet.points(it) != null }
     }
 
+    /** Handles of a shape: an arc's ends and middle, or the corners of straight pieces. */
+    private fun handlePoints(s: PageStroke): FloatArray? = Magnet.arc(s) ?: Magnet.curve(s) ?: Magnet.polyline(s)
+
+    /** The line [handles] of a dragged shape stand for: the arc through them, or the corners themselves. */
+    private fun shapeThrough(handles: FloatArray): FloatArray = when (vertexLine) {
+        Line.ARC -> Magnet.arcThrough(handles)
+        Line.CURVE -> Magnet.curveThrough(handles)
+        Line.PIECES -> handles
+    }
+
     /** Middle of the visible part of [page], in its page coordinates (for placing new things). */
     fun visibleCenter(page: Int): FloatArray {
         val p = toPage(page, width / 2f, height / 2f)
@@ -717,10 +737,10 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
     private fun selectionBounds(): RectF? {
         val r = rawSelectionBounds() ?: return null
         r.set(
-            anchorX + (r.left - anchorX) * moveK,
-            anchorY + (r.top - anchorY) * moveK,
-            anchorX + (r.right - anchorX) * moveK,
-            anchorY + (r.bottom - anchorY) * moveK,
+            anchorX + (r.left - anchorX) * moveKx,
+            anchorY + (r.top - anchorY) * moveKy,
+            anchorX + (r.right - anchorX) * moveKx,
+            anchorY + (r.bottom - anchorY) * moveKy,
         )
         r.offset(moveDx, moveDy)
         val pad = SELECTION_PAD_DP * density / currentScale()
@@ -866,7 +886,8 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                     Mode.MOVE -> {
                         moveDx = 0f
                         moveDy = 0f
-                        moveK = 1f
+                        moveKx = 1f
+        moveKy = 1f
                         moveAngle = 0f
                         vertexPoints = null
                         vertexIndex = -1
@@ -956,7 +977,16 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                 val inside = raw != null && raw.width() < 2 * grab && raw.height() < 2 * grab && raw.contains(p[0], p[1])
                 vertexIndex = if (inside) -1 else vertexAt(p[0], p[1], grab)
                 rotating = !inside && vertexIndex < 0 && hypot(p[0] - bounds.centerX(), p[1] - (bounds.top - rotateHandleOffset())) < grab
-                resizing = !inside && vertexIndex < 0 && !rotating && hypot(p[0] - bounds.right, p[1] - bounds.bottom) < grab
+                val axis = when {
+                    inside || vertexIndex >= 0 || rotating -> null
+                    hypot(p[0] - bounds.right, p[1] - bounds.bottom) < grab -> Axis.BOTH
+                    // Side handles from outside the shape only: on a slim one they reach over it.
+                    raw != null && p[0] > raw.right && hypot(p[0] - bounds.right, p[1] - bounds.centerY()) < grab -> Axis.X
+                    raw != null && p[1] > raw.bottom && hypot(p[0] - bounds.centerX(), p[1] - bounds.bottom) < grab -> Axis.Y
+                    else -> null
+                }
+                resizing = axis != null
+                resizeAxis = axis ?: Axis.BOTH
                 if (vertexIndex >= 0 || rotating || resizing || bounds.contains(p[0], p[1])) {
                     activePage = selectionPage
                     return Mode.MOVE
@@ -981,7 +1011,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
     /** Index of the corner of the selected shape within [grab] of the point, or -1. */
     private fun vertexAt(x: Float, y: Float, grab: Float): Int {
         val shape = selectedShape() ?: return -1
-        val pts = Magnet.polyline(shape) ?: return -1
+        val pts = handlePoints(shape) ?: return -1
         var best = grab
         var found = -1
         val last = if (closedPolyline(pts)) pts.size - 2 else pts.size
@@ -1202,10 +1232,11 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         mode = Mode.SNAPPED
 
         val pressure = strokePressures.filter { it > 0f }.sorted().let { if (it.isEmpty()) 0.5f else it[it.size / 2] }
-        val (kind, size) = evenKind(wet.kind, wet.size, pressure)
+        // As thick as the pen is set, however hard it was pressed.
+        val (kind, size) = evenKind(wet.kind, wet.size)
         val brush = InkBrushes.create(kind, wet.color, size)
         val doc = doc(wet.page)
-        var paths = shape.paths
+        var paths = ShapeRecognizer.level(shape).paths
         // Ends of lines stick to the corners and lines already there.
         val open = shape.kind == ShapeRecognizer.Kind.LINE || shape.kind == ShapeRecognizer.Kind.ARROW || shape.kind == ShapeRecognizer.Kind.POLYLINE
         if (doc != null && open) {
@@ -1453,7 +1484,8 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             return
         }
         selectionPage = page
-        reselect(listOf(hit))
+        // The whole figure first (a stamp, a table, a drawing); a second tap picks a part of it.
+        reselect(Objects.joined(doc, hit))
     }
 
     /** The topmost stroke, fill or picture at the point (page coordinates), or null. */
@@ -1482,7 +1514,8 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         resizing = false
         moveDx = 0f
         moveDy = 0f
-        moveK = 1f
+        moveKx = 1f
+        moveKy = 1f
         moveAngle = 0f
         moveTargets = null
         clearSnap()
@@ -1492,12 +1525,12 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         val hit = doc?.let { hitAt(it, p[0], p[1]) }
         when {
             doc == null || hit == null -> pageLayer.invalidate()
-            hit !in selected -> reselect(listOf(hit))
-            selected.size == 1 -> {
+            hit !in selected -> reselect(Objects.joined(doc, hit))
+            selected.size > 1 -> reselect(listOf(hit))
+            else -> {
                 val group = Objects.joined(doc, hit)
                 if (group.size > 1) reselect(group) else pageLayer.invalidate()
             }
-            else -> reselect(listOf(hit))
         }
     }
 
@@ -1543,7 +1576,8 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         moveStartY = p[1]
         moveDx = 0f
         moveDy = 0f
-        moveK = 1f
+        moveKx = 1f
+        moveKy = 1f
         moveAngle = 0f
         val raw = rawSelectionBounds() ?: RectF()
         anchorX = raw.left
@@ -1559,10 +1593,15 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         if (doc == null) return
         if (vertexIndex >= 0) {
             val shape = selectedShape()
-            val pts = shape?.let(Magnet::polyline)
+            val pts = shape?.let(::handlePoints)
             if (pts == null) {
                 vertexIndex = -1
             } else {
+                vertexLine = when {
+                    Magnet.arc(shape) != null -> Line.ARC
+                    Magnet.curve(shape) != null -> Line.CURVE
+                    else -> Line.PIECES
+                }
                 vertexStart = pts.copyOf()
                 vertexClosed = closedPolyline(pts)
                 moveTargets = Magnet.targets(doc.strokes) { it === shape }
@@ -1605,10 +1644,19 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             if (abs(angle - nearest) < SNAP_TOLERANCE) angle = nearest
             moveAngle = angle
         } else if (resizing) {
-            // Proportional resize around the top-left corner, following the dragged corner.
-            val span = (cornerX - anchorX) + (cornerY - anchorY)
-            if (span > 0f) moveK = ((cornerX + x - moveStartX - anchorX) + (cornerY + y - moveStartY - anchorY)) / span
-            moveK = moveK.coerceIn(MIN_RESIZE, MAX_RESIZE)
+            // Around the top-left corner: in proportion by the corner, one way by a side.
+            val w = cornerX - anchorX
+            val h = cornerY - anchorY
+            when (resizeAxis) {
+                Axis.BOTH -> {
+                    val span = w + h
+                    if (span > 0f) moveKx = ((cornerX + x - moveStartX - anchorX) + (cornerY + y - moveStartY - anchorY)) / span
+                    moveKx = moveKx.coerceIn(MIN_RESIZE, MAX_RESIZE)
+                    moveKy = moveKx
+                }
+                Axis.X -> if (w > 0f) moveKx = ((w + x - moveStartX) / w).coerceIn(MIN_RESIZE, MAX_RESIZE)
+                Axis.Y -> if (h > 0f) moveKy = ((h + y - moveStartY) / h).coerceIn(MIN_RESIZE, MAX_RESIZE)
+            }
         } else if (vertexIndex >= 0) {
             val pts = vertexStart.copyOf()
             var vx = pts[vertexIndex * 2] + x - moveStartX
@@ -1620,6 +1668,11 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                 snapX = it.x
                 snapY = it.y
                 snapPage = selectionPage
+            }
+            // Straight pieces stick a little to multiples of 15° from the next corner.
+            if (snapX.isNaN() && vertexLine == Line.PIECES) level(pts, vertexIndex, vx, vy)?.let {
+                vx = it[0]
+                vy = it[1]
             }
             pts[vertexIndex * 2] = vx
             pts[vertexIndex * 2 + 1] = vy
@@ -1635,6 +1688,26 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             magnetMove()
         }
         pageLayer.invalidate()
+    }
+
+    /** Corner [i] of [pts] at ([x], [y]), turned onto a multiple of 15° from a neighbour when near one. */
+    private fun level(pts: FloatArray, i: Int, x: Float, y: Float): FloatArray? {
+        val n = if (vertexClosed) pts.size / 2 - 1 else pts.size / 2
+        val neighbours = listOfNotNull(
+            if (i > 0) i - 1 else if (vertexClosed) n - 1 else null,
+            if (i < n - 1) i + 1 else if (vertexClosed) 0 else null,
+        )
+        var best: FloatArray? = null
+        var moved = Float.MAX_VALUE
+        for (j in neighbours) {
+            val q = Magnet.level(x, y, pts[j * 2], pts[j * 2 + 1]) ?: continue
+            val d = hypot(q[0] - x, q[1] - y)
+            if (d < moved) {
+                moved = d
+                best = q
+            }
+        }
+        return best
     }
 
     /** Pulls the moved selection so its nearest point sticks to a line end, corner or line. */
@@ -1676,7 +1749,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             vertexPoints = null
             val shape = selectedShape()
             if (doc != null && corners != null && shape != null) {
-                val reshaped = Magnet.restroke(shape, corners)
+                val reshaped = Magnet.restroke(shape, shapeThrough(corners))
                 doc.edit(strokes = doc.strokes.map { if (it === shape) reshaped else it })
                 reselect(listOf(reshaped))
                 changed()
@@ -1687,24 +1760,26 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         }
         val dx = moveDx
         val dy = moveDy
-        val k = moveK
+        val kx = moveKx
+        val ky = moveKy
         val angle = moveAngle
         moveDx = 0f
         moveDy = 0f
-        moveK = 1f
+        moveKx = 1f
+        moveKy = 1f
         moveAngle = 0f
         rotating = false
-        if (doc == null || selected.isEmpty() || (abs(dx) + abs(dy) < 0.5f && abs(k - 1f) < 0.005f && abs(angle) < 0.1f)) {
+        if (doc == null || selected.isEmpty() || (abs(dx) + abs(dy) < 0.5f && abs(kx - 1f) < 0.005f && abs(ky - 1f) < 0.005f && abs(angle) < 0.1f)) {
             pageLayer.invalidate()
             return
         }
-        val t = PageEdits.Transform.of(k, anchorX, anchorY, angle, turnX, turnY, dx, dy)
+        val t = PageEdits.Transform.of(kx, ky, anchorX, anchorY, angle, turnX, turnY, dx, dy)
         // Dropped mostly on another page: the selection moves over to it.
         val target = dropPage(t)
         val dst = target?.takeIf { it != selectionPage }?.let(::doc)
         if (target != null && dst != null) {
             val src = selectionPage
-            val shift = PageEdits.Transform.of(k, anchorX, anchorY, angle, turnX, turnY, dx + lefts[src] - lefts[target], dy + tops[src] - tops[target])
+            val shift = PageEdits.Transform.of(kx, ky, anchorX, anchorY, angle, turnX, turnY, dx + lefts[src] - lefts[target], dy + tops[src] - tops[target])
             val strokes = doc.strokes.filter { it in selected }.map { PageEdits.transform(it, shift) }
             val fills = doc.fills.filter { it in selected }.map { PageEdits.transform(it, shift) }
             val images = doc.images.filter { it in selected }.map { PageEdits.transform(it, shift) }
@@ -2415,10 +2490,12 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                     // Rotation arrow inside the handle.
                     handlePaint.strokeWidth = 1.5f * density / scale
                     canvas.drawArc(hx - handle * 0.5f, hy - handle * 0.5f, hx + handle * 0.5f, hy + handle * 0.5f, -60f, 270f, false, handlePaint)
-                    // Corner handle for resizing.
+                    // Corner handle for resizing, side handles for stretching one way.
                     drawHandle(canvas, r.right, r.bottom, handle, scale)
+                    drawHandle(canvas, r.right, r.centerY(), handle * SIDE_HANDLE, scale)
+                    drawHandle(canvas, r.centerX(), r.bottom, handle * SIDE_HANDLE, scale)
                     canvas.restore()
-                    if (!dragging) selectedShape()?.let(Magnet::polyline)?.let { drawCorners(canvas, it, scale) }
+                    if (!dragging) selectedShape()?.let(::handlePoints)?.let { drawCorners(canvas, it, scale) }
                     if (rotating && mode == Mode.MOVE) {
                         anglePaint.textSize = 14f * density / scale
                         canvas.drawText("${Math.round(moveAngle)}°", hx + handle * 1.6f, hy + anglePaint.textSize / 3, anglePaint)
@@ -2517,9 +2594,10 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                 // A corner being dragged: the shape as it will be.
                 previewPaint.color = InkColors.forPaper(shape.stroke.brush.colorIntArgb, dark)
                 previewPaint.strokeWidth = shape.stroke.brush.size
+                val line = shapeThrough(corners)
                 tracePath.rewind()
-                tracePath.moveTo(corners[0], corners[1])
-                for (k in 2 until corners.size step 2) tracePath.lineTo(corners[k], corners[k + 1])
+                tracePath.moveTo(line[0], line[1])
+                for (k in 2 until line.size step 2) tracePath.lineTo(line[k], line[k + 1])
                 canvas.drawPath(tracePath, previewPaint)
                 drawCorners(canvas, corners, currentScale())
                 drawSnap(canvas, page)
@@ -2530,7 +2608,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             // Same order as PageEdits.Transform.of: scale, then turn, then move.
             canvas.translate(moveDx, moveDy)
             canvas.rotate(moveAngle, turnX, turnY)
-            canvas.scale(moveK, moveK, anchorX, anchorY)
+            canvas.scale(moveKx, moveKy, anchorX, anchorY)
             for (img in doc.images) if (img in selected) pageRenderer.drawImage(canvas, img, src.image(img.file))
             for (f in doc.fills) if (f in selected) pageRenderer.drawFill(canvas, f, 255)
             for (s in doc.strokes) if (s in selected && s.kind == InkKind.HIGHLIGHTER) pageRenderer.drawStroke(canvas, s, toScreen)
@@ -2607,6 +2685,9 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         private const val SNAP_DEGREES = 15f
         private const val SNAP_TOLERANCE = 4f
         private const val MIN_RESIZE = 0.1f
+
+        /** Side handles, a little smaller than the corner one. */
+        private const val SIDE_HANDLE = 0.8f
         private const val MAX_RESIZE = 10f
 
         /** Hold-to-snap: pen still (within the slop) for this long at the end of a stroke. */
