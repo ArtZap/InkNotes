@@ -534,6 +534,52 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         changed()
     }
 
+    /**
+     * Kinds of line among the selection that can be changed into one another (not markers),
+     * once each; empty when there are none.
+     */
+    fun selectedLineKinds(): Set<InkKind> =
+        selected.mapNotNullTo(LinkedHashSet()) { (it as? PageStroke)?.kind?.takeIf { k -> k in LINE_KINDS } }
+
+    /**
+     * Draws the selected lines as [kind] (a neon line as an ordinary one, and back), in
+     * their colours and about as wide as they are.
+     */
+    fun restyleSelection(kind: InkKind) {
+        if (kind !in LINE_KINDS) return
+        val doc = doc(selectionPage) ?: return
+        val newSelection = ArrayList<Any>()
+        var any = false
+        val strokes = doc.strokes.map { s ->
+            when {
+                s !in selected -> s
+                s.kind !in LINE_KINDS || s.kind == kind -> s.also(newSelection::add)
+                else -> {
+                    any = true
+                    restyle(s, kind).also(newSelection::add)
+                }
+            }
+        }
+        if (!any) return
+        doc.edit(strokes = strokes)
+        doc.fills.filterTo(newSelection) { it in selected }
+        doc.images.filterTo(newSelection) { it in selected }
+        reselect(newSelection)
+        changed()
+    }
+
+    private fun restyle(s: PageStroke, kind: InkKind): PageStroke {
+        val brush = s.stroke.brush
+        // The width it shows: a fountain pen's size is its nib, twice its usual line.
+        val width = if (s.kind == InkKind.FOUNTAIN) brush.size * FOUNTAIN_TO_LINE else brush.size
+        val size = when (kind) {
+            InkKind.FOUNTAIN -> (width / FOUNTAIN_TO_LINE).coerceIn(MIN_FOUNTAIN, MAX_FOUNTAIN)
+            InkKind.NEON -> width.coerceIn(MIN_NEON, MAX_NEON)
+            else -> width.coerceIn(MIN_PEN, MAX_PEN)
+        }
+        return PageStroke(kind, Stroke(InkBrushes.create(kind, brush.colorIntArgb, size), s.stroke.inputs))
+    }
+
     /** Page of the current selection. */
     val selectionPageIndex get() = selectionPage
 
@@ -2719,6 +2765,17 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
 
         /** Even line in place of a fountain pen: about its average width. */
         private const val FOUNTAIN_TO_LINE = 0.5f
+
+        /** Lines that can be turned into one another ([restyleSelection]); markers cannot. */
+        val LINE_KINDS = setOf(InkKind.PEN, InkKind.LINE, InkKind.PENCIL, InkKind.DASHED, InkKind.FOUNTAIN, InkKind.NEON)
+
+        // Sizes a restyled line keeps to (as the tools' sliders do).
+        private const val MIN_PEN = 0.8f
+        private const val MAX_PEN = 12f
+        private const val MIN_FOUNTAIN = 2f
+        private const val MAX_FOUNTAIN = 24f
+        private const val MIN_NEON = 3f
+        private const val MAX_NEON = 20f
         private const val ARROW_HALF_WIDTH = 0.34f
 
         /** A hint band is this much taller than the text it is fitted over. */

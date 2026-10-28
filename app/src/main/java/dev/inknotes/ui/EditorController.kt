@@ -164,6 +164,10 @@ class EditorController(
     /** The selection is a table: rows and columns can be added. */
     var selectionIsTable by mutableStateOf(false)
         private set
+
+    /** Kinds of line among the selection that its line type can be changed from; empty: none. */
+    var selectionLineKinds by mutableStateOf<Set<InkKind>>(emptySet())
+        private set
     var fillColor by mutableIntStateOf(FILL_COLORS[0])
         private set
     var selectionCount by mutableIntStateOf(0)
@@ -983,6 +987,12 @@ class EditorController(
         selectionCount = count
         selectedFills = view?.selectedFillCount() ?: 0
         selectionIsTable = count > 0 && view?.selectionIsTable() == true
+        selectionLineKinds = if (count > 0) view?.selectedLineKinds().orEmpty() else emptySet()
+    }
+
+    /** The selected lines drawn as [kind]: neon as an ordinary pen line, a pen line as pencil… */
+    fun restyleSelection(kind: InkKind) {
+        view?.restyleSelection(kind)
     }
 
     override fun onPendingAreaChanged(pending: Boolean) {

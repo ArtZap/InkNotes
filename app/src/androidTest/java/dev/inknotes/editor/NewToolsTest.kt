@@ -387,6 +387,27 @@ class NewToolsTest {
         assertEquals(2.8f, doc.strokes[0].stroke.brush.size, 0.01f)
     }
 
+    @Test
+    fun aNeonLineBecomesAPenLineAndBack() = onMain {
+        val neon = PageStroke(InkKind.NEON, Stroke(InkBrushes.create(InkKind.NEON, 0xFFFF2BD6.toInt(), 6.5f), batch(200f, 500f, 600f, 500f)))
+        doc.edit(strokes = listOf(neon))
+        view.tool = Tool.PEN
+        tap(400f, 500f)
+        assertEquals(setOf(InkKind.NEON), view.selectedLineKinds())
+        view.restyleSelection(InkKind.PEN)
+        val pen = doc.strokes[0]
+        assertEquals(InkKind.PEN, pen.kind)
+        assertEquals(0xFFFF2BD6.toInt(), pen.stroke.brush.colorIntArgb)
+        assertEquals(6.5f, pen.stroke.brush.size, 0.01f)
+        // Still selected, so it can be changed again.
+        assertEquals(1, selectionCount)
+        view.restyleSelection(InkKind.NEON)
+        assertEquals(InkKind.NEON, doc.strokes[0].kind)
+        // Markers are left as they are.
+        view.restyleSelection(InkKind.HIGHLIGHTER)
+        assertEquals(InkKind.NEON, doc.strokes[0].kind)
+    }
+
     // ---------------------------------------------------------- magnet
 
     @Test

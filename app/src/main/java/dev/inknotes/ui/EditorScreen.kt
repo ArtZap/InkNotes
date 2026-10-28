@@ -733,6 +733,7 @@ private fun SelectionOptions(c: EditorController, onPickColor: () -> Unit, onHat
     IconAction(InkIcons.Close, "Снять выделение", { c.clearSelection() })
     Text("Выделено: ${c.selectionCount}", fontWeight = FontWeight.Medium)
     ColorChoices(c, selected = null, onPickColor)
+    if (c.selectionLineKinds.isNotEmpty()) LineKindButton(c)
     if (c.selectionIsTable) {
         IconAction(InkIcons.TableAddRow, "Добавить строку снизу", { c.addToTable(row = true) })
         IconAction(InkIcons.TableAddColumn, "Добавить столбец справа", { c.addToTable(row = false) })
@@ -746,6 +747,37 @@ private fun SelectionOptions(c: EditorController, onPickColor: () -> Unit, onHat
     TextButton(onClick = { c.recognizeSelection() }) { Text("Текст") }
     IconAction(InkIcons.Duplicate, "Дублировать", { c.duplicateSelection() })
     IconAction(InkIcons.Delete, "Удалить выделенное", { c.deleteSelection() })
+}
+
+private val LINE_KINDS = listOf(
+    InkKind.PEN to "Ручка",
+    InkKind.LINE to "Ровная",
+    InkKind.PENCIL to "Карандаш",
+    InkKind.DASHED to "Пунктир",
+    InkKind.FOUNTAIN to "Перо",
+    InkKind.NEON to "Неон",
+)
+
+/** Type of the selected lines: a neon line made an ordinary one, a pen line pencil… */
+@Composable
+private fun LineKindButton(c: EditorController) {
+    Box {
+        var open by remember { mutableStateOf(false) }
+        val kinds = c.selectionLineKinds
+        val title = if (kinds.size == 1) LINE_KINDS.firstOrNull { it.first == kinds.first() }?.second ?: "Линия" else "Тип линии"
+        TextButton(onClick = { open = true }) { Text("$title ▾") }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            for ((kind, name) in LINE_KINDS) {
+                DropdownMenuItem(
+                    text = { Text((if (kinds.size == 1 && kind in kinds) "✓ " else "") + name) },
+                    onClick = {
+                        c.restyleSelection(kind)
+                        open = false
+                    },
+                )
+            }
+        }
+    }
 }
 
 private val PEN_KINDS = listOf(InkKind.PEN to "Ручка", InkKind.PENCIL to "Карандаш", InkKind.DASHED to "Пунктир")
