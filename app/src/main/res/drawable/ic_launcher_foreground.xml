@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  "Ink": the I is a fountain pen leaning slightly right, nib down; its ink trail runs from the
+  nib into the n. White details (rings, cap highlight, nib slit) are gaps and cut-outs, so the
+  drawing is one colour and also serves as the monochrome (themed) icon. Safe zone: 66dp circle.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:translateX="-2"
+        android:translateY="4">
+        <!-- Pen, drawn upright with the nib point at (38,68), then tilted around it. -->
+        <group
+            android:pivotX="38"
+            android:pivotY="68"
+            android:rotation="20">
+            <!-- Nib with breather hole and slit -->
+            <path
+                android:fillColor="#FF111111"
+                android:fillType="evenOdd"
+                android:pathData="M38,68L35.2,61C35,60 35,59.5 35.5,59H40.5C41,59.5 41,60 40.8,61Z
+                    M37.2,62a0.8,0.8 0,1 0,1.6 0a0.8,0.8 0,1 0,-1.6 0Z
+                    M37.7,63.2H38.3V66.6H37.7Z" />
+            <!-- Grip section and ring -->
+            <path
+                android:fillColor="#FF111111"
+                android:pathData="M35.4,58.4L34.9,54.8H41.1L40.6,58.4Z
+                    M34.8,54.2L34.7,53.4H41.3L41.2,54.2Z" />
+            <!-- Barrel -->
+            <path
+                android:fillColor="#FF111111"
+                android:pathData="M34,52.8H42V40.6H34Z" />
+            <!-- Cap with a highlight -->
+            <path
+                android:fillColor="#FF111111"
+                android:fillType="evenOdd"
+                android:pathData="M33.7,40V25Q33.7,21.5 38,21.5Q42.3,21.5 42.3,25V40Z
+                    M35.3,26.5H36.3V37.5H35.3Z" />
+        </group>
+        <!-- Ink trail from the nib into the n -->
+        <path
+            android:strokeColor="#FF111111"
+            android:strokeWidth="2.2"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:pathData="M38,68C40,73 44,72.5 46,70.5C48,68.5 50,73.5 54,67.5" />
+        <!-- n -->
+        <path
+            android:strokeColor="#FF111111"
+            android:strokeWidth="4"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:pathData="M54,68V52M54,58C54,50.5 65,50.5 65,58V68" />
+        <!-- k -->
+        <path
+            android:strokeColor="#FF111111"
+            android:strokeWidth="4"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:pathData="M71,40V68M81.5,52L71,61.5M75,58.5L82,68" />
+    </group>
+</vector>
