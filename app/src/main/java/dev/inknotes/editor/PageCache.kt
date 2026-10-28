@@ -146,7 +146,40 @@ internal class PageCache(private val invalidate: () -> Unit) {
             dst.set(0f, top, look.width, top + strip.height * k)
             canvas.drawBitmap(strip, null, dst, bitmapPaint)
         }
+        // A new picture on its way (a large change): what the old one lacks is drawn over it
+        // meanwhile, so nothing blinks — e.g. the rest of a table when one line of it is picked.
+        if (!sameContent(e, doc, excluded)) drawMissing(canvas, e, doc, look, excluded, viewScale, picture)
         return Result.DRAWN
+    }
+
+    private fun drawMissing(canvas: Canvas, e: Entry, doc: PageDocument, look: Look, excluded: Set<Any>, viewScale: Float, picture: (String) -> Bitmap?) {
+        val shown = identitySet(e.strokes)
+        val shownFills = identitySet(e.fills)
+        val shownImages = identitySet(e.images)
+        fun missing(x: Any, inPicture: Boolean) = x !in excluded && (!inPicture || x in e.excluded)
+        val strokes = doc.strokes.filter { missing(it, it in shown) }
+        val fills = doc.fills.filter { missing(it, it in shownFills) }
+        val images = doc.images.filter { missing(it, it in shownImages) }
+        if (strokes.isEmpty() && fills.isEmpty() && images.isEmpty()) return
+        val r = patcher
+        r.pageWidth = look.width
+        r.pageHeight = look.height
+        r.paper = look.paper
+        r.dark = look.dark
+        r.photo = look.photo
+        r.pdf = look.pdf
+        r.pdfDetail = null
+        val toScreen = Matrix().apply { setScale(viewScale, viewScale) }
+        for (img in images) r.drawImage(canvas, img, picture(img.file))
+        val budget = Hatch.budgetFor(fills.size)
+        for (f in fills) r.drawFill(canvas, f, 255, budget)
+        val highlights = strokes.filter { it.kind == InkKind.HIGHLIGHTER }
+        if (highlights.isNotEmpty()) {
+            r.beginHighlighter(canvas)
+            for (s in highlights) r.drawStroke(canvas, s, toScreen)
+            r.endHighlighter(canvas)
+        }
+        r.drawInk(canvas, strokes.filter { it.kind.isInk }, toScreen)
     }
 
     /**
