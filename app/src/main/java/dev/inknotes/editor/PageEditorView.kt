@@ -50,6 +50,10 @@ import kotlin.math.atan2
 import kotlin.math.ceil
 import kotlin.math.hypot
 import kotlin.math.max
+import kotlin.math.min
+
+/** Direction a finger scroll keeps to (see FingerGesture). */
+private enum class ScrollAxis { UNDECIDED, VERTICAL, HORIZONTAL, FREE }
 
 enum class Tool { PEN, FOUNTAIN, HIGHLIGHTER, ERASER, LASSO, AREA, NEON, LASER, SPOILER }
 
@@ -2291,11 +2295,18 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         }
     }
 
-    /** Like [clampAxis], within the part of the view kept for the pages (see [pageShift]). */
+    /**
+     * Sideways the pages may go past the edges of the part of the view kept for them (see
+     * [pageShift]) by up to half its width, or half the page when the page is narrower: so
+     * the page's edge can be brought towards the middle, where it is easy to write.
+     */
     private fun clampX(t: Float, content: Float): Float {
         val l = pagesLeft()
         val r = pagesRight()
-        return if (content <= r - l) l + (r - l - content) / 2 else t.coerceIn(r - content, l)
+        val extra = min(content, r - l) * SIDE_PAN
+        val lo = min(l, r - content) - extra
+        val hi = max(l, r - content) + extra
+        return t.coerceIn(lo, hi)
     }
 
     private fun clampAxis(t: Float, content: Float, viewport: Float, margin: Float): Float =
@@ -2313,10 +2324,24 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         private var lastY = 0f
         private var lastSpan = 0f
 
+        /**
+         * Direction the fingers keep to, decided once they have moved: a scroll that starts
+         * up or down stays straight (the page can go sideways now, it should not drift while
+         * paging), one that starts sideways stays level, and a slanted one or a pinch is free.
+         */
+        private var axis = ScrollAxis.UNDECIDED
+        private var moveX = 0f
+        private var moveY = 0f
+        private var pinch = 0f
+
         fun start(e: MotionEvent) {
             startTime = e.eventTime
             maxPointers = 1
             travel = 0f
+            axis = ScrollAxis.UNDECIDED
+            moveX = 0f
+            moveY = 0f
+            pinch = 0f
             rebase(e, -1)
         }
 
@@ -2327,12 +2352,30 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
 
         fun move(e: MotionEvent) {
             val (x, y, span) = focus(e, -1)
-            val dx = x - lastX
-            val dy = y - lastY
+            var dx = x - lastX
+            var dy = y - lastY
             if (e.pointerCount >= 2 && lastSpan > 0f && span > 0f) {
                 val k = span / lastSpan
                 worldToView.postScale(k, k, x, y)
                 travel += abs(span - lastSpan)
+                pinch += abs(span - lastSpan)
+                if (pinch > touchSlop) axis = ScrollAxis.FREE
+            }
+            if (axis == ScrollAxis.UNDECIDED) {
+                moveX += dx
+                moveY += dy
+                if (hypot(moveX, moveY) > touchSlop) {
+                    axis = when {
+                        abs(moveY) > abs(moveX) * AXIS_RATIO -> ScrollAxis.VERTICAL
+                        abs(moveX) > abs(moveY) * AXIS_RATIO -> ScrollAxis.HORIZONTAL
+                        else -> ScrollAxis.FREE
+                    }
+                }
+            }
+            when (axis) {
+                ScrollAxis.VERTICAL -> dx = 0f
+                ScrollAxis.HORIZONTAL -> dy = 0f
+                else -> Unit
             }
             worldToView.postTranslate(dx, dy)
             travel += abs(dx) + abs(dy)
@@ -2886,6 +2929,12 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         private const val FLASH_MS = 4000L
         private const val DUPLICATE_OFFSET = 24f
         private const val MIN_ZOOM = 0.5f
+
+        /** How far past their edges the pages go sideways: this share of the view's width. */
+        private const val SIDE_PAN = 0.5f
+
+        /** A finger scroll this much more along one axis than the other keeps to that axis. */
+        private const val AXIS_RATIO = 2f
 
         /** Most of the view's width [pageShift] may keep free beside the pages. */
         const val MAX_PAGE_SHIFT = 0.45f
