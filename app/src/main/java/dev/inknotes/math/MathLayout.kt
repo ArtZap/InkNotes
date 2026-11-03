@@ -83,7 +83,7 @@ object MathLayout {
         override val box get() = glyph.box
     }
 
-    internal class Frac(override val box: Box, val num: List<Item>, val den: List<Item>) : Item()
+    internal class Frac(override val box: Box, val num: List<Item>, val den: List<Item>, val bar: Box) : Item()
     internal class Root(override val box: Box, val inner: List<Item>) : Item()
     internal class Group(override val box: Box, val open: String, val close: String, val inner: List<Item>) : Item()
     internal class Grid(override val box: Box, val rows: List<List<List<Item>>>, val det: Boolean) : Item()
@@ -124,7 +124,12 @@ object MathLayout {
             // A dash joins what it touches (the top of a 5, the bar of T or π); over a gap it is
             // a bar of its own (√, an overline).
             val stackGap = if ((a.isDash && a.width > 0.5f * h) || (b.isDash && b.width > 0.5f * h)) 0.1f * h else 0.3f * h
-            val joined = ((xOverlap > 0.35f * narrow || crossing) && yGap < stackGap) ||
+            // Two whole symbols one above the other (an exponent written over the next letter, 8
+            // over a d) are taller together than any symbol: not the parts of one, like the
+            // loops of an 8 or a B.
+            val stacked = yGap >= -0.05f * h && !a.isDash && !b.isDash && min(a.height, b.height) >= 0.4f * h &&
+                max(a.bottom, b.bottom) - min(a.top, b.top) > 1.3f * h
+            val joined = ((xOverlap > 0.35f * narrow || crossing) && yGap < stackGap && !stacked) ||
                 // the flag of 1, the bar of a crossed 7 or z: a short straight tick touching a stroke
                 tick(a, b, h) || tick(b, a, h) ||
                 // the top bar of a 5 drawn as its own stroke, just touching the body's top end
@@ -166,13 +171,24 @@ object MathLayout {
         return true
     }
 
-    /** Dash [d] lies on top of [s] over part of it, an end touching [s] (the bar of a 5). */
+    /**
+     * Dash [d] lies on top of [s] over part of it, an end touching [s] (the bar of a 5). A bar
+     * drawn long, well past the body, counts only when it starts at the body's top left corner,
+     * where the 5 is begun: a fraction bar over a digit reaches past it on both sides.
+     */
     internal fun cap(d: Ink, s: Ink, h: Float): Boolean {
-        if (!d.isDash || d.width > 1.2f * max(s.width, 0.3f * h) || s.height < 0.3f * h) return false
+        val body = max(s.width, 0.3f * h)
+        if (!d.isDash || d.width > 1.7f * body || s.height < 0.3f * h) return false
         if (min(d.right, s.right) - max(d.left, s.left) <= 0f || d.cy > s.top + 0.2f * s.height) return false
         val tol = max(0.12f * h, 0.12f * s.height)
-        for (end in listOf(0, d.xs.lastIndex)) {
-            for (k in s.xs.indices) if (abs(s.xs[k] - d.xs[end]) < tol && abs(s.ys[k] - d.ys[end]) < tol) return true
+        val long = d.width > 1.2f * body
+        val leftEnd = if (d.xs[0] <= d.xs.last()) 0 else d.xs.lastIndex
+        for (end in if (long) listOf(leftEnd) else listOf(0, d.xs.lastIndex)) {
+            if (long && d.xs[end] > s.left + 0.4f * s.width) continue
+            for (k in s.xs.indices) {
+                if (long && s.ys[k] > s.top + 0.25f * s.height) continue
+                if (abs(s.xs[k] - d.xs[end]) < tol && abs(s.ys[k] - d.ys[end]) < tol) return true
+            }
         }
         return false
     }
@@ -193,15 +209,21 @@ object MathLayout {
             (abs(hook.cy - tall.top) < 0.25f * h || abs(hook.cy - tall.bottom) < 0.25f * h) &&
             hook.left < tall.right + 0.15f * h && hook.right > tall.left - 0.15f * h
 
-    /** A horizontal stroke with real strokes (not dots) both above and below it. */
-    private fun isBar(s: Ink, all: List<Ink>, h: Float): Boolean {
-        if (!s.isDash || s.width < 0.45f * h) return false
+    /**
+     * A horizontal stroke with real strokes (not dots) both above and below it. A short one
+     * is the bar of a small fraction (an exponent ½, ⅛) when what it holds is small and it is
+     * about as wide as that.
+     */
+    internal fun isBar(s: Ink, all: List<Ink>, h: Float): Boolean {
+        if (!s.isDash || s.width < 0.25f * h) return false
         // The top of a 5 drawn as its own stroke, under a fraction bar, is no bar itself.
         if (all.any { it !== s && cap(s, it, h) }) return false
         fun over(o: Ink) = o.cx in s.left - 0.1f * h..s.right + 0.1f * h && o.height + o.width > 0.3f * h
-        val above = all.any { it !== s && over(it) && it.bottom <= s.cy + 0.1f * h && s.top - it.bottom < 0.9f * h }
-        val below = all.any { it !== s && over(it) && it.top >= s.cy - 0.1f * h && it.top - s.bottom < 0.9f * h }
-        return above && below
+        val above = all.filter { it !== s && over(it) && it.bottom <= s.cy + 0.1f * h && s.top - it.bottom < 0.9f * h }
+        val below = all.filter { it !== s && over(it) && it.top >= s.cy - 0.1f * h && it.top - s.bottom < 0.9f * h }
+        if (above.isEmpty() || below.isEmpty()) return false
+        if (s.width >= 0.45f * h) return true
+        return (above + below).all { it.height < 0.6f * h } && s.width >= 0.7f * max(above.maxOf { it.width }, below.maxOf { it.width })
     }
 
     /** √ drawn in one stroke: low on the left, a long horizontal top over its content. */
@@ -407,6 +429,13 @@ object MathLayout {
                 cur = level
             }
             for (item in items) {
+                // A small fraction up at the top right of the symbol before it is its exponent: 22^½.
+                if (item is Frac && raisedFraction(item, ref)) {
+                    enter(Level.SUP)
+                    flush()
+                    emit(item)
+                    continue
+                }
                 if (item !is G) {
                     enter(Level.BASE)
                     flush()
@@ -494,6 +523,14 @@ object MathLayout {
             return if (crossesV && crossesD) "+" else null
         }
 
+        /** [f] is written as an exponent of [ref]: its bar no lower than ref's top, all of it small. */
+        private fun raisedFraction(f: Frac, ref: Box?): Boolean {
+            val r = ref ?: return false
+            val size = max(r.height, 0.75f * h)
+            return f.bar.cy < r.top + 0.25f * r.height && f.box.bottom < r.bottom && f.box.left > r.cx &&
+                (f.num + f.den).all { it.box.height < 0.8f * size }
+        }
+
         private fun level(b: Box, ref: Box?, axis: Float): Level {
             if (ref == null) return Level.BASE
             // Written wholly above the top of the symbol before it: an exponent of almost any size.
@@ -565,7 +602,10 @@ object MathLayout {
         private fun vGap(a: Box, b: Box) = max(0f, max(a.top, b.top) - min(a.bottom, b.bottom))
 
         private fun fractions(pool: MutableList<Item>): MutableList<Item> {
-            val bars = pool.filterIsInstance<G>().filter { it.glyph.isDash && it.box.width >= 0.45f * h }.sortedByDescending { it.box.width }
+            val inks = pool.filterIsInstance<G>().flatMap { it.glyph.strokes }
+            val bars = pool.filterIsInstance<G>().filter {
+                it.glyph.isDash && (it.box.width >= 0.45f * h || isBar(it.glyph.strokes[0], inks, h))
+            }.sortedByDescending { it.box.width }
             for (bar in bars) {
                 if (bar !in pool) continue
                 val bb = bar.box
@@ -586,6 +626,25 @@ object MathLayout {
                             }
                         }
                     }
+                    if (!up || got.isEmpty()) return got
+                    // An exponent of the numerator may run on past the end of the bar (888¹²³ over
+                    // 3): small symbols well above the bar, one after another from what reaches
+                    // its end. Something on the line beside the fraction comes down to the bar.
+                    grew = true
+                    while (grew) {
+                        grew = false
+                        val reach = got.maxOf { it.box.right }
+                        if (reach < bb.right - 0.3f * h) break
+                        val last = got.maxBy { it.box.right }
+                        for (c in pool) {
+                            if (c === bar || c in got || c.box.left <= bb.right || c.box.left > reach + 0.6f * h) continue
+                            if (c.box.bottom > bb.cy - 0.1f * h || c.box.height > 0.85f * h) continue
+                            if (min(c.box.bottom, last.box.bottom) - max(c.box.top, last.box.top) <= 0f) continue
+                            got += c
+                            grew = true
+                            break
+                        }
+                    }
                     return got
                 }
                 val num = stack(true)
@@ -593,7 +652,7 @@ object MathLayout {
                 if (num.isEmpty() || den.isEmpty()) continue
                 if ((num + den).all { max(it.box.width, it.box.height) < 0.25f * h }) continue // ÷
                 pool.removeAll(num.toSet() + den.toSet() + bar)
-                pool += Frac(Box.ofBoxes((num + den).map { it.box } + bb), num, den)
+                pool += Frac(Box.ofBoxes((num + den).map { it.box } + bb), num, den, bb)
             }
             return pool
         }
@@ -677,8 +736,14 @@ object MathLayout {
                 val ib = s.box
                 fun near(it: Item) = it !== s && !shapes.containsKey(it) && it.box.height < 1.2f * h &&
                     it.box.right > ib.left - 0.8f * h && it.box.left < ib.right + 1.2f * h
-                val hi = pool.filter { near(it) && it.box.cy < ib.cy && it.box.bottom < ib.top + 0.35f * ib.height }
-                val lo = pool.filter { near(it) && it.box.cy > ib.cy && it.box.top > ib.bottom - 0.35f * ib.height }
+                // What stands right over or under a symbol of the integrand belongs to it (√x⁸ dx:
+                // the 8 over the d), not to the limits.
+                val integrand = pool.filter { it !== s && !shapes.containsKey(it) && it.box.left > ib.right - 0.1f * h && abs(it.box.cy - ib.cy) < 0.35f * ib.height }
+                fun onIntegrand(it: Item) = integrand.any { o ->
+                    o !== it && min(o.box.right, it.box.right) - max(o.box.left, it.box.left) > 0.5f * it.box.width
+                }
+                val hi = pool.filter { near(it) && it.box.cy < ib.cy && it.box.bottom < ib.top + 0.35f * ib.height && !onIntegrand(it) }
+                val lo = pool.filter { near(it) && it.box.cy > ib.cy && it.box.top > ib.bottom - 0.35f * ib.height && !onIntegrand(it) }
                 pool.removeAll(hi.toSet() + lo.toSet() + s)
                 pool += IntSign(Box.ofBoxes(listOf(ib) + (hi + lo).map { it.box }), lo, hi)
                 used += s

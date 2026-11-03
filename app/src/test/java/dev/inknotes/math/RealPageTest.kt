@@ -1,6 +1,7 @@
 package dev.inknotes.math
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -104,5 +105,35 @@ class RealPageTest {
         assertEquals("\\frac{#^{#}-#}{#}", right(165f, 539f, ink8)) // f(x) = (5x³ − x)/2
         assertEquals("\\frac{#^{#}-#}{#}", right(134f, 656f, ink8)) // y = (5x³ − x)/2, the 5 in two strokes
         assertEquals("#^{-#}", right(134f, 775f, ink8)) // y = 3x⁻¹
+    }
+
+    /**
+     * A page of formulas that were read wrong (MathProbe, Xiaomi/Huawei tablet, Nov 2026): small
+     * fractions as exponents, an exponent running past a fraction bar, a 5 with a long top bar,
+     * an exponent over the d of dx, an "=" whose top line hooks back.
+     */
+    private val ink9 = RealPage.load("page9.json")
+
+    @Test
+    fun fractionExponents() {
+        assertEquals("#^{\\frac{#}{#}}", template(393f, 114f, ink9)) // 22^½, not 22·½
+        assertEquals("(#)^{\\frac{#}{#}}", template(405f, 57f, ink9)) // (22)^½
+        assertEquals("#^{\\frac{#}{#}}", template(145f, 132f, ink9)) // 33^⅛, a bar shorter than half a digit
+    }
+
+    @Test
+    fun exponentPastTheFractionBar() = assertEquals("\\frac{#^{#}}{#}", template(675f, 207f, ink9)) // 888¹²³ over 3
+
+    @Test
+    fun fiveWithALongTopBar() = assertEquals("#+#", right(120f, 204f, ink9)) // y = 2 + 5x
+
+    @Test
+    fun exponentOverTheDOfDx() = assertEquals("\\int_{#}^{#} \\sqrt{#}^{#}#", template(198f, 61f, ink9)) // ∫₀¹ √x⁸ dx
+
+    @Test
+    fun equalsWhoseTopLineHooksBack() {
+        // The second line of the system: б = 7a − 11.
+        assertTrue(MathPage.findEquals(ink9).any { Math.abs(it.cy - 325f) < 6f && Math.abs(it.left - 624f) < 4f })
+        assertEquals("#+\\sqrt{#}", template(694f, 82f, ink9)) // 2 + √3 still as it was
     }
 }

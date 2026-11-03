@@ -1,6 +1,7 @@
 package dev.inknotes.math
 
 import kotlin.math.abs
+import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
 
@@ -305,12 +306,20 @@ object MathPage {
         var bottom = brace.bottom
         var right = brace.right
         var h = 0f
-        for (eq in members) {
+        val sides = members.map { eq ->
             val l = side(eq, -1, eqs, rest, limit = brace.right)
             val r = side(eq, 1, eqs, rest, limit = null)
             if (l.isEmpty() || r.isEmpty() || l.size > MAX_SIDE || r.size > MAX_SIDE) return null
-            options += readings(l, eq.h, eq.cy, reader, Prefer.LETTERS, maxLetters = members.size).ifEmpty { return null }
-            options += readings(r, eq.h, eq.cy, reader, Prefer.NUMBERS, known = { env.variable(it) != null }).ifEmpty { return null }
+            Triple(eq, l, r)
+        }
+        val lefts = sides.map { (eq, l, _) -> readings(l, eq.h, eq.cy, reader, Prefer.LETTERS, maxLetters = members.size).ifEmpty { return null } }
+        // The unknowns are the letters of the left sides (a = …, б = …): on the right a run that
+        // reads as one of them or as digits is that letter (3б, not 36: б looks like a 6).
+        val unknowns = lefts.flatMap { Algebra.freeVars(it[0]) }.filter { env.variable(it) == null }.toSet()
+        for ((k, parts) in sides.withIndex()) {
+            val (eq, l, r) = parts
+            options += lefts[k]
+            options += readings(r, eq.h, eq.cy, reader, Prefer.NUMBERS, known = { env.variable(it) != null }, favored = unknowns).ifEmpty { return null }
             bottom = max(bottom, max(l.maxOf { it.bottom }, r.maxOf { it.bottom }))
             right = max(right, r.maxOf { it.right })
             h = max(h, eq.h)
@@ -390,6 +399,7 @@ object MathPage {
         known: (String) -> Boolean = { false },
         maxLetters: Int = Int.MAX_VALUE,
         variable: String = "x",
+        favored: Set<String> = emptySet(),
     ): List<Expr> {
         val pieces = try {
             MathLayout.formula(strokes, h, axis)
@@ -431,8 +441,9 @@ object MathPage {
                 val unknowns = names.size
                 val score = when (prefer) {
                     Prefer.FIRST -> 0
-                    // ∫ v dv rather than ∫ r dv: the integrand is about the variable of dv.
-                    Prefer.NUMBERS -> unknowns + 2 * oddIntegrals(e)
+                    // ∫ v dv rather than ∫ r dv: the integrand is about the variable of dv. Letters
+                    // [favored] (a system's unknowns) count for, not against, a reading.
+                    Prefer.NUMBERS -> names.count { it !in favored } - names.count { it in favored } + 2 * oddIntegrals(e)
                     // About letters ("2z", not "22"), but not more than the system has unknowns
                     // (x⁶ rather than t^G); 9z rather than oz (o, l, I are digits misread far more often).
                     Prefer.LETTERS -> (if (unknowns > maxLetters) 20 + unknowns else -unknowns) + 2 * names.count { it in RARE_UNKNOWNS }
@@ -444,7 +455,7 @@ object MathPage {
                 }
                 break
             }
-            if (prefer != Prefer.LETTERS && found.count { it.second == 0 } >= MAX_READINGS) break
+            if (prefer != Prefer.LETTERS && favored.isEmpty() && found.count { it.second == 0 } >= MAX_READINGS) break
         }
         return found.sortedBy { it.second }.map { it.first }.take(MAX_READINGS)
     }
@@ -683,8 +694,12 @@ object MathPage {
         return out
     }
 
-    /** A line of an "=": wide, roughly level (a slight slant or wave is fine). */
-    private fun equalsLine(s: Ink): Boolean {
+    /**
+     * A line of an "=": wide, roughly level (a slight slant or wave is fine). A short hook at an
+     * end (the pen already heading back for the second line) is left out of the test.
+     */
+    private fun equalsLine(stroke: Ink): Boolean {
+        val s = withoutHooks(stroke)
         // A short dash written a little slanted has a box only about twice as wide as high;
         // its slope is checked below.
         if (s.width !in MIN_EQ_WIDTH..MAX_EQ_WIDTH || s.width < 1.25f * max(s.height, 0.5f)) return false
@@ -693,6 +708,32 @@ object MathPage {
         return (abs(dy) < 0.4f * abs(dx) && MathLayout.straight(s, 0.3f) && !wavy(s)).also {
             if (!it && s.width < 12f) trace?.invoke("  not a dash: ${s.left.toInt()}..${s.right.toInt()},${s.cy} h=${s.height} dy=$dy dx=$dx")
         }
+    }
+
+    /**
+     * [s] from its leftmost to its rightmost point (in the direction it was drawn), when what
+     * lies outside that is a short hook: under 40% of the stroke's length. A z or 2 turns back
+     * for most of its length and stays as it is.
+     */
+    private fun withoutHooks(s: Ink): Ink {
+        val n = s.xs.size
+        if (n < 6) return s
+        var iMin = 0
+        var iMax = 0
+        for (k in 1 until n) {
+            if (s.xs[k] < s.xs[iMin]) iMin = k
+            if (s.xs[k] > s.xs[iMax]) iMax = k
+        }
+        val (from, to) = if (s.xs.last() >= s.xs[0]) iMin to iMax else iMax to iMin
+        if (from >= to || (from == 0 && to == n - 1)) return s
+        fun length(a: Int, b: Int): Float {
+            var l = 0f
+            for (k in a + 1..b) l += hypot(s.xs[k] - s.xs[k - 1], s.ys[k] - s.ys[k - 1])
+            return l
+        }
+        val total = length(0, n - 1)
+        if (total <= 0f || length(from, to) < 0.6f * total) return s
+        return Ink(s.xs.copyOfRange(from, to + 1), s.ys.copyOfRange(from, to + 1), s.order)
     }
 
     /** A wavy line (~): it goes up and down several times, a dash at most once. */

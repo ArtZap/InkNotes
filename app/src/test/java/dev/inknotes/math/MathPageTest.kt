@@ -35,8 +35,11 @@ class MathPageTest {
             add(label, ts.map { x + w * shape(it) }, ts.map { top + h * it })
         }
 
-        fun reader() = RunReader { run, _ -> listOf(run.sortedBy { it.left }.mapNotNull { labels[it] }.joinToString("")) }
-        fun answers() = MathPage.analyze(strokes, reader())
+        fun reader(alt: Map<String, List<String>> = emptyMap()) = RunReader { run, _ ->
+            val label = run.sortedBy { it.left }.mapNotNull { labels[it] }.joinToString("")
+            alt[label] ?: listOf(label)
+        }
+        fun answers(alt: Map<String, List<String>> = emptyMap()) = MathPage.analyze(strokes, reader(alt))
     }
 
     private fun text(a: PageAnswer) = (a.answer as Answer.Text).lines.joinToString("\n")
@@ -170,6 +173,32 @@ class MathPageTest {
         // Under the system, from the brace, never over the equations.
         assertTrue(a.x < 110f)
         assertTrue(a.y > 158f)
+    }
+
+    /** A Russian б reads as 6 first: in a system whose unknowns are a and б, 3б is 3·b, not 36. */
+    @Test
+    fun systemWithCyrillicB() {
+        val s = Sheet()
+        // { a = 3б + 6
+        //   б = 7a − 11
+        s.tall(null, 90f, 66f, 100f, 12f) { t -> if (t < 0.5f) 1 - 2 * t else 2 * t - 1 }
+        s.glyph("a", 110f, 84f, 14f, 16f)
+        s.equals(130f, 92f)
+        s.glyph("3", 156f, 80f)
+        s.glyph("Б", 174f, 80f)
+        s.glyph("+", 194f, 86f, 12f, 12f)
+        s.glyph("6", 212f, 80f)
+        s.glyph("Б", 110f, 132f)
+        s.equals(130f, 144f)
+        s.glyph("7", 156f, 132f)
+        s.glyph("a", 174f, 140f, 14f, 16f)
+        s.dash(194f, 147f, 12f)
+        s.glyph("1", 212f, 132f, 8f)
+        s.glyph("1", 224f, 132f, 8f)
+        // How ML Kit reads them: digits first.
+        val a = s.answers(mapOf("3Б+6" to listOf("36+6", "3b+6"), "Б" to listOf("6", "b"))).single()
+        val answer = text(a)
+        assertTrue(answer, answer.startsWith("a = ") && "b = " in answer && "42" !in answer)
     }
 
     @Test
