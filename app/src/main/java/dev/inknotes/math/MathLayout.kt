@@ -109,6 +109,12 @@ object MathLayout {
             val a = strokes[i]
             val b = strokes[j]
             if (a in bars || b in bars) continue
+            // Over and under a fraction bar: numerator and denominator, however close (a small ½).
+            if (bars.any { bar ->
+                    bar.cy > min(a.bottom, b.bottom) - 0.05f * h && bar.cy < max(a.top, b.top) + 0.05f * h &&
+                        bar.left < a.right && bar.right > a.left && bar.left < b.right && bar.right > b.left
+                }
+            ) continue
             if (a in containers || b in containers) {
                 // Only the hooks of a square bracket join a tall stroke.
                 if (!hookOf(a, b, h) && !hookOf(b, a, h)) continue
@@ -173,22 +179,22 @@ object MathLayout {
 
     /**
      * Dash [d] lies on top of [s] over part of it, an end touching [s] (the bar of a 5). A bar
-     * drawn long, well past the body, counts only when it starts at the body's top left corner,
-     * where the 5 is begun: a fraction bar over a digit reaches past it on both sides.
+     * drawn long, well past the body, counts only when its left end is where the body was begun
+     * or at its very top: a fraction bar over a digit reaches past it on both sides.
      */
     internal fun cap(d: Ink, s: Ink, h: Float): Boolean {
         val body = max(s.width, 0.3f * h)
         if (!d.isDash || d.width > 1.7f * body || s.height < 0.3f * h) return false
         if (min(d.right, s.right) - max(d.left, s.left) <= 0f || d.cy > s.top + 0.2f * s.height) return false
         val tol = max(0.12f * h, 0.12f * s.height)
-        val long = d.width > 1.2f * body
-        val leftEnd = if (d.xs[0] <= d.xs.last()) 0 else d.xs.lastIndex
-        for (end in if (long) listOf(leftEnd) else listOf(0, d.xs.lastIndex)) {
-            if (long && d.xs[end] > s.left + 0.4f * s.width) continue
-            for (k in s.xs.indices) {
-                if (long && s.ys[k] > s.top + 0.25f * s.height) continue
-                if (abs(s.xs[k] - d.xs[end]) < tol && abs(s.ys[k] - d.ys[end]) < tol) return true
-            }
+        if (d.width > 1.2f * body) {
+            val end = if (d.xs[0] <= d.xs.last()) 0 else d.xs.lastIndex
+            var top = 0
+            for (k in s.ys.indices) if (s.ys[k] < s.ys[top]) top = k
+            return listOf(0, top).any { k -> abs(s.xs[k] - d.xs[end]) < tol && abs(s.ys[k] - d.ys[end]) < tol }
+        }
+        for (end in listOf(0, d.xs.lastIndex)) {
+            for (k in s.xs.indices) if (abs(s.xs[k] - d.xs[end]) < tol && abs(s.ys[k] - d.ys[end]) < tol) return true
         }
         return false
     }
