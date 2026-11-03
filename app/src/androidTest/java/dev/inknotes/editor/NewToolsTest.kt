@@ -12,6 +12,7 @@ import androidx.ink.strokes.MutableStrokeInputBatch
 import androidx.ink.strokes.Stroke
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import dev.inknotes.HangDump
 import dev.inknotes.data.FillPattern
 import dev.inknotes.data.InkBrushes
 import dev.inknotes.data.InkKind
@@ -25,6 +26,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
@@ -37,6 +39,10 @@ import kotlin.math.hypot
  */
 @RunWith(AndroidJUnit4::class)
 class NewToolsTest {
+    /** A test stuck for longer fails and shows where (one of them used to hang the whole run). */
+    @get:Rule
+    val hang = HangDump(90)
+
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
     private lateinit var view: PageEditorView
