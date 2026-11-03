@@ -15,8 +15,9 @@ import kotlin.math.max
 
 /**
  * Fill patterns. Each one is drawn axis-aligned in "pattern space", which is the page
- * rotated by [HatchStyle.angle] around the anchor point, so any pattern can be tilted and
- * stays attached to its shape when the shape moves.
+ * rotated by [HatchStyle.angle] around the anchor point. Fills anchor it at the page's
+ * corner, so fills with the same look line up: as if the page were hatched all over and
+ * showed it only where filled.
  */
 object Hatch {
     /** Upper bound of drawn primitives per fill, so a tiny spacing on a big area stays fast. */
@@ -50,11 +51,24 @@ object Hatch {
         alpha: Int,
         paint: Paint,
         maxCells: Float = MAX_CELLS,
-    ) = synchronized(this) { drawLocked(canvas, bounds, ox, oy, pattern, style.sane(), color, alpha, paint, maxCells) }
+        opaque: Boolean = false,
+    ) = synchronized(this) { drawLocked(canvas, bounds, ox, oy, pattern, style.sane(), color, alpha, paint, maxCells, opaque) }
+
+    /**
+     * Alpha (0..255) a fill of [pattern] in [color] is shown with: [alpha] times the colour's
+     * own, the style's opacity and the pattern's tint. Drawn [opaque] inside a layer, the layer
+     * takes this one.
+     */
+    fun alphaOf(pattern: FillPattern, style: HatchStyle, color: Int, alpha: Int): Int {
+        var a = alpha * Color.alpha(color) / 255f * style.sane().opacity
+        if (pattern == FillPattern.SOLID) a *= 90f / 255f
+        if (pattern == FillPattern.CHECKER) a *= 0.55f
+        return a.toInt().coerceIn(0, 255)
+    }
 
     private val clip = android.graphics.Rect()
 
-    private fun drawLocked(canvas: Canvas, bounds: RectF, ox: Float, oy: Float, pattern: FillPattern, s: HatchStyle, color: Int, alpha: Int, paint: Paint, maxCells: Float) {
+    private fun drawLocked(canvas: Canvas, bounds: RectF, ox: Float, oy: Float, pattern: FillPattern, s: HatchStyle, color: Int, alpha: Int, paint: Paint, maxCells: Float, opaque: Boolean) {
         // Only the part that can show: the fill's bounds within the canvas clip (screen, page).
         if (!canvas.getClipBounds(clip)) return
         val b = RectF(bounds)
@@ -62,10 +76,7 @@ object Hatch {
         paint.reset()
         paint.isAntiAlias = true
         paint.color = color
-        var a = alpha * Color.alpha(color) / 255f * s.opacity
-        if (pattern == FillPattern.SOLID) a *= 90f / 255f
-        if (pattern == FillPattern.CHECKER) a *= 0.55f
-        paint.alpha = a.toInt().coerceIn(0, 255)
+        paint.alpha = if (opaque) 255 else alphaOf(pattern, s, color, alpha)
         val w = s.width * s.scale
         paint.strokeWidth = w
         paint.strokeCap = Paint.Cap.ROUND

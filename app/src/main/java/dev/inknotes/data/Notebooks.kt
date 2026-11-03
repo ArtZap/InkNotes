@@ -436,6 +436,23 @@ class NotebookRepository(filesDir: File) {
         return updated
     }
 
+    /**
+     * A copy of page [index] right after it: same paper size, the same PDF page under it,
+     * and [content] (the page's elements as they are now) on it.
+     */
+    fun duplicatePage(nb: Notebook, index: Int, content: PageContent): Notebook {
+        val src = nb.pageIds[index]
+        val id = newId()
+        val pages = nb.pageIds.toMutableList().apply { add(index + 1, id) }
+        val sizes = nb.pageSizes[src]?.let { nb.pageSizes + (id to it) } ?: nb.pageSizes
+        val pdf = nb.pdfPages[src]?.let { nb.pdfPages + (id to it) } ?: nb.pdfPages
+        val updated = nb.copy(pageIds = pages, pageSizes = sizes, pdfPages = pdf, updatedAt = System.currentTimeMillis())
+        writeMeta(updated)
+        // Queued before anything can load the new page, on the same thread.
+        savePageAsync(updated, id, content)
+        return updated
+    }
+
     fun movePage(nb: Notebook, from: Int, to: Int): Notebook {
         val pages = nb.pageIds.toMutableList()
         pages.add(to, pages.removeAt(from))

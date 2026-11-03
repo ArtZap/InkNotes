@@ -219,7 +219,7 @@ private fun LineTypeChip(type: LineType, selected: Boolean, enabled: Boolean, co
 }
 
 @Composable
-private fun SettingSlider(
+internal fun SettingSlider(
     label: String,
     value: String,
     current: Float,

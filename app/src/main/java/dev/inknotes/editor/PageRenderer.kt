@@ -5,6 +5,7 @@ import android.graphics.BlendMode
 import android.graphics.BlurMaskFilter
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.DashPathEffect
 import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Path
@@ -17,6 +18,9 @@ import dev.inknotes.data.InkKind
 import dev.inknotes.data.InkTextures
 import dev.inknotes.data.Notebook
 import dev.inknotes.data.PageBackground
+import dev.inknotes.data.DashStyle
+import dev.inknotes.data.FillPattern
+import dev.inknotes.data.HatchStyle
 import dev.inknotes.data.PageFill
 import dev.inknotes.data.PageImage
 import dev.inknotes.data.PageStroke
@@ -315,9 +319,54 @@ class PageRenderer {
             drawNeonGlow(canvas, s)
             drawNeonTube(canvas, s, toScreen, core = false)
             drawNeonTube(canvas, s, toScreen, core = true)
+        } else if (s.dash != null) {
+            drawDashed(canvas, s)
         } else {
             ink.draw(canvas, displayStroke(s), toScreen)
         }
+    }
+
+    private val dashPaths = WeakHashMap<PageStroke, Path>()
+    private val dashEffects = HashMap<Pair<DashStyle, Float>, DashPathEffect>()
+    private val dashPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
+        strokeJoin = Paint.Join.ROUND
+    }
+
+    /**
+     * A dashed line with its own pattern ([PageStroke.dash]): the pen's track as it is (shapes
+     * keep sharp corners), stroked with the line's width and dashes.
+     */
+    private fun drawDashed(canvas: Canvas, s: PageStroke) {
+        val dash = s.dash ?: return
+        val width = s.stroke.brush.size
+        val path = dashPaths.getOrPut(s) { polyline(s.stroke) }
+        if (dashEffects.size > 64) dashEffects.clear()
+        dashPaint.pathEffect = dashEffects.getOrPut(dash to width) { DashPathEffect(dash.intervals(width), 0f) }
+        dashPaint.color = InkColors.forPaper(s.stroke.brush.colorIntArgb, inkOnDark)
+        dashPaint.strokeWidth = width
+        canvas.drawPath(path, dashPaint)
+    }
+
+    private fun polyline(stroke: Stroke): Path {
+        val inputs = stroke.inputs
+        val path = Path()
+        if (inputs.size == 0) return path
+        val p = StrokeInput()
+        inputs.populate(0, p)
+        var px = p.x
+        var py = p.y
+        path.moveTo(px, py)
+        for (i in 1 until inputs.size) {
+            inputs.populate(i, p)
+            if (kotlin.math.hypot(p.x - px, p.y - py) < 0.3f) continue
+            px = p.x
+            py = p.y
+            path.lineTo(px, py)
+        }
+        if (inputs.size == 1) path.lineTo(px + 0.01f, py)
+        return path
     }
 
     /**
@@ -332,7 +381,7 @@ class PageRenderer {
         while (i < strokes.size) {
             val s = strokes[i]
             if (s.kind != InkKind.NEON) {
-                if (s.kind.isInk) ink.draw(canvas, displayStroke(s), toScreen)
+                if (s.dash != null) drawDashed(canvas, s) else if (s.kind.isInk) ink.draw(canvas, displayStroke(s), toScreen)
                 i++
                 continue
             }
@@ -410,10 +459,63 @@ class PageRenderer {
         canvas.save()
         canvas.clipPath(f.path)
         f.cutPath?.let(canvas::clipOutPath)
-        // Anchor the pattern to the shape so it moves with it.
-        Hatch.draw(canvas, f.bounds, f.outline[0], f.outline[1], f.pattern, f.style, InkColors.forPaper(f.color, inkOnDark), alpha, fillPaint, maxCells)
+        // Anchored to the page, not the shape: fills of the same look line up (see Hatch).
+        Hatch.draw(canvas, f.bounds, 0f, 0f, f.pattern, f.style, InkColors.forPaper(f.color, inkOnDark), alpha, fillPaint, maxCells)
         canvas.restore()
     }
+
+    /**
+     * Layers for drawing fills of the same look as one: off for PDF, whose canvas can't
+     * mask a layer, so there each fill is drawn by itself.
+     */
+    var fillLayers = true
+
+    private data class FillLook(val pattern: FillPattern, val style: HatchStyle, val color: Int)
+
+    /**
+     * [fills] in order. Those with the same pattern, settings and colour are one hatching seen
+     * through all their shapes: the lines run on across them and are drawn once where they
+     * overlap, so overlaps don't get darker.
+     */
+    fun drawFills(canvas: Canvas, fills: List<PageFill>, maxCells: Float = Hatch.budgetFor(fills.size)) {
+        if (fills.size < 2 || !fillLayers) {
+            for (f in fills) drawFill(canvas, f, 255, maxCells)
+            return
+        }
+        val groups = LinkedHashMap<Any, MutableList<PageFill>>()
+        // Solid ink (arrowheads, filled stamps) is opaque: nothing to gain from a layer.
+        for (f in fills) groups.getOrPut(if (f.pattern == FillPattern.INK) f else FillLook(f.pattern, f.style.sane(), f.color)) { ArrayList(1) } += f
+        for (group in groups.values) {
+            if (group.size == 1) drawFill(canvas, group[0], 255, maxCells) else drawFillGroup(canvas, group, maxCells * group.size)
+        }
+    }
+
+    private fun drawFillGroup(canvas: Canvas, group: List<PageFill>, maxCells: Float) {
+        val first = group[0]
+        val bounds = RectF(first.bounds)
+        for (f in group) bounds.union(f.bounds)
+        val color = InkColors.forPaper(first.color, inkOnDark)
+        val alpha = Hatch.alphaOf(first.pattern, first.style, color, 255)
+        if (alpha == 0) return
+        // The pattern once over all the shapes, opaque; then kept only inside them; then faded.
+        canvas.saveLayerAlpha(bounds, alpha)
+        Hatch.draw(canvas, bounds, 0f, 0f, first.pattern, first.style, color, 255, fillPaint, maxCells, opaque = true)
+        canvas.saveLayer(bounds, keepInsidePaint)
+        for (f in group) {
+            val cut = f.cutPath
+            if (cut != null) {
+                canvas.save()
+                canvas.clipOutPath(cut)
+            }
+            canvas.drawPath(f.path, shapePaint)
+            if (cut != null) canvas.restore()
+        }
+        canvas.restore()
+        canvas.restore()
+    }
+
+    private val shapePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.BLACK }
+    private val keepInsidePaint = Paint().apply { blendMode = BlendMode.DST_IN }
 
     /** A placed picture; a light frame stands in while the bitmap is still loading. */
     fun drawImage(canvas: Canvas, img: PageImage, bitmap: Bitmap?) {
@@ -483,8 +585,7 @@ class PageRenderer {
         loadImage: (String) -> Bitmap? = { null },
     ) {
         for (img in images) drawImage(canvas, img, loadImage(img.file))
-        val budget = Hatch.budgetFor(fills.size)
-        for (f in fills) drawFill(canvas, f, 255, budget)
+        drawFills(canvas, fills)
         if (strokes.any { it.kind == InkKind.HIGHLIGHTER }) {
             beginHighlighter(canvas)
             for (s in strokes) if (s.kind == InkKind.HIGHLIGHTER) drawStroke(canvas, s, toScreen)

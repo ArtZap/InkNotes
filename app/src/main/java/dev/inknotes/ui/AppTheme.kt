@@ -24,6 +24,8 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.inknotes.data.DashPattern
+import dev.inknotes.data.DashStyle
 import dev.inknotes.data.FillPattern
 import dev.inknotes.data.HatchStyle
 import dev.inknotes.data.LineType
@@ -150,8 +152,26 @@ class AppPrefs(context: Context) {
             .takeIf { it == InkKind.PEN || it == InkKind.PENCIL || it == InkKind.DASHED } ?: InkKind.PEN
         set(value) = prefs.edit().putString(PEN_KIND, value.name).apply()
 
+    /** Room beside the pages in the editor: share of the screen's width, + left, − right. */
+    var pageShift: Float
+        get() = prefs.getFloat(PAGE_SHIFT, 0f).takeIf { it.isFinite() } ?: 0f
+        set(value) = prefs.edit().putFloat(PAGE_SHIFT, value).apply()
+
+    /** Pattern of new dashed lines. */
+    var dashStyle: DashStyle
+        get() {
+            val parts = prefs.getString(DASH_STYLE, null)?.split(',') ?: return DashStyle.DEFAULT
+            val pattern = parts.getOrNull(0)?.let { name -> DashPattern.entries.find { it.name == name } } ?: return DashStyle.DEFAULT
+            val dash = parts.getOrNull(1)?.toFloatOrNull()?.takeIf { it.isFinite() } ?: return DashStyle.DEFAULT
+            val gap = parts.getOrNull(2)?.toFloatOrNull()?.takeIf { it.isFinite() } ?: return DashStyle.DEFAULT
+            return DashStyle(pattern, dash, gap).sane()
+        }
+        set(value) = prefs.edit().putString(DASH_STYLE, with(value) { "${pattern.name},$dash,$gap" }).apply()
+
     private companion object {
         const val PEN_KIND = "penKind"
+        const val DASH_STYLE = "dashStyle"
+        const val PAGE_SHIFT = "pageShift"
         const val SCRIBBLE = "scribbleErase"
         const val GLASS = "glassCovers"
         const val SORT = "librarySort"

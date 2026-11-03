@@ -394,15 +394,23 @@ class NewToolsTest {
         view.tool = Tool.PEN
         tap(400f, 500f)
         assertEquals(setOf(InkKind.NEON), view.selectedLineKinds())
+        view.penSize = 3.4f
+        view.neonSize = 9f
         view.restyleSelection(InkKind.PEN)
         val pen = doc.strokes[0]
         assertEquals(InkKind.PEN, pen.kind)
         assertEquals(0xFFFF2BD6.toInt(), pen.stroke.brush.colorIntArgb)
-        assertEquals(6.5f, pen.stroke.brush.size, 0.01f)
+        // The width the pen is set to now, not the neon line's.
+        assertEquals(3.4f, pen.stroke.brush.size, 0.01f)
         // Still selected, so it can be changed again.
         assertEquals(1, selectionCount)
         view.restyleSelection(InkKind.NEON)
         assertEquals(InkKind.NEON, doc.strokes[0].kind)
+        assertEquals(9f, doc.strokes[0].stroke.brush.size, 0.01f)
+        // The selection's width slider: every selected line that wide.
+        view.setSelectionLineWidth(5f)
+        view.endSelectionLineWidth()
+        assertEquals(5f, doc.strokes[0].stroke.brush.size, 0.01f)
         // Markers are left as they are.
         view.restyleSelection(InkKind.HIGHLIGHTER)
         assertEquals(InkKind.NEON, doc.strokes[0].kind)

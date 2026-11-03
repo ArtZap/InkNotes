@@ -29,6 +29,7 @@ import androidx.ink.strokes.MutableStrokeInputBatch
 import androidx.ink.strokes.Stroke
 import androidx.ink.strokes.StrokeInput
 import androidx.input.motionprediction.MotionEventPredictor
+import dev.inknotes.data.DashStyle
 import dev.inknotes.data.FillPattern
 import dev.inknotes.data.HatchStyle
 import dev.inknotes.data.InkBrushes
@@ -194,6 +195,9 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
     /** What the pen tool draws: a pen line, pencil or dashes. */
     var penKind = InkKind.PEN
 
+    /** Pattern of new dashed lines. */
+    var dashStyle = DashStyle.DEFAULT
+
     var penColor = Color.BLACK
     var penSize = 2.8f
     var fountainColor = 0xFF1A1A1A.toInt()
@@ -234,7 +238,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
     private var totalHeight = 0f
 
     /** Page, kind and the colour the user chose (wet ink is shown recoloured for the paper). */
-    private class WetStroke(val page: Int, val kind: InkKind, val color: Int, val size: Float)
+    private class WetStroke(val page: Int, val kind: InkKind, val color: Int, val size: Float, val dash: DashStyle?)
 
     private val wetStrokes = HashMap<InProgressStrokeId, WetStroke>()
     private val density = resources.displayMetrics.density
@@ -263,6 +267,12 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
     private val tracePoints = ArrayList<Float>()
     private var pendingArea: FloatArray? = null
     private var areaPage = 0
+
+    /**
+     * [pendingArea] without the closed shapes inside it (see [AreaFinder.carve]), once worked
+     * out; it is what [applyFill] puts on the page.
+     */
+    private var pendingPieces: List<FloatArray>? = null
 
     private val cache = PageCache { pageLayer.invalidate() }
 
@@ -396,7 +406,24 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         totalHeight = max(0f, y - PAGE_GAP)
         clearSelection()
         clearPendingArea()
-        if (worldWidth != oldWidth) fitToWidth(currentPage) else applyViewport()
+        // A page of another width came or went: same place and zoom, refitted.
+        if (worldWidth != oldWidth && width > 0 && n > 0) refit(width) else applyViewport()
+    }
+
+    /** Where page [index] is on screen: how far its top is from the view's top (pixels). */
+    fun pagePlace(index: Int): Float? {
+        if (index !in tops.indices) return null
+        val v = FloatArray(9).also(worldToView::getValues)
+        return v[Matrix.MTRANS_Y] + tops[index] * v[Matrix.MSCALE_Y]
+    }
+
+    /** Puts page [index] back where [pagePlace] found it (after pages around it moved). */
+    fun restorePagePlace(index: Int, place: Float) {
+        if (index !in tops.indices) return
+        val v = FloatArray(9).also(worldToView::getValues)
+        v[Matrix.MTRANS_Y] = place - tops[index] * v[Matrix.MSCALE_Y]
+        worldToView.setValues(v)
+        applyViewport()
     }
 
     fun scrollToPage(index: Int) {
@@ -411,7 +438,13 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         super.onSizeChanged(w, h, oldw, oldh)
         // Only the height changed (the tool bar above grew or shrank): keep zoom and place,
         // onLayout keeps the pages where they were on screen.
-        if (oldw == w && oldw > 0 && tops.isNotEmpty()) applyViewport() else fitToWidth(currentPage)
+        // The width changed (the pages panel opened, the tablet turned): the same place stays in
+        // view, fitted to the new width if it was fitted, otherwise at the same zoom.
+        when {
+            oldw == w && oldw > 0 && tops.isNotEmpty() -> applyViewport()
+            oldw > 0 && tops.isNotEmpty() -> refit(oldw)
+            else -> fitToWidth(currentPage)
+        }
         pendingFlash?.let { (page, rect) ->
             pendingFlash = null
             flash(page, rect)
@@ -453,13 +486,54 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         pageLayer.invalidate()
     }
 
+    /**
+     * Room kept free beside the pages, as a share of the view's width: on the left when
+     * positive, on the right when negative (somewhere to rest the hand, or for notes beside).
+     * The pages fit into what is left.
+     */
+    var pageShift = 0f
+        set(value) {
+            val v = value.coerceIn(-MAX_PAGE_SHIFT, MAX_PAGE_SHIFT)
+            if (v == field) return
+            field = v
+            if (width > 0 && tops.isNotEmpty()) refit(width) else applyViewport()
+        }
+
+    /** Left and right edges of the part of the view the pages fit into (view pixels). */
+    private fun pagesLeft() = PAGE_MARGIN * density + max(pageShift, 0f) * width
+    private fun pagesRight() = width - PAGE_MARGIN * density - max(-pageShift, 0f) * width
+
+    private fun fitScaleNow() = max(1f, pagesRight() - pagesLeft()) / worldWidth
+
     /** Fit page width to the screen and show [page] at the top. */
     fun fitToWidth(page: Int = currentPage) {
         if (width == 0) return
-        fitScale = (width - 2 * PAGE_MARGIN * density) / worldWidth
+        fitScale = fitScaleNow()
         worldToView.setScale(fitScale, fitScale)
-        worldToView.postTranslate(PAGE_MARGIN * density, PAGE_MARGIN * density)
+        worldToView.postTranslate(pagesLeft(), PAGE_MARGIN * density)
         scrollToPage(page.coerceIn(0, max(0, tops.size - 1)))
+    }
+
+    /**
+     * After the view's width ([oldWidth] before), the room beside the pages or the pages' width
+     * changed: what was at the top of the screen stays there, the zoom stays (or the pages stay
+     * fitted, if they were), nothing scrolls back to the start of a page.
+     */
+    private fun refit(oldWidth: Int) {
+        if (width == 0) return
+        val v = FloatArray(9).also(worldToView::getValues)
+        val s = v[Matrix.MSCALE_X]
+        val fitted = abs(s - fitScale) <= fitScale * 0.01f
+        fitScale = fitScaleNow()
+        val ns = if (fitted) fitScale else s
+        val worldTop = -v[Matrix.MTRANS_Y] / s
+        val worldX = (oldWidth / 2f - v[Matrix.MTRANS_X]) / s
+        v[Matrix.MSCALE_X] = ns
+        v[Matrix.MSCALE_Y] = ns
+        v[Matrix.MTRANS_Y] = -worldTop * ns
+        v[Matrix.MTRANS_X] = width / 2f - worldX * ns
+        worldToView.setValues(v)
+        applyViewport()
     }
 
     /** Maps page coordinates of [page] to view pixels (for tests and overlays). */
@@ -543,7 +617,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
 
     /**
      * Draws the selected lines as [kind] (a neon line as an ordinary one, and back), in
-     * their colours and about as wide as they are.
+     * their colours and as wide as that kind of line is set now (its tool's slider).
      */
     fun restyleSelection(kind: InkKind) {
         if (kind !in LINE_KINDS) return
@@ -569,15 +643,70 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
     }
 
     private fun restyle(s: PageStroke, kind: InkKind): PageStroke {
-        val brush = s.stroke.brush
-        // The width it shows: a fountain pen's size is its nib, twice its usual line.
-        val width = if (s.kind == InkKind.FOUNTAIN) brush.size * FOUNTAIN_TO_LINE else brush.size
         val size = when (kind) {
-            InkKind.FOUNTAIN -> (width / FOUNTAIN_TO_LINE).coerceIn(MIN_FOUNTAIN, MAX_FOUNTAIN)
-            InkKind.NEON -> width.coerceIn(MIN_NEON, MAX_NEON)
-            else -> width.coerceIn(MIN_PEN, MAX_PEN)
+            // An even line is as thick as the pen's line looks.
+            InkKind.LINE -> InkBrushes.lineWidth(penSize)
+            else -> sizeOf(kind)
         }
-        return PageStroke(kind, Stroke(InkBrushes.create(kind, brush.colorIntArgb, size), s.stroke.inputs))
+        val dash = if (kind == InkKind.DASHED) s.dash ?: dashStyle else null
+        return PageStroke(kind, Stroke(InkBrushes.create(kind, s.stroke.brush.colorIntArgb, size), s.stroke.inputs), dash)
+    }
+
+    /** Width a line shows (page units): a fountain pen's size is its nib, twice its usual line. */
+    private fun shownWidth(s: PageStroke) = s.stroke.brush.size * if (s.kind == InkKind.FOUNTAIN) FOUNTAIN_TO_LINE else 1f
+
+    /** Width the selected lines show (the widest of them), or null when no lines are selected. */
+    fun selectionLineWidth(): Float? {
+        val doc = doc(selectionPage) ?: return null
+        return doc.strokes.filter { it in selected }.maxOfOrNull(::shownWidth)
+    }
+
+    /**
+     * Makes every selected line [width] wide as it shows. Calls while a slider is dragged
+     * make one undo step, closed by [endSelectionLineWidth].
+     */
+    fun setSelectionLineWidth(width: Float) {
+        val doc = doc(selectionPage) ?: return
+        if (doc.strokes.none { it in selected }) return
+        val w = width.coerceIn(MIN_LINE_WIDTH, MAX_LINE_WIDTH)
+        val newSelection = ArrayList<Any>()
+        val strokes = doc.strokes.map { s ->
+            if (s !in selected) return@map s
+            val size = if (s.kind == InkKind.FOUNTAIN) w / FOUNTAIN_TO_LINE else w
+            val resized = if (abs(s.stroke.brush.size - size) < 1e-3f) s else s.with(Stroke(InkBrushes.create(s.kind, s.stroke.brush.colorIntArgb, size), s.stroke.inputs))
+            newSelection += resized
+            resized
+        }
+        doc.beginSession()
+        doc.set(strokes = strokes)
+        doc.fills.filterTo(newSelection) { it in selected }
+        doc.images.filterTo(newSelection) { it in selected }
+        reselect(newSelection)
+    }
+
+    fun endSelectionLineWidth() {
+        val doc = doc(selectionPage) ?: return
+        doc.commitSession()
+        changed()
+    }
+
+    /** Gives the selected dashed lines [style]. */
+    fun restyleSelectedDashes(style: DashStyle) {
+        val doc = doc(selectionPage) ?: return
+        if (doc.strokes.none { it in selected && it.kind == InkKind.DASHED }) return
+        val newSelection = ArrayList<Any>()
+        val strokes = doc.strokes.map { s ->
+            when {
+                s !in selected -> s
+                s.kind != InkKind.DASHED -> s.also(newSelection::add)
+                else -> PageStroke(s.kind, s.stroke, style).also(newSelection::add)
+            }
+        }
+        doc.edit(strokes = strokes)
+        doc.fills.filterTo(newSelection) { it in selected }
+        doc.images.filterTo(newSelection) { it in selected }
+        reselect(newSelection)
+        changed()
     }
 
     /** Page of the current selection. */
@@ -817,9 +946,10 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
     // ------------------------------------------------------------- area fill
 
     fun applyFill(pattern: FillPattern, color: Int, style: HatchStyle = fillStyle) {
-        val outline = pendingArea ?: return
+        if (pendingArea == null) return
+        val pieces = pendingPieces ?: return carvePendingArea { applyFill(pattern, color, style) }
         val doc = doc(areaPage) ?: return
-        doc.edit(fills = doc.fills + PageFill(outline, pattern, color, style = style))
+        doc.edit(fills = doc.fills + pieces.map { PageFill(it, pattern, color, style = style) })
         clearPendingArea()
         changed()
     }
@@ -827,6 +957,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
     fun clearPendingArea() {
         if (pendingArea == null) return
         pendingArea = null
+        pendingPieces = null
         pageLayer.invalidate()
         listener?.onPendingAreaChanged(false)
     }
@@ -1110,7 +1241,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         val brush = if (kind == InkKind.NEON) InkBrushes.neonLive(shown, Neon.core(shown), Neon.CORE, size) else InkBrushes.create(kind, shown, size)
         activePointerId = e.getPointerId(index)
         val id = inProgressView.startStroke(e, activePointerId, brush, viewToPageMatrix(activePage), Matrix())
-        wetStrokes[id] = WetStroke(activePage, kind, color, size)
+        wetStrokes[id] = WetStroke(activePage, kind, color, size, if (kind == InkKind.DASHED) dashStyle else null)
         drawStrokeId = id
         hideCursor()
 
@@ -1217,7 +1348,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             } else {
                 null
             }
-            doc.add(PageStroke(wet.kind, aligned ?: stored))
+            doc.add(PageStroke(wet.kind, aligned ?: stored, wet.dash))
         }
         inProgressView.removeFinishedStrokes(strokes.keys)
         pageLayer.invalidate()
@@ -1306,7 +1437,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             val k = ((d - len * 0.6f) / d).coerceAtLeast(0f)
             paths = listOf(listOf(tail, ShapeRecognizer.P(tail.x + (tip.x - tail.x) * k, tail.y + (tip.y - tail.y) * k)))
         }
-        val shapeStrokes = paths.map { path -> PageStroke(kind, Stroke(brush, shapeInputs(path, pressure))) }
+        val shapeStrokes = paths.map { path -> PageStroke(kind, Stroke(brush, shapeInputs(path, pressure)), if (kind == InkKind.DASHED) wet.dash else null) }
         doc?.let { it.edit(strokes = it.strokes + shapeStrokes, fills = it.fills + shapeFills) }
         performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
         changed()
@@ -1479,8 +1610,31 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             select(points)
         } else {
             pendingArea = points
+            pendingPieces = null
             areaPage = activePage
             listener?.onPendingAreaChanged(true)
+            carvePendingArea()
+        }
+    }
+
+    /** Works out [pendingPieces] on the area worker, then shows them in the preview. */
+    private fun carvePendingArea(then: (() -> Unit)? = null) {
+        val outline = pendingArea ?: return
+        val page = areaPage
+        val doc = doc(page) ?: return
+        val strokes = doc.strokes
+        val w = widths.getOrElse(page) { PAGE_W }
+        val h = heights.getOrElse(page) { PAGE_H }
+        areaExec.execute {
+            val pieces = runCatching { AreaFinder.carve(strokes, w, h, outline) }.getOrNull()
+                ?.takeIf { it.isNotEmpty() } ?: listOf(outline)
+            holdHandler.post {
+                // Traced again or let go meanwhile.
+                if (pendingArea !== outline) return@post
+                pendingPieces = pieces
+                pageLayer.invalidate()
+                then?.invoke()
+            }
         }
     }
 
@@ -1974,7 +2128,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         val a = end(rulerFrom)
         val b = end(rulerTo)
         val path = listOf(ShapeRecognizer.P(a[0], a[1]), ShapeRecognizer.P(b[0], b[1]))
-        doc.add(PageStroke(kind, Stroke(InkBrushes.create(kind, color, size), shapeInputs(path, 0.6f))))
+        doc.add(PageStroke(kind, Stroke(InkBrushes.create(kind, color, size), shapeInputs(path, 0.6f)), if (kind == InkKind.DASHED) dashStyle else null))
         changed()
     }
 
@@ -2118,7 +2272,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         worldToView.getValues(v)
         val s = v[Matrix.MSCALE_X]
         val margin = PAGE_MARGIN * density
-        v[Matrix.MTRANS_X] = clampAxis(v[Matrix.MTRANS_X], worldWidth * s, width.toFloat(), margin)
+        v[Matrix.MTRANS_X] = clampX(v[Matrix.MTRANS_X], worldWidth * s)
         v[Matrix.MTRANS_Y] = clampAxis(v[Matrix.MTRANS_Y], totalHeight * s, height.toFloat(), margin)
         worldToView.setValues(v)
         worldToView.invert(viewToWorld)
@@ -2129,6 +2283,13 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             currentPage = visible
             listener?.onVisiblePageChanged(visible)
         }
+    }
+
+    /** Like [clampAxis], within the part of the view kept for the pages (see [pageShift]). */
+    private fun clampX(t: Float, content: Float): Float {
+        val l = pagesLeft()
+        val r = pagesRight()
+        return if (content <= r - l) l + (r - l - content) / 2 else t.coerceIn(r - content, l)
     }
 
     private fun clampAxis(t: Float, content: Float, viewport: Float, margin: Float): Float =
@@ -2508,7 +2669,8 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             val area = pendingArea
             if (area != null && areaPage == i) {
                 val preview = PageFill(area, fillPattern, fillColor, style = fillStyle)
-                pageRenderer.drawFill(canvas, preview, 110)
+                // What will be filled, once known: the traced outline less the shapes inside it.
+                for (piece in pendingPieces ?: listOf(area)) pageRenderer.drawFill(canvas, PageFill(piece, fillPattern, fillColor, style = fillStyle), 110)
                 canvas.drawPath(preview.path, dashPaint)
             }
             if (tracePoints.size >= 4 && activePage == i) {
@@ -2581,8 +2743,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             fun wanted(x: Any) = (only == null || x in only) && x !in exclude
             fun seen(b: RectF?) = visible == null || b == null || RectF.intersects(b, visible)
             for (img in doc.images) if (wanted(img) && seen(PageEdits.bounds(img))) pageRenderer.drawImage(canvas, img, src.image(img.file))
-            val budget = Hatch.budgetFor(doc.fills.size)
-            for (f in doc.fills) if (wanted(f) && seen(f.bounds)) pageRenderer.drawFill(canvas, f, 255, budget)
+            pageRenderer.drawFills(canvas, doc.fills.filter { wanted(it) && seen(it.bounds) }, Hatch.budgetFor(doc.fills.size))
             val highlights = doc.strokes.filter { it.kind == InkKind.HIGHLIGHTER && wanted(it) && seen(PageCache.strokeBounds(it)) }
             if (highlights.isNotEmpty()) {
                 pageRenderer.beginHighlighter(canvas)
@@ -2656,7 +2817,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             canvas.rotate(moveAngle, turnX, turnY)
             canvas.scale(moveKx, moveKy, anchorX, anchorY)
             for (img in doc.images) if (img in selected) pageRenderer.drawImage(canvas, img, src.image(img.file))
-            for (f in doc.fills) if (f in selected) pageRenderer.drawFill(canvas, f, 255)
+            pageRenderer.drawFills(canvas, doc.fills.filter { it in selected })
             for (s in doc.strokes) if (s in selected && s.kind == InkKind.HIGHLIGHTER) pageRenderer.drawStroke(canvas, s, toScreen)
             pageRenderer.drawInk(canvas, doc.strokes.filter { it in selected && it.kind.isInk }, toScreen)
             for (s in doc.strokes) if (s in selected && s.kind == InkKind.SPOILER) pageRenderer.drawSpoiler(canvas, s, toScreen, s in revealed)
@@ -2719,6 +2880,9 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         private const val FLASH_MS = 4000L
         private const val DUPLICATE_OFFSET = 24f
         private const val MIN_ZOOM = 0.5f
+
+        /** Most of the view's width [pageShift] may keep free beside the pages. */
+        const val MAX_PAGE_SHIFT = 0.45f
         private const val MAX_ZOOM = 6f
         private const val TAP_TIMEOUT_MS = 300L
         private const val SELECTION_COLOR = 0xFF1E5BD8.toInt()
@@ -2769,13 +2933,9 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         /** Lines that can be turned into one another ([restyleSelection]); markers cannot. */
         val LINE_KINDS = setOf(InkKind.PEN, InkKind.LINE, InkKind.PENCIL, InkKind.DASHED, InkKind.FOUNTAIN, InkKind.NEON)
 
-        // Sizes a restyled line keeps to (as the tools' sliders do).
-        private const val MIN_PEN = 0.8f
-        private const val MAX_PEN = 12f
-        private const val MIN_FOUNTAIN = 2f
-        private const val MAX_FOUNTAIN = 24f
-        private const val MIN_NEON = 3f
-        private const val MAX_NEON = 20f
+        /** Widths the selection's line width can be set to (page units, as the line shows). */
+        const val MIN_LINE_WIDTH = 0.5f
+        const val MAX_LINE_WIDTH = 40f
         private const val ARROW_HALF_WIDTH = 0.34f
 
         /** A hint band is this much taller than the text it is fitted over. */

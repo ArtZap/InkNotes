@@ -36,6 +36,7 @@ object PdfExporter {
             dark = false
             paper = nb.light
             softGlow = false
+            fillLayers = false
             photo = nb.light.photo?.let { repo.loadPhoto(nb, it) }
         }
         PdfPages(repo).use { pdfPages ->

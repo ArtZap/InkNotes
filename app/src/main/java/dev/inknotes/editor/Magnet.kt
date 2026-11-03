@@ -420,7 +420,7 @@ object Magnet {
             val n = (hypot(points[i] - x0, points[i + 1] - y0) / STEP).toInt().coerceAtLeast(1)
             for (k in 1..n) add(x0 + (points[i] - x0) * k / n, y0 + (points[i + 1] - y0) * k / n)
         }
-        return PageStroke(template.kind, Stroke(template.stroke.brush, batch))
+        return template.with(Stroke(template.stroke.brush, batch))
     }
 
     private const val STEP = 2f

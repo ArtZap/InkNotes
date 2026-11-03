@@ -22,6 +22,7 @@ import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.core.content.FileProvider
 import dev.inknotes.data.InkKind
+import dev.inknotes.data.DashStyle
 import dev.inknotes.data.FillPattern
 import dev.inknotes.data.HatchStyle
 import dev.inknotes.data.Notebook
@@ -29,6 +30,8 @@ import dev.inknotes.data.NotebookRepository
 import dev.inknotes.data.PageBackground
 import dev.inknotes.data.PageSize
 import dev.inknotes.data.PageImage
+import dev.inknotes.data.PageStroke
+import dev.inknotes.data.PageContent
 import dev.inknotes.data.PaperKind
 import dev.inknotes.data.PdfExporter
 import dev.inknotes.data.PdfPages
@@ -571,6 +574,45 @@ class EditorController(
         syncView()
     }
 
+    /** Room kept beside the pages (see [PageEditorView.pageShift]). */
+    var pageShift by mutableFloatStateOf(prefs.pageShift)
+        private set
+
+    fun changePageShift(value: Float) {
+        pageShift = value.coerceIn(-PageEditorView.MAX_PAGE_SHIFT, PageEditorView.MAX_PAGE_SHIFT)
+        prefs.pageShift = pageShift
+        syncView()
+    }
+
+    /** Pattern of new dashed lines. */
+    var dashStyle by mutableStateOf(prefs.dashStyle)
+        private set
+
+    fun changeDashStyle(style: DashStyle) {
+        dashStyle = style.sane()
+        prefs.dashStyle = dashStyle
+        syncView()
+    }
+
+    /** The current dash pattern given to the selected dashed lines. */
+    fun applyDashToSelection() {
+        view?.restyleSelectedDashes(dashStyle)
+    }
+
+    /** Width the selected lines show (page units), or null when no lines are selected. */
+    var selectionLineWidth by mutableStateOf<Float?>(null)
+        private set
+
+    /** Live while the slider moves; [endSelectionLineWidth] makes it one undo step. */
+    fun setSelectionLineWidth(width: Float) {
+        view?.setSelectionLineWidth(width)
+        selectionLineWidth = width
+    }
+
+    fun endSelectionLineWidth() {
+        view?.endSelectionLineWidth()
+    }
+
     /** Text read from the selected handwriting, shown to copy (null: none). */
     var recognizedText by mutableStateOf<String?>(null)
 
@@ -843,11 +885,39 @@ class EditorController(
 
     fun pageSize(index: Int = pageIndex): PageSize = notebook.pageIds.getOrNull(index)?.let(notebook::pageSize) ?: PageSize.DEFAULT
 
-    fun movePage(from: Int, to: Int) {
+    /**
+     * Moves page [from] to [to]. With [follow] the moved page is shown; otherwise the page
+     * on screen stays where it is on screen (dragging thumbnails around).
+     */
+    fun movePage(from: Int, to: Int, follow: Boolean = false) {
         if (from !in notebook.pageIds.indices || to !in notebook.pageIds.indices || from == to) return
+        val shown = notebook.pageIds.getOrNull(pageIndex)
+        val place = view?.pagePlace(pageIndex)
         notebook = repo.movePage(notebook, from, to)
         view?.relayout()
-        goToPage(to)
+        val now = notebook.pageIds.indexOf(shown)
+        when {
+            follow -> goToPage(to)
+            place != null && now >= 0 -> view?.restorePagePlace(now, place)
+        }
+    }
+
+    /** Puts a copy of page [index] right after it and shows the copy. */
+    fun duplicatePage(index: Int) {
+        if (index !in notebook.pageIds.indices) return
+        flush()
+        val pageId = notebook.pageIds[index]
+        val content = docs[pageId]?.content() ?: repo.loadPage(notebook, pageId)
+        // New elements: selection and undo go by identity, so the pages share none.
+        val copy = PageContent(
+            content.strokes.map { PageStroke(it.kind, it.stroke, it.dash) },
+            content.fills.map { it.copy() },
+            content.images.map { it.moved() },
+        )
+        notebook = repo.duplicatePage(notebook, index, copy)
+        handwriting.pageSaved(notebook, notebook.pageIds[index + 1], copy)
+        view?.relayout()
+        goToPage(index + 1)
     }
 
     // ------------------------------------------------------------- thumbnails
@@ -988,6 +1058,7 @@ class EditorController(
         selectedFills = view?.selectedFillCount() ?: 0
         selectionIsTable = count > 0 && view?.selectionIsTable() == true
         selectionLineKinds = if (count > 0) view?.selectedLineKinds().orEmpty() else emptySet()
+        selectionLineWidth = if (count > 0) view?.selectionLineWidth() else null
     }
 
     /** The selected lines drawn as [kind]: neon as an ordinary pen line, a pen line as pencil… */
@@ -1062,6 +1133,8 @@ class EditorController(
         val v = view ?: return
         v.tool = tool
         v.penKind = penKind
+        v.dashStyle = dashStyle
+        v.pageShift = pageShift
         v.penColor = penColor
         v.penSize = penSize
         v.fountainColor = fountainColor
