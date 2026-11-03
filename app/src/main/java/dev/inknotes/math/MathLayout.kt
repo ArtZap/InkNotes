@@ -615,9 +615,13 @@ object MathLayout {
             for (bar in bars) {
                 if (bar !in pool) continue
                 val bb = bar.box
+                // A tall bracket reaching across the bar ((22)^½ written tight) is beside the
+                // fraction, not in it; brackets wholly under the bar, 1/(x + 1), are in it.
+                fun across(it: Item) = it is G && it.box.top < bb.cy && it.box.bottom > bb.cy &&
+                    tallShape(it.glyph, h) in BRACKETS
                 fun stack(up: Boolean): List<Item> {
                     val cand = pool.filter {
-                        it !== bar && it.box.cx in bb.left - 0.15f * h..bb.right + 0.15f * h &&
+                        it !== bar && it.box.cx in bb.left - 0.15f * h..bb.right + 0.15f * h && !across(it) &&
                             (if (up) it.box.bottom <= bb.cy + 0.15f * h else it.box.top >= bb.cy - 0.15f * h)
                     }
                     val got = ArrayList<Item>()
@@ -814,6 +818,7 @@ object MathLayout {
     internal fun median(v: List<Float>): Float? = if (v.isEmpty()) null else v.sorted()[v.size / 2]
 
     private val CONTAINER_SHAPES = setOf('(', ')', '∫', '{', '}')
+    private val BRACKETS = setOf('(', ')', '|', '{', '}')
     private const val INTEGRAL_MIN = 1.15f
 
     /** Round brackets this tall (of the line height) and up are told by their shape. */
