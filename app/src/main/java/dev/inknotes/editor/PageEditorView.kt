@@ -946,9 +946,10 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
     // ------------------------------------------------------------- area fill
 
     fun applyFill(pattern: FillPattern, color: Int, style: HatchStyle = fillStyle) {
-        if (pendingArea == null) return
-        val pieces = pendingPieces ?: return carvePendingArea { applyFill(pattern, color, style) }
+        val outline = pendingArea ?: return
         val doc = doc(areaPage) ?: return
+        // Not worked out yet (the button pressed right after tracing): worked out now, it takes a moment.
+        val pieces = pendingPieces ?: carve(areaPage, outline)
         doc.edit(fills = doc.fills + pieces.map { PageFill(it, pattern, color, style = style) })
         clearPendingArea()
         changed()
@@ -1617,8 +1618,15 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         }
     }
 
+    /** [outline] on [page] less the closed shapes inside it; the outline itself if nothing is left. */
+    private fun carve(page: Int, outline: FloatArray): List<FloatArray> =
+        carve(doc(page)?.strokes.orEmpty(), widths.getOrElse(page) { PAGE_W }, heights.getOrElse(page) { PAGE_H }, outline)
+
+    private fun carve(strokes: List<PageStroke>, w: Float, h: Float, outline: FloatArray): List<FloatArray> =
+        runCatching { AreaFinder.carve(strokes, w, h, outline) }.getOrNull()?.takeIf { it.isNotEmpty() } ?: listOf(outline)
+
     /** Works out [pendingPieces] on the area worker, then shows them in the preview. */
-    private fun carvePendingArea(then: (() -> Unit)? = null) {
+    private fun carvePendingArea() {
         val outline = pendingArea ?: return
         val page = areaPage
         val doc = doc(page) ?: return
@@ -1626,14 +1634,12 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         val w = widths.getOrElse(page) { PAGE_W }
         val h = heights.getOrElse(page) { PAGE_H }
         areaExec.execute {
-            val pieces = runCatching { AreaFinder.carve(strokes, w, h, outline) }.getOrNull()
-                ?.takeIf { it.isNotEmpty() } ?: listOf(outline)
+            val pieces = carve(strokes, w, h, outline)
             holdHandler.post {
                 // Traced again or let go meanwhile.
                 if (pendingArea !== outline) return@post
                 pendingPieces = pieces
                 pageLayer.invalidate()
-                then?.invoke()
             }
         }
     }
