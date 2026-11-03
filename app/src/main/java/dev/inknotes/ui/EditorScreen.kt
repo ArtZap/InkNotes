@@ -1,6 +1,18 @@
 package dev.inknotes.ui
 
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.zIndex
+import kotlinx.coroutines.launch
 import android.content.Intent
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
@@ -113,6 +125,7 @@ fun EditorScreen(
     var showSearch by remember { mutableStateOf(false) }
     var showSelectionSize by remember { mutableStateOf(false) }
     var showHelp by remember { mutableStateOf(false) }
+    var showShift by remember { mutableStateOf(false) }
     var pageSizeOf by remember { mutableStateOf<Int?>(null) }
     var pageText by remember { mutableStateOf<List<dev.inknotes.search.TextLine>?>(null) }
     val context = LocalContext.current
@@ -155,6 +168,7 @@ fun EditorScreen(
             menu = {
                 MenuItem("Фон") { showBackground = true }
                 MenuItem("Размер и ориентация страницы…", InkIcons.PageSize) { pageSizeOf = controller.pageIndex }
+                MenuItem("Отступ страницы слева или справа…") { showShift = true }
                 MenuItem("Распознанный текст страницы") { controller.currentPageText { pageText = it } }
                 MenuItem("Поделиться файлом тетради", InkIcons.Share) { share() }
                 MenuItem("Сохранить файл тетради…") { saveLauncher.launch("${controller.fileName(controller.notebook.title)}.inknote") }
@@ -173,9 +187,16 @@ fun EditorScreen(
         ToolRow(controller, onPickColor = { showPicker = true }, onHatchSettings = { showHatch = true }, onSelectionSize = { showSelectionSize = true })
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         Row(Modifier.fillMaxSize()) {
-            if (showPages) {
-                PagesPanel(controller, onPageSize = { pageSizeOf = it })
-                VerticalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            // Slides in and out; the page beside it keeps its place (see PageEditorView.refit).
+            AnimatedVisibility(
+                visible = showPages,
+                enter = expandHorizontally(tween(PANEL_MS), expandFrom = Alignment.Start) + fadeIn(tween(PANEL_MS)),
+                exit = shrinkHorizontally(tween(PANEL_MS), shrinkTowards = Alignment.Start) + fadeOut(tween(PANEL_MS)),
+            ) {
+                Row {
+                    PagesPanel(controller, onPageSize = { pageSizeOf = it })
+                    VerticalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                }
             }
             AndroidView(
                 factory = { ctx -> PageEditorView(ctx).also(controller::attach) },
@@ -193,6 +214,7 @@ fun EditorScreen(
     controller.recognizedText?.let { RecognizedTextDialog(it, controller, onDismiss = { controller.recognizedText = null }) }
     controller.tappedAnswer?.let { AnswerDialog(controller, it, onDismiss = { controller.tappedAnswer = null }) }
     if (showHelp) HelpDialog(onDismiss = { showHelp = false })
+    if (showShift) PageShiftDialog(controller, onDismiss = { showShift = false })
     if (showBackground) BackgroundDialog(controller, onDismiss = { showBackground = false })
     if (showSelectionSize && controller.selectionCount > 0) SelectionSizeDialog(controller, onDismiss = { showSelectionSize = false })
     pageSizeOf?.let { PageSizeDialog(controller, it, onDismiss = { pageSizeOf = null }) }
@@ -371,6 +393,9 @@ private fun TopRow(
     }
 }
 
+/** How long the pages panel takes to slide in or out. */
+private const val PANEL_MS = 220
+
 /** Narrower than this (dp), the editor's top bar keeps only the essentials; the rest is in its menu. */
 private const val COMPACT_TOP_BAR_DP = 1000
 
@@ -459,16 +484,74 @@ private fun PageTextDialog(c: EditorController, lines: List<dev.inknotes.search.
     )
 }
 
-/** Side column of page thumbnails: tap to jump, menu to move/delete, button to add. */
+/**
+ * Side column of page thumbnails: tap to jump; hold and drag to move a page; hold and let go
+ * for its menu (duplicate, move, delete…); a button at the end adds a page.
+ */
 @Composable
 private fun PagesPanel(c: EditorController, onPageSize: (Int) -> Unit) {
     val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
     var confirmDelete by remember { mutableStateOf<Int?>(null) }
+    // While a thumbnail is dragged the list shows this order; the notebook changes on release.
+    // One state for the panel's life: the drag handlers below hold on to it.
+    var order by remember { mutableStateOf(c.notebook.pageIds) }
+    var dragged by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(c.notebook.pageIds) {
+        if (dragged == null) order = c.notebook.pageIds
+    }
+    var dragOffset by remember { mutableFloatStateOf(0f) }
+    var dragTravel by remember { mutableFloatStateOf(0f) }
+    var menuFor by remember { mutableStateOf<String?>(null) }
+    val gapPx = with(androidx.compose.ui.platform.LocalDensity.current) { 12.dp.toPx() }
+    val edgePx = with(androidx.compose.ui.platform.LocalDensity.current) { 48.dp.toPx() }
     LaunchedEffect(c.pageIndex) {
-        if (c.pageIndex !in listState.firstVisibleItemIndex until listState.firstVisibleItemIndex + listState.layoutInfo.visibleItemsInfo.size) {
+        if (dragged == null && c.pageIndex !in listState.firstVisibleItemIndex until listState.firstVisibleItemIndex + listState.layoutInfo.visibleItemsInfo.size) {
             listState.animateScrollToItem(c.pageIndex)
         }
     }
+
+    /** The dragged thumbnail moved by [dy]: it trades places with the one its middle is over. */
+    fun dragBy(dy: Float) {
+        val id = dragged ?: return
+        dragOffset += dy
+        dragTravel += kotlin.math.abs(dy)
+        val items = listState.layoutInfo.visibleItemsInfo
+        val cur = items.firstOrNull { it.key == id } ?: return
+        val middle = cur.offset + dragOffset + cur.size / 2
+        val target = items.firstOrNull { it.key != id && it.key is String && middle >= it.offset && middle <= it.offset + it.size }
+        if (target != null) {
+            val from = order.indexOf(id)
+            val to = order.indexOf(target.key as String)
+            if (from >= 0 && to >= 0) {
+                order = order.toMutableList().apply { add(to, removeAt(from)) }
+                // Where the thumbnail is laid out now: keep it under the finger.
+                val newTop = if (to > from) target.offset + target.size - cur.size else target.offset
+                dragOffset += cur.offset - newTop
+            }
+        }
+        // Near the ends of the column, the list scrolls along.
+        val info = listState.layoutInfo
+        val top = cur.offset + dragOffset
+        when {
+            top < info.viewportStartOffset + edgePx -> scope.launch { listState.scrollBy(-gapPx) }
+            top + cur.size > info.viewportEndOffset - edgePx -> scope.launch { listState.scrollBy(gapPx) }
+        }
+    }
+
+    fun endDrag() {
+        val id = dragged ?: return
+        dragged = null
+        dragOffset = 0f
+        val from = c.notebook.pageIds.indexOf(id)
+        val to = order.indexOf(id)
+        when {
+            from >= 0 && to >= 0 && from != to -> c.movePage(from, to)
+            // Held without moving: the page's menu.
+            dragTravel < gapPx -> menuFor = id
+        }
+    }
+
     LazyColumn(
         state = listState,
         modifier = Modifier
@@ -479,19 +562,54 @@ private fun PagesPanel(c: EditorController, onPageSize: (Int) -> Unit) {
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         val widest = c.notebook.pageIds.indices.maxOfOrNull(c::pageWidth) ?: PageEditorView.PAGE_W
-        itemsIndexed(c.notebook.pageIds, key = { _, id -> id }) { index, pageId ->
-            LaunchedEffect(pageId, c.thumbnailTick, c.dark) { c.requestThumbnail(pageId) }
-            PageThumbnail(
-                c = c,
-                index = index,
-                image = c.thumbnails[pageId],
-                aspect = c.pageHeight(index) / c.pageWidth(index),
-                // Thumbnails keep the pages' sizes relative to each other.
-                widthShare = c.pageWidth(index) / widest,
-                current = index == c.pageIndex,
-                onDelete = { confirmDelete = index },
-                onPageSize = { onPageSize(index) },
-            )
+        itemsIndexed(order, key = { _, id -> id }) { position, pageId ->
+            val index = c.notebook.pageIds.indexOf(pageId)
+            // A page deleted a moment ago is still in the order for a frame.
+            if (index >= 0) {
+                LaunchedEffect(pageId, c.thumbnailTick, c.dark) { c.requestThumbnail(pageId) }
+                val isDragged = pageId == dragged
+                PageThumbnail(
+                    c = c,
+                    index = index,
+                    position = position,
+                    image = c.thumbnails[pageId],
+                    aspect = c.pageHeight(index) / c.pageWidth(index),
+                    // Thumbnails keep the pages' sizes relative to each other.
+                    widthShare = c.pageWidth(index) / widest,
+                    current = index == c.pageIndex,
+                    menuOpen = menuFor == pageId,
+                    onMenuClose = { menuFor = null },
+                    onDelete = { confirmDelete = index },
+                    onPageSize = { onPageSize(index) },
+                    modifier = if (isDragged) {
+                        Modifier
+                            .zIndex(1f)
+                            .graphicsLayer {
+                                translationY = dragOffset
+                                scaleX = 1.06f
+                                scaleY = 1.06f
+                                shadowElevation = 12.dp.toPx()
+                            }
+                    } else {
+                        Modifier.animateItem()
+                    },
+                    dragHandle = Modifier.pointerInput(pageId) {
+                        detectDragGesturesAfterLongPress(
+                            onDragStart = {
+                                dragged = pageId
+                                dragOffset = 0f
+                                dragTravel = 0f
+                            },
+                            onDrag = { change, amount ->
+                                change.consume()
+                                dragBy(amount.y)
+                            },
+                            onDragEnd = { endDrag() },
+                            onDragCancel = { endDrag() },
+                        )
+                    },
+                )
+            }
         }
         item {
             OutlinedButton(
@@ -521,20 +639,25 @@ private fun PagesPanel(c: EditorController, onPageSize: (Int) -> Unit) {
     }
 }
 
+/** A page's thumbnail; [position] is its place in the column (it differs while one is dragged). */
 @Composable
 private fun PageThumbnail(
     c: EditorController,
     index: Int,
+    position: Int,
     image: ImageBitmap?,
     aspect: Float,
     widthShare: Float,
     current: Boolean,
+    menuOpen: Boolean,
+    onMenuClose: () -> Unit,
     onDelete: () -> Unit,
     onPageSize: () -> Unit,
+    modifier: Modifier = Modifier,
+    dragHandle: Modifier = Modifier,
 ) {
-    var menuOpen by remember { mutableStateOf(false) }
     val shape = RoundedCornerShape(4.dp)
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
             Modifier
                 .fillMaxWidth(widthShare.coerceIn(0.2f, 1f))
@@ -546,38 +669,41 @@ private fun PageThumbnail(
                     if (current) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
                     shape,
                 )
-                .combinedClickable(
-                    onClickLabel = "Перейти к странице ${index + 1}",
-                    onClick = { c.goToPage(index) },
-                    onLongClick = { menuOpen = true },
-                )
+                .clickable(onClickLabel = "Перейти к странице ${index + 1}") { c.goToPage(index) }
+                // After the click handler: it sees events first and takes the release of a hold,
+                // so letting go after dragging (or for the menu) does not also open the page.
+                .then(dragHandle)
         ) {
             if (image != null) Image(image, contentDescription = null, modifier = Modifier.fillMaxSize())
-            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+            DropdownMenu(expanded = menuOpen, onDismissRequest = onMenuClose) {
+                DropdownMenuItem(text = { Text("Дублировать") }, onClick = {
+                    onMenuClose()
+                    c.duplicatePage(index)
+                })
                 DropdownMenuItem(text = { Text("Переместить выше") }, enabled = index > 0, onClick = {
-                    menuOpen = false
+                    onMenuClose()
                     c.movePage(index, index - 1)
                 })
                 DropdownMenuItem(text = { Text("Переместить ниже") }, enabled = index < c.notebook.pageIds.lastIndex, onClick = {
-                    menuOpen = false
+                    onMenuClose()
                     c.movePage(index, index + 1)
                 })
                 DropdownMenuItem(text = { Text("Вставить пустую после") }, onClick = {
-                    menuOpen = false
+                    onMenuClose()
                     c.addPageAt(index + 1)
                 })
                 DropdownMenuItem(text = { Text("Размер и ориентация…") }, onClick = {
-                    menuOpen = false
+                    onMenuClose()
                     onPageSize()
                 })
                 DropdownMenuItem(text = { Text("Удалить", color = MaterialTheme.colorScheme.error) }, enabled = c.notebook.pageIds.size > 1, onClick = {
-                    menuOpen = false
+                    onMenuClose()
                     onDelete()
                 })
             }
         }
         Spacer(Modifier.height(4.dp))
-        Text("${index + 1}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("${position + 1}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -734,6 +860,8 @@ private fun SelectionOptions(c: EditorController, onPickColor: () -> Unit, onHat
     Text("Выделено: ${c.selectionCount}", fontWeight = FontWeight.Medium)
     ColorChoices(c, selected = null, onPickColor)
     if (c.selectionLineKinds.isNotEmpty()) LineKindButton(c)
+    SelectionWidthButton(c)
+    SelectionDashButton(c)
     if (c.selectionIsTable) {
         IconAction(InkIcons.TableAddRow, "Добавить строку снизу", { c.addToTable(row = true) })
         IconAction(InkIcons.TableAddColumn, "Добавить столбец справа", { c.addToTable(row = false) })
@@ -823,6 +951,7 @@ private fun InkOptions(c: EditorController, onPickColor: () -> Unit, tool: Tool 
         else -> c.penColor
     }
     if (tool == Tool.PEN || tool == Tool.FOUNTAIN) PenKindButton(c)
+    if (tool == Tool.PEN && c.penKind == InkKind.DASHED) DashSettingsButton(c)
     // The slider first: it stays on screen however many recent colours there are.
     SizeSlider(c, tool)
     Spacer(Modifier.width(4.dp))

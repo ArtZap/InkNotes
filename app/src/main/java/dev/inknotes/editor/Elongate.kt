@@ -62,7 +62,7 @@ object Elongate {
                 )
                 batch.add(p)
             }
-            PageStroke(s.kind, Stroke(s.stroke.brush, batch))
+            s.with(Stroke(s.stroke.brush, batch))
         }
         val newFills = fills.mapIndexed { j, f ->
             val i = strokes.size + j

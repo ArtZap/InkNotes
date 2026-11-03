@@ -15,104 +15,338 @@ import kotlin.math.sqrt
 
 /**
  * The closed region around a point, bounded by the lines on the page: what the hatch tool
- * fills on a tap. The lines are drawn into a mask a little thicker than they are (so small
- * gaps where a shape was not quite closed still hold), the region is flood-filled from the
- * point and its outline traced. Inner shapes become holes, joined to the outline by hairline
- * cuts, so the result is a single polygon like a traced area.
+ * fills on a tap, and the part of a traced outline that is not inside other closed shapes.
+ *
+ * The lines are drawn into two masks: as thick as they are plus [GAP] on each side (so small
+ * gaps where a shape was not quite closed still hold) and as they are. The region is
+ * flood-filled in the thick mask, then widened in the thin one: to the lines' edges, and into
+ * narrow corners and channels that lead nowhere else. A narrow place that does lead somewhere
+ * (a gap in the outline) stays shut. Closed shapes inside become holes, joined to the outline
+ * by hairline cuts, so each result is a single polygon like a traced area.
  */
 object AreaFinder {
 
     /** Outline in page units (x, y pairs), or null when the point is on a line or the region is open. */
     fun find(strokes: List<PageStroke>, pageW: Float, pageH: Float, x: Float, y: Float): FloatArray? {
         if (pageW < 1f || pageH < 1f || x !in 0f..pageW || y !in 0f..pageH) return null
+        val m = Walls(strokes, pageW, pageH)
+        val seed = m.at(x, y)
+        val inside = BooleanArray(m.size)
+        when {
+            !m.thick[seed] -> {
+                if (!m.flood(intArrayOf(seed), inside, m.thick, null)) return null
+                m.widen(inside, null)
+            }
+            !m.thin[seed] -> {
+                // A tap in a narrow place: the region it opens into, or the narrow pocket itself.
+                when (val open = m.nearestOpen(seed, inside)) {
+                    OPEN -> return null
+                    POCKET -> Unit
+                    else -> {
+                        inside.fill(false)
+                        if (!m.flood(intArrayOf(open), inside, m.thick, null)) return null
+                        m.widen(inside, null)
+                        if (!inside[seed]) return null
+                    }
+                }
+            }
+            else -> return null
+        }
+        m.underLines(inside, null)
+        return m.polygons(inside).maxByOrNull { abs(area(it)) }
+    }
+
+    /**
+     * A traced [outline] (page units) without the closed shapes inside it: the part reachable
+     * from the outline's edge without crossing a line. May come apart into several polygons
+     * when lines cut the outline through; empty when nothing of it is left.
+     */
+    fun carve(strokes: List<PageStroke>, pageW: Float, pageH: Float, outline: FloatArray): List<FloatArray> {
+        if (pageW < 1f || pageH < 1f || outline.size < 6) return emptyList()
+        val m = Walls(strokes, pageW, pageH)
+        val within = m.polygon(outline)
+        val edge = ArrayList<Int>()
+        for (i in 0 until m.size) if (within[i] && m.onEdge(i, within)) edge += i
+        val inside = BooleanArray(m.size)
+        m.flood(edge.filter { !m.thick[it] }.toIntArray(), inside, m.thick, within)
+        m.widen(inside, within, edge)
+        m.underLines(inside, within)
+        return m.polygons(inside)
+    }
+
+    private const val OPEN = -1
+    private const val POCKET = -2
+
+    /** The page's lines rasterized at [k] mask pixels per page unit, with a one-pixel frame. */
+    private class Walls(strokes: List<PageStroke>, pageW: Float, pageH: Float) {
         val k = min(1f, sqrt(MAX_PIXELS / (pageW * pageH)))
         val w = ceil(pageW * k).toInt() + 2
         val h = ceil(pageH * k).toInt() + 2
-        val mask = Bitmap.createBitmap(w, h, Bitmap.Config.ALPHA_8)
-        val canvas = Canvas(mask)
-        canvas.translate(1f, 1f)
-        canvas.scale(k, k)
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            style = Paint.Style.STROKE
-            strokeCap = Paint.Cap.ROUND
-            strokeJoin = Paint.Join.ROUND
-        }
-        val path = Path()
-        val p = StrokeInput()
-        for (s in strokes) {
-            if (!s.kind.isInk) continue
-            val inputs = s.stroke.inputs
-            if (inputs.size == 0) continue
-            path.rewind()
-            inputs.populate(0, p)
-            path.moveTo(p.x, p.y)
-            for (i in 1 until inputs.size) {
-                inputs.populate(i, p)
-                path.lineTo(p.x, p.y)
-            }
-            if (inputs.size == 1) path.lineTo(p.x + 0.01f, p.y)
-            paint.strokeWidth = s.stroke.brush.size + 2 * GAP
-            canvas.drawPath(path, paint)
-        }
-        val bytes = ByteBuffer.allocate(mask.rowBytes * h)
-        mask.copyPixelsToBuffer(bytes)
-        val stride = mask.rowBytes
-        mask.recycle()
-        val raw = bytes.array()
-        val wall = BooleanArray(w * h) { i -> (raw[(i / w) * stride + i % w].toInt() and 0xFF) > WALL }
+        val size = w * h
 
-        val sx = (x * k + 1).toInt().coerceIn(1, w - 2)
-        val sy = (y * k + 1).toInt().coerceIn(1, h - 2)
-        if (wall[sy * w + sx]) return null
-        // Flood fill; reaching the border of the mask means the region is not closed.
-        val inside = BooleanArray(w * h)
-        val queue = IntArray(w * h)
-        var head = 0
-        var tail = 0
-        queue[tail++] = sy * w + sx
-        inside[sy * w + sx] = true
-        while (head < tail) {
-            val i = queue[head++]
-            val cx = i % w
-            val cy = i / w
-            if (cx == 0 || cy == 0 || cx == w - 1 || cy == h - 1) return null
-            var j = i - 1
-            if (!inside[j] && !wall[j]) { inside[j] = true; queue[tail++] = j }
-            j = i + 1
-            if (!inside[j] && !wall[j]) { inside[j] = true; queue[tail++] = j }
-            j = i - w
-            if (!inside[j] && !wall[j]) { inside[j] = true; queue[tail++] = j }
-            j = i + w
-            if (!inside[j] && !wall[j]) { inside[j] = true; queue[tail++] = j }
-        }
-        // Grow under the lines by the extra width they were drawn with.
-        // Only pixels next to the region matter: start from all of it, then from what was added.
-        var from = 0
-        var to = tail
-        repeat(ceil(GAP * k).toInt() + 1) {
-            for (q in from until to) {
-                val i = queue[q]
-                val cx = i % w
-                val cy = i / w
-                if (cx > 1 && !inside[i - 1]) { inside[i - 1] = true; queue[tail++] = i - 1 }
-                if (cx < w - 2 && !inside[i + 1]) { inside[i + 1] = true; queue[tail++] = i + 1 }
-                if (cy > 1 && !inside[i - w]) { inside[i - w] = true; queue[tail++] = i - w }
-                if (cy < h - 2 && !inside[i + w]) { inside[i + w] = true; queue[tail++] = i + w }
+        /** Lines drawn wider by [GAP] on each side: what the flood fill may not cross. */
+        val thick: BooleanArray
+
+        /** Lines as they are. */
+        val thin: BooleanArray
+
+        init {
+            val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ALPHA_8)
+            val canvas = Canvas(bitmap)
+            canvas.translate(1f, 1f)
+            canvas.scale(k, k)
+            val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                style = Paint.Style.STROKE
+                strokeCap = Paint.Cap.ROUND
+                strokeJoin = Paint.Join.ROUND
             }
-            from = to
-            to = tail
+            val paths = ArrayList<Pair<Path, Float>>()
+            val p = StrokeInput()
+            for (s in strokes) {
+                if (!s.kind.isInk) continue
+                val inputs = s.stroke.inputs
+                if (inputs.size == 0) continue
+                val path = Path()
+                inputs.populate(0, p)
+                path.moveTo(p.x, p.y)
+                for (i in 1 until inputs.size) {
+                    inputs.populate(i, p)
+                    path.lineTo(p.x, p.y)
+                }
+                if (inputs.size == 1) path.lineTo(p.x + 0.01f, p.y)
+                paths += path to s.stroke.brush.size
+            }
+            for ((path, width) in paths) {
+                paint.strokeWidth = width + 2 * GAP
+                canvas.drawPath(path, paint)
+            }
+            thick = read(bitmap, WALL)
+            bitmap.eraseColor(0)
+            for ((path, width) in paths) {
+                paint.strokeWidth = width
+                canvas.drawPath(path, paint)
+            }
+            thin = read(bitmap, WALL)
+            bitmap.recycle()
         }
-        val loops = trace(inside, w, h).map { loop -> simplify(loop, 0.8f) }.filter { it.size >= 6 }
-        if (loops.isEmpty()) return null
-        // The outline is the loop with the largest area; holes go the other way round.
-        val outer = loops.maxBy { abs(area(it)) }
-        val minHole = MIN_HOLE * k * k
-        val holes = loops.filter { it !== outer && abs(area(it)) >= minHole }.sortedByDescending { abs(area(it)) }.take(MAX_HOLES)
-        var poly = outer
-        for (hole in holes) poly = bridge(poly, hole)
-        if (poly.size > MAX_FLOATS) return null
-        // Mask pixels back to page units.
-        return FloatArray(poly.size) { i -> (poly[i] - 1f) / k }
+
+        fun read(bitmap: Bitmap, threshold: Int): BooleanArray {
+            val stride = bitmap.rowBytes
+            val bytes = ByteBuffer.allocate(stride * h)
+            bitmap.copyPixelsToBuffer(bytes)
+            val raw = bytes.array()
+            return BooleanArray(size) { i -> (raw[(i / w) * stride + i % w].toInt() and 0xFF) > threshold }
+        }
+
+        /** Mask pixel of a page point. */
+        fun at(x: Float, y: Float): Int {
+            val sx = (x * k + 1).toInt().coerceIn(1, w - 2)
+            val sy = (y * k + 1).toInt().coerceIn(1, h - 2)
+            return sy * w + sx
+        }
+
+        /** Pixels inside [outline] (page units). */
+        fun polygon(outline: FloatArray): BooleanArray {
+            val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ALPHA_8)
+            val canvas = Canvas(bitmap)
+            canvas.translate(1f, 1f)
+            canvas.scale(k, k)
+            val path = Path().apply {
+                moveTo(outline[0], outline[1])
+                for (i in 2 until outline.size step 2) lineTo(outline[i], outline[i + 1])
+                close()
+            }
+            canvas.drawPath(path, Paint().apply { style = Paint.Style.FILL })
+            val mask = read(bitmap, 127)
+            bitmap.recycle()
+            // The frame is never part of an area: the flood fill steps off it.
+            for (x in 0 until w) {
+                mask[x] = false
+                mask[(h - 1) * w + x] = false
+            }
+            for (y in 0 until h) {
+                mask[y * w] = false
+                mask[y * w + w - 1] = false
+            }
+            return mask
+        }
+
+        fun onBorder(i: Int): Boolean {
+            val x = i % w
+            val y = i / w
+            return x == 0 || y == 0 || x == w - 1 || y == h - 1
+        }
+
+        fun onEdge(i: Int, within: BooleanArray) = !within[i - 1] || !within[i + 1] || !within[i - w] || !within[i + w]
+
+        private val queue = IntArray(size)
+
+        /** Offsets of the four neighbours of a pixel. */
+        private val around = intArrayOf(-1, 1, -w, w)
+
+        /**
+         * Flood fill from [seeds] through pixels free of [wall] (and in [within], when given).
+         * False when it reaches the mask's frame, that is, the region is not closed.
+         */
+        fun flood(seeds: IntArray, inside: BooleanArray, wall: BooleanArray, within: BooleanArray?): Boolean {
+            var head = 0
+            var tail = 0
+            for (s in seeds) if (!inside[s]) {
+                inside[s] = true
+                queue[tail++] = s
+            }
+            var closed = true
+            while (head < tail) {
+                val i = queue[head++]
+                if (onBorder(i)) {
+                    if (within == null) return false
+                    closed = false
+                    continue
+                }
+                for (d in around) {
+                    val j = i + d
+                    if (inside[j] || wall[j] || (within != null && !within[j])) continue
+                    inside[j] = true
+                    queue[tail++] = j
+                }
+            }
+            return closed
+        }
+
+        /**
+         * From a pixel under the thick lines but off the thin ones: the nearest pixel of an
+         * open region ([OPEN] if the frame comes first). When there is none, the narrow pocket
+         * walked through is left in [inside] and the answer is [POCKET].
+         */
+        fun nearestOpen(seed: Int, inside: BooleanArray): Int {
+            var head = 0
+            var tail = 0
+            queue[tail++] = seed
+            inside[seed] = true
+            while (head < tail) {
+                val i = queue[head++]
+                if (onBorder(i)) return OPEN
+                for (d in around) {
+                    val j = i + d
+                    if (inside[j] || thin[j]) continue
+                    if (!thick[j]) return j
+                    inside[j] = true
+                    queue[tail++] = j
+                }
+            }
+            return POCKET
+        }
+
+        /**
+         * Widens the flood-filled region in the thin mask: up to the lines' edges (the band the
+         * thick lines took), then into every narrow place that leads nowhere but back into the
+         * region. [edge] (traced areas) also starts narrow places that the outline cuts across.
+         */
+        fun widen(inside: BooleanArray, within: BooleanArray?, edge: List<Int> = emptyList()) {
+            fun ok(j: Int) = within == null || within[j]
+            // Up to the lines: the band of width GAP that the thick lines added.
+            var head = 0
+            var tail = 0
+            for (i in 0 until size) if (inside[i]) queue[tail++] = i
+            repeat(ceil(GAP * k).toInt() + 1) {
+                val end = tail
+                while (head < end) {
+                    val i = queue[head++]
+                    if (onBorder(i)) continue
+                    for (d in around) {
+                        val j = i + d
+                        if (inside[j] || thin[j] || !ok(j)) continue
+                        inside[j] = true
+                        queue[tail++] = j
+                    }
+                }
+            }
+            // Narrow places: free of lines but closed in the thick mask, not taken yet.
+            fun narrow(j: Int) = !inside[j] && !thin[j] && thick[j] && ok(j)
+            val seen = BooleanArray(size)
+            val part = ArrayList<Int>()
+            fun explore(start: Int) {
+                if (seen[start] || !narrow(start)) return
+                part.clear()
+                var leaks = false
+                seen[start] = true
+                part += start
+                var n = 0
+                while (n < part.size) {
+                    val i = part[n++]
+                    if (onBorder(i)) {
+                        if (within == null) leaks = true
+                        continue
+                    }
+                    for (d in around) {
+                        val j = i + d
+                        // Into another region: a gap in the outline, not a corner of this one.
+                        if (!inside[j] && !thick[j] && ok(j)) leaks = true
+                        if (!seen[j] && narrow(j)) {
+                            seen[j] = true
+                            part += j
+                        }
+                    }
+                }
+                if (!leaks) for (i in part) inside[i] = true
+            }
+            for (i in 0 until size) {
+                if (!inside[i] || onBorder(i)) continue
+                explore(i - 1)
+                explore(i + 1)
+                explore(i - w)
+                explore(i + w)
+            }
+            for (i in edge) explore(i)
+        }
+
+        /** One pixel under the lines, so no seam of paper shows between a fill and its outline. */
+        fun underLines(inside: BooleanArray, within: BooleanArray?) {
+            val add = ArrayList<Int>()
+            for (i in 0 until size) {
+                if (!inside[i] || onBorder(i)) continue
+                for (d in around) {
+                    val j = i + d
+                    if (!inside[j] && thin[j] && (within == null || within[j])) add += j
+                }
+            }
+            for (j in add) inside[j] = true
+        }
+
+        /** The regions of [inside] as polygons in page units, holes joined in. */
+        fun polygons(inside: BooleanArray): List<FloatArray> {
+            val loops = trace(inside, w, h).map { simplify(it, 0.8f) }.filter { it.size >= 6 }
+            // Outlines run one way round, holes the other (see trace).
+            val outers = loops.filter { area(it) > 0f && area(it) >= MIN_PIECE * k * k }.sortedBy { area(it) }
+            val holes = loops.filter { area(it) < 0f && -area(it) >= MIN_HOLE * k * k }.sortedBy { area(it) }
+            val owned = HashMap<FloatArray, MutableList<FloatArray>>()
+            for (hole in holes) {
+                // The smallest outline around the hole is the one it is cut out of.
+                val owner = outers.firstOrNull { contains(it, hole[0], hole[1]) } ?: continue
+                owned.getOrPut(owner) { ArrayList() } += hole
+            }
+            return outers.mapNotNull { outer ->
+                var poly = outer
+                for (hole in owned[outer].orEmpty().take(MAX_HOLES)) {
+                    if (poly.size + hole.size + 4 > MAX_FLOATS) break
+                    poly = bridge(poly, hole)
+                }
+                if (poly.size > MAX_FLOATS) null else FloatArray(poly.size) { i -> (poly[i] - 1f) / k }
+            }
+        }
+    }
+
+    /** Is ([x], [y]) inside polygon [p] (even-odd)? */
+    private fun contains(p: FloatArray, x: Float, y: Float): Boolean {
+        var c = false
+        var j = p.size - 2
+        for (i in p.indices step 2) {
+            val yi = p[i + 1]
+            val yj = p[j + 1]
+            if ((yi > y) != (yj > y) && x < (p[j] - p[i]) * (y - yi) / (yj - yi) + p[i]) c = !c
+            j = i
+        }
+        return c
     }
 
     /**
@@ -169,7 +403,7 @@ object AreaFinder {
         return 0
     }
 
-    /** Signed area (shoelace). */
+    /** Signed area (shoelace): positive for outlines as [trace] makes them, negative for holes. */
     private fun area(p: FloatArray): Float {
         var a = 0f
         var j = p.size - 2
@@ -247,7 +481,12 @@ object AreaFinder {
 
     /** Mask alpha above which a pixel is a line. */
     private const val WALL = 60
-    private const val MIN_HOLE = 300f
-    private const val MAX_HOLES = 80
+
+    /** Holes smaller than this (page units²) are specks, not shapes: even the inside of a small "o" stays unfilled. */
+    private const val MIN_HOLE = 6f
+
+    /** Pieces of a carved area smaller than this (page units²) are dropped. */
+    private const val MIN_PIECE = 40f
+    private const val MAX_HOLES = 400
     private const val MAX_FLOATS = 200_000
 }

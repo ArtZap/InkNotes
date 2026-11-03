@@ -59,8 +59,64 @@ enum class InkKind {
     val isInk get() = this != HIGHLIGHTER && this != SPOILER
 }
 
-/** Identity matters: selection and undo track elements by reference, so no data class. */
-class PageStroke(val kind: InkKind, val stroke: Stroke)
+/**
+ * Identity matters: selection and undo track elements by reference, so no data class.
+ * [dash] is the pattern of a [InkKind.DASHED] line (null: the stock dashes of older notes).
+ */
+class PageStroke(val kind: InkKind, val stroke: Stroke, val dash: DashStyle? = null) {
+    /** The same line with another stroke (moved, recoloured, cut…), its dash pattern kept. */
+    fun with(stroke: Stroke, kind: InkKind = this.kind) = PageStroke(kind, stroke, if (kind == InkKind.DASHED) dash else null)
+}
+
+/** Marks a dashed line is made of, repeated; stored by ordinal (page format v11+): only append. */
+enum class DashPattern(val title: String) {
+    DASH("Штрихи"),
+    DOT("Точки"),
+    DASH_DOT("Штрих-точка"),
+    DASH_DOT_DOT("Штрих, две точки"),
+    LONG_SHORT("Длинный, короткий"),
+    DASH_DASH_DOT("Два штриха, точка"),
+}
+
+/**
+ * How a dashed line is drawn, in page units: dashes [dash] long (as they look, round ends
+ * included) with [gap] of paper between marks. Dots are as wide as the line.
+ */
+data class DashStyle(
+    val pattern: DashPattern = DashPattern.DASH,
+    val dash: Float = 14f,
+    val gap: Float = 9f,
+) {
+    fun sane() = DashStyle(pattern, dash.coerceIn(MIN_LENGTH, MAX_LENGTH), gap.coerceIn(MIN_LENGTH, MAX_LENGTH))
+
+    /**
+     * On and off lengths for a line [width] wide with round ends: the ends stick out half the
+     * width past each mark, so a mark is drawn that much shorter and a gap that much longer.
+     */
+    fun intervals(width: Float): FloatArray {
+        val s = sane()
+        val marks = when (s.pattern) {
+            DashPattern.DASH -> listOf(s.dash)
+            DashPattern.DOT -> listOf(0f)
+            DashPattern.DASH_DOT -> listOf(s.dash, 0f)
+            DashPattern.DASH_DOT_DOT -> listOf(s.dash, 0f, 0f)
+            DashPattern.LONG_SHORT -> listOf(s.dash, s.dash * 0.35f)
+            DashPattern.DASH_DASH_DOT -> listOf(s.dash, s.dash, 0f)
+        }
+        val out = FloatArray(marks.size * 2)
+        for ((i, m) in marks.withIndex()) {
+            out[i * 2] = (m - width).coerceAtLeast(0.01f)
+            out[i * 2 + 1] = s.gap + width
+        }
+        return out
+    }
+
+    companion object {
+        const val MIN_LENGTH = 1f
+        const val MAX_LENGTH = 120f
+        val DEFAULT = DashStyle()
+    }
+}
 
 /** Stored by ordinal (page format v3+): only append new entries. */
 enum class FillPattern(val title: String) {
@@ -284,7 +340,7 @@ object InkBrushes {
 /**
  * Page file: header, strokes (ink kind, colour, size, raw pointer inputs in androidx.ink's
  * compact encoding), then fills (v2+, with a [HatchStyle] since v3, its line type since v4).
- * v5 adds the fountain pen ink kind, v6 placed images (drawn under everything else), v7 their rotation, v8 the neon ink kind (written only by pages that have neon, so older apps still read the rest), v9 the pencil and dashed kinds (likewise), v10 even lines and the hint marker (likewise). The brush family is not stored; it is rebuilt from
+ * v5 adds the fountain pen ink kind, v6 placed images (drawn under everything else), v7 their rotation, v8 the neon ink kind (written only by pages that have neon, so older apps still read the rest), v9 the pencil and dashed kinds (likewise), v10 even lines and the hint marker (likewise), v11 dash patterns of dashed lines (likewise, after the pictures). The brush family is not stored; it is rebuilt from
  * the kind, so stock brush upgrades apply to old notes.
  */
 /** A page written by a newer app version (not a corrupt file). */
@@ -292,7 +348,7 @@ class NewerFormatException(message: String) : IOException(message)
 
 object PageCodec {
     private const val MAGIC = 0x494E4B50 // "INKP"
-    private const val VERSION = 10
+    private const val VERSION = 11
 
     /** v2 pattern ordinals: SOLID, DIAGONAL, CROSS, HORIZONTAL, DOTS (all with fixed looks). */
     private val V2_PATTERNS = listOf(
@@ -331,6 +387,7 @@ object PageCodec {
         data.writeInt(MAGIC)
         data.writeInt(
             when {
+                content.strokes.any { it.dash != null } -> 11
                 content.strokes.any { it.kind == InkKind.LINE || it.kind == InkKind.SPOILER } || content.fills.any { it.pattern == FillPattern.INK } -> 10
                 content.strokes.any { it.kind == InkKind.PENCIL || it.kind == InkKind.DASHED } -> 9
                 content.strokes.any { it.kind == InkKind.NEON } -> 8
@@ -374,6 +431,18 @@ object PageCodec {
             data.writeFloat(img.h)
             data.writeFloat(img.rotation)
         }
+        // v11: dash patterns, by index of the line (only lines that have one).
+        val dashed = content.strokes.withIndex().filter { it.value.dash != null }
+        if (dashed.isNotEmpty()) {
+            data.writeInt(dashed.size)
+            for ((i, s) in dashed) {
+                val d = s.dash!!
+                data.writeInt(i)
+                data.writeByte(d.pattern.ordinal)
+                data.writeFloat(d.dash)
+                data.writeFloat(d.gap)
+            }
+        }
         data.flush()
     }
 
@@ -385,7 +454,7 @@ object PageCodec {
             // What the whole page may hold, however it is split up: every cut is a path operation on each redraw.
             val floatsLeft = longArrayOf(MAX_PAGE_FLOATS)
             var cutsLeft = MAX_PAGE_CUTS
-            val strokes = List(data.readCount(MAX_ELEMENTS)) {
+            val strokes = MutableList(data.readCount(MAX_ELEMENTS)) {
                 val kind = InkKind.entries.getOrNull(data.readUnsignedByte()) ?: throw IOException("bad ink kind")
                 val color = data.readInt()
                 val size = data.readFloat()
@@ -447,6 +516,17 @@ object PageCodec {
                     val rotation = if (version >= 7) data.readFloat() else 0f
                     if (!rotation.isFinite()) throw IOException("bad image rotation")
                     PageImage(file, v[0], v[1], v[2], v[3], ((rotation % 360f) + 360f) % 360f)
+                }
+            }
+            if (version >= 11) {
+                repeat(data.readCount(MAX_ELEMENTS)) {
+                    val i = data.readInt()
+                    val pattern = DashPattern.entries.getOrNull(data.readUnsignedByte()) ?: throw IOException("bad dash pattern")
+                    val dash = data.readFloat()
+                    val gap = data.readFloat()
+                    if (i !in strokes.indices || !dash.isFinite() || !gap.isFinite()) throw IOException("bad dash style")
+                    val s = strokes[i]
+                    if (s.kind == InkKind.DASHED) strokes[i] = PageStroke(s.kind, s.stroke, DashStyle(pattern, dash, gap).sane())
                 }
             }
             PageContent(strokes, fills, images)

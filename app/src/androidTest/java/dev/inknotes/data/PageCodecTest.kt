@@ -27,6 +27,24 @@ class PageCodecTest {
         assertEquals(style, fill.style)
     }
 
+    /** A dashed line's pattern survives a round trip; only pages that have one are v11. */
+    @Test
+    fun dashStyleRoundTrip() {
+        val batch = androidx.ink.strokes.MutableStrokeInputBatch()
+        for (i in 0..10) batch.add(androidx.ink.brush.InputToolType.STYLUS, i * 10f, 50f, i * 8L)
+        fun stroke(kind: InkKind, dash: DashStyle? = null) = PageStroke(kind, androidx.ink.strokes.Stroke(InkBrushes.create(kind, Color.BLACK, 3f), batch), dash)
+        fun version(f: File) = java.io.DataInputStream(f.inputStream()).use { it.readInt(); it.readInt() }
+        val style = DashStyle(DashPattern.DASH_DOT, dash = 20f, gap = 7f)
+        val file = File(dir, "dash.ink")
+        file.outputStream().use { PageCodec.write(it, PageContent(listOf(stroke(InkKind.PEN), stroke(InkKind.DASHED, style), stroke(InkKind.DASHED)), emptyList())) }
+        assertEquals(11, version(file))
+        val read = PageCodec.read(file).strokes
+        assertEquals(null, read[0].dash)
+        assertEquals(style, read[1].dash)
+        // Dashed lines of older notes keep the stock dashes.
+        assertEquals(null, read[2].dash)
+    }
+
     /** Neon survives a round trip; pages without it stay readable by v7 apps. */
     @Test
     fun neonInkRoundTripAndVersion() {

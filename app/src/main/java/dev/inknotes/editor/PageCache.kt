@@ -171,8 +171,7 @@ internal class PageCache(private val invalidate: () -> Unit) {
         r.pdfDetail = null
         val toScreen = Matrix().apply { setScale(viewScale, viewScale) }
         for (img in images) r.drawImage(canvas, img, picture(img.file))
-        val budget = Hatch.budgetFor(fills.size)
-        for (f in fills) r.drawFill(canvas, f, 255, budget)
+        r.drawFills(canvas, fills)
         val highlights = strokes.filter { it.kind == InkKind.HIGHLIGHTER }
         if (highlights.isNotEmpty()) {
             r.beginHighlighter(canvas)
@@ -494,8 +493,7 @@ internal class PageCache(private val invalidate: () -> Unit) {
         r.drawBackground(canvas, edgeWidth = 0f)
         fun visible(b: RectF?) = clip == null || (b != null && RectF.intersects(b, clip))
         for (img in images) if (img !in excluded && visible(PageEdits.bounds(img))) r.drawImage(canvas, img, picture(img.file))
-        val budget = Hatch.budgetFor(fills.size)
-        for (f in fills) if (f !in excluded && visible(f.bounds)) r.drawFill(canvas, f, 255, budget)
+        r.drawFills(canvas, fills.filter { it !in excluded && visible(it.bounds) }, Hatch.budgetFor(fills.size))
         val highlights = strokes.filter { it.kind == InkKind.HIGHLIGHTER && it !in excluded && visible(boundsFor(it, clip)) }
         if (highlights.isNotEmpty()) {
             r.beginHighlighter(canvas)

@@ -251,7 +251,7 @@ object Tables {
         val batch = MutableStrokeInputBatch()
         val n = (hypot(x1 - x0, y1 - y0) / STEP).toInt().coerceAtLeast(1)
         for (k in 0..n) batch.add(InputToolType.STYLUS, x0 + (x1 - x0) * k / n, y0 + (y1 - y0) * k / n, k * 4L, pressure = 0.6f)
-        return PageStroke(s.kind, Stroke(s.stroke.brush, batch))
+        return s.with(Stroke(s.stroke.brush, batch))
     }
 
     /** [s] cut off at [edge] (a level position when [row], else an upright one), or null if nothing is left. */
@@ -283,7 +283,7 @@ object Tables {
             prevY = p.y
         }
         if (count < 2) return null
-        return PageStroke(s.kind, Stroke(s.stroke.brush, batch))
+        return s.with(Stroke(s.stroke.brush, batch))
     }
 
     private const val TOLERANCE = 6f

@@ -146,7 +146,7 @@ object PageEdits {
         runCatching {
             val batch = MutableStrokeInputBatch()
             for (p in inputs) batch.add(p)
-            PageStroke(template.kind, Stroke(template.stroke.brush, batch))
+            template.with(Stroke(template.stroke.brush, batch))
         }.getOrNull()
 
     /** Adds the eraser segment to [f]'s cuts, extending the previous cut when it continues it. */
@@ -275,7 +275,7 @@ object PageEdits {
         } else {
             InkBrushes.create(s.kind, s.stroke.brush.colorIntArgb, (s.stroke.brush.size * t.scale).coerceIn(MIN_BRUSH, MAX_BRUSH))
         }
-        return PageStroke(s.kind, Stroke(brush, batch))
+        return s.with(Stroke(brush, batch))
     }
 
     fun transform(f: PageFill, t: Transform): PageFill {
@@ -313,7 +313,7 @@ object PageEdits {
     /** Highlighter strokes keep their translucency when recoloured. */
     fun recolor(s: PageStroke, color: Int): PageStroke {
         val c = if (s.kind == InkKind.HIGHLIGHTER) (color and 0x00FFFFFF) or (0x80 shl 24) else color
-        return PageStroke(s.kind, s.stroke.copy(s.stroke.brush.copyWithColorIntArgb(colorIntArgb = c)))
+        return s.with(s.stroke.copy(s.stroke.brush.copyWithColorIntArgb(colorIntArgb = c)))
     }
 
     fun recolor(f: PageFill, color: Int): PageFill = f.copy(color = color)

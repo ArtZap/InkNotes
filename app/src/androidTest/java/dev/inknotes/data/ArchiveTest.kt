@@ -223,7 +223,8 @@ class ArchiveTest {
             z.closeEntry()
         }
         assertTrue(file.length() < 5 * 1024 * 1024)
-        val result = read(mine, file)
+        // Reading up to the cap is 150 MB of inflating: a slow tablet in the middle of a run needs time.
+        val result = read(mine, file, seconds = 180)
         assertTrue(result is ArchiveImport.Failed)
         assertEquals("Файл слишком большой", (result as ArchiveImport.Failed).reason)
     }
@@ -283,7 +284,7 @@ class ArchiveTest {
         repo.exportArchiveAsync(nb, { file.outputStream() }, done)
     }
 
-    private fun read(repo: NotebookRepository, file: File): ArchiveImport = await { done ->
+    private fun read(repo: NotebookRepository, file: File, seconds: Long = 20): ArchiveImport = await(seconds) { done ->
         repo.readArchiveAsync({ file.inputStream() }, done)
     }
 
@@ -291,14 +292,14 @@ class ArchiveTest {
         repo.commitImportAsync(ready, replace, done)
     }
 
-    private fun <T> await(start: ((T) -> Unit) -> Unit): T {
+    private fun <T> await(seconds: Long = 20, start: ((T) -> Unit) -> Unit): T {
         val latch = CountDownLatch(1)
         var value: T? = null
         start {
             value = it
             latch.countDown()
         }
-        assertTrue(latch.await(20, TimeUnit.SECONDS))
+        assertTrue("no result in $seconds s", latch.await(seconds, TimeUnit.SECONDS))
         @Suppress("UNCHECKED_CAST")
         return value as T
     }

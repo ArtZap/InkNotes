@@ -12,6 +12,7 @@ import androidx.ink.strokes.MutableStrokeInputBatch
 import androidx.ink.strokes.Stroke
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import dev.inknotes.HangDump
 import dev.inknotes.data.FillPattern
 import dev.inknotes.data.InkBrushes
 import dev.inknotes.data.InkKind
@@ -25,6 +26,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
@@ -37,6 +39,10 @@ import kotlin.math.hypot
  */
 @RunWith(AndroidJUnit4::class)
 class NewToolsTest {
+    /** A test stuck for longer fails and shows where (one of them used to hang the whole run). */
+    @get:Rule
+    val hang = HangDump(90)
+
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
     private lateinit var view: PageEditorView
@@ -394,15 +400,23 @@ class NewToolsTest {
         view.tool = Tool.PEN
         tap(400f, 500f)
         assertEquals(setOf(InkKind.NEON), view.selectedLineKinds())
+        view.penSize = 3.4f
+        view.neonSize = 9f
         view.restyleSelection(InkKind.PEN)
         val pen = doc.strokes[0]
         assertEquals(InkKind.PEN, pen.kind)
         assertEquals(0xFFFF2BD6.toInt(), pen.stroke.brush.colorIntArgb)
-        assertEquals(6.5f, pen.stroke.brush.size, 0.01f)
+        // The width the pen is set to now, not the neon line's.
+        assertEquals(3.4f, pen.stroke.brush.size, 0.01f)
         // Still selected, so it can be changed again.
         assertEquals(1, selectionCount)
         view.restyleSelection(InkKind.NEON)
         assertEquals(InkKind.NEON, doc.strokes[0].kind)
+        assertEquals(9f, doc.strokes[0].stroke.brush.size, 0.01f)
+        // The selection's width slider: every selected line that wide.
+        view.setSelectionLineWidth(5f)
+        view.endSelectionLineWidth()
+        assertEquals(5f, doc.strokes[0].stroke.brush.size, 0.01f)
         // Markers are left as they are.
         view.restyleSelection(InkKind.HIGHLIGHTER)
         assertEquals(InkKind.NEON, doc.strokes[0].kind)
