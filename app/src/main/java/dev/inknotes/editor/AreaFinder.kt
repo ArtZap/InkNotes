@@ -17,12 +17,13 @@ import kotlin.math.sqrt
  * The closed region around a point, bounded by the lines on the page: what the hatch tool
  * fills on a tap, and the part of a traced outline that is not inside other closed shapes.
  *
- * The lines are drawn into two masks: as thick as they are plus [GAP] on each side (so small
- * gaps where a shape was not quite closed still hold) and as they are. The region is
- * flood-filled in the thick mask, then widened in the thin one: to the lines' edges, and into
- * narrow corners and channels that lead nowhere else. A narrow place that does lead somewhere
- * (a gap in the outline) stays shut. Closed shapes inside become holes, joined to the outline
- * by hairline cuts, so each result is a single polygon like a traced area.
+ * The lines are drawn into two masks: as they are, and as walls. A shape not quite closed has
+ * its gap at the end of a line that stops short of another; the walls close such gaps (a round
+ * plug at a loose end, reaching up to 2·[GAP] past it) and nothing else, so a narrow channel
+ * between two lines (a circle close to the sides of a box) stays open. The region is
+ * flood-filled inside the walls, then widened in the thin mask into narrow corners that lead
+ * nowhere else; a plugged gap stays shut. Closed shapes inside become holes, joined to the
+ * outline by hairline cuts, so each result is a single polygon like a traced area.
  */
 object AreaFinder {
 
@@ -84,7 +85,7 @@ object AreaFinder {
         val h = ceil(pageH * k).toInt() + 2
         val size = w * h
 
-        /** Lines drawn wider by [GAP] on each side: what the flood fill may not cross. */
+        /** The lines and the plugs at loose ends: what the flood fill may not cross. */
         val thick: BooleanArray
 
         /** Lines as they are. */
@@ -101,33 +102,103 @@ object AreaFinder {
                 strokeJoin = Paint.Join.ROUND
             }
             val paths = ArrayList<Pair<Path, Float>>()
+            val lines = ArrayList<Line>()
             val p = StrokeInput()
             for (s in strokes) {
                 if (!s.kind.isInk) continue
                 val inputs = s.stroke.inputs
                 if (inputs.size == 0) continue
                 val path = Path()
-                inputs.populate(0, p)
-                path.moveTo(p.x, p.y)
-                for (i in 1 until inputs.size) {
+                val xs = FloatArray(inputs.size)
+                val ys = FloatArray(inputs.size)
+                for (i in 0 until inputs.size) {
                     inputs.populate(i, p)
-                    path.lineTo(p.x, p.y)
+                    xs[i] = p.x
+                    ys[i] = p.y
+                    if (i == 0) path.moveTo(p.x, p.y) else path.lineTo(p.x, p.y)
                 }
                 if (inputs.size == 1) path.lineTo(p.x + 0.01f, p.y)
                 paths += path to s.stroke.brush.size
+                lines += Line(xs, ys, s.stroke.brush.size / 2)
             }
-            for ((path, width) in paths) {
-                paint.strokeWidth = width + 2 * GAP
-                canvas.drawPath(path, paint)
-            }
-            thick = read(bitmap, WALL)
-            bitmap.eraseColor(0)
             for ((path, width) in paths) {
                 paint.strokeWidth = width
                 canvas.drawPath(path, paint)
             }
             thin = read(bitmap, WALL)
+            val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+            for (plug in plugs(lines)) canvas.drawCircle(plug[0], plug[1], plug[2], fill)
+            thick = read(bitmap, WALL)
             bitmap.recycle()
+        }
+
+        /** A stroke's centre line and half its width. */
+        private class Line(val xs: FloatArray, val ys: FloatArray, val half: Float) {
+            /** Length along the line up to each point. */
+            val along = FloatArray(xs.size).also {
+                for (i in 1 until xs.size) it[i] = it[i - 1] + hypot(xs[i] - xs[i - 1], ys[i] - ys[i - 1])
+            }
+        }
+
+        /**
+         * Round plugs (x, y, radius) closing the gaps at loose ends: an end of a line that does
+         * not touch other ink (or its own line farther along) but comes within 2·[GAP] of it.
+         * The plug reaches just over to the line it falls short of.
+         */
+        private fun plugs(lines: List<Line>): List<FloatArray> {
+            // Segments by grid cell, for the lines near an end.
+            val cell = 16f
+            val grid = HashMap<Long, MutableList<IntArray>>()
+            fun key(cx: Int, cy: Int) = (cx.toLong() shl 32) or (cy.toLong() and 0xFFFFFFFFL)
+            for ((li, l) in lines.withIndex()) {
+                for (i in 0 until l.xs.size - 1) {
+                    val pad = l.half + 1f
+                    val x0 = ((minOf(l.xs[i], l.xs[i + 1]) - pad) / cell).toInt()
+                    val x1 = ((maxOf(l.xs[i], l.xs[i + 1]) + pad) / cell).toInt()
+                    val y0 = ((minOf(l.ys[i], l.ys[i + 1]) - pad) / cell).toInt()
+                    val y1 = ((maxOf(l.ys[i], l.ys[i + 1]) + pad) / cell).toInt()
+                    if ((x1 - x0 + 1).toLong() * (y1 - y0 + 1) > MAX_CELLS_PER_SEGMENT) continue
+                    for (cx in x0..x1) for (cy in y0..y1) grid.getOrPut(key(cx, cy)) { ArrayList(2) } += intArrayOf(li, i)
+                }
+            }
+            val out = ArrayList<FloatArray>()
+            for ((li, l) in lines.withIndex()) {
+                val n = l.xs.size
+                if (n < 2 || l.along[n - 1] < 2 * l.half) continue
+                for (end in listOf(0, n - 1)) {
+                    val ex = l.xs[end]
+                    val ey = l.ys[end]
+                    // Its own line near this end is the end itself, not something it reaches.
+                    val skip = 2 * (l.half + 2 * GAP)
+                    val reach = l.half + 2 * GAP + MAX_HALF
+                    var bestGap = Float.MAX_VALUE
+                    var bestDist = 0f
+                    val seen = HashSet<Long>()
+                    for (cx in ((ex - reach) / cell).toInt()..((ex + reach) / cell).toInt()) {
+                        for (cy in ((ey - reach) / cell).toInt()..((ey + reach) / cell).toInt()) {
+                            for (seg in grid[key(cx, cy)].orEmpty()) {
+                                val (oi, si) = seg[0] to seg[1]
+                                if (!seen.add((oi.toLong() shl 32) or si.toLong())) continue
+                                val o = lines[oi]
+                                if (oi == li) {
+                                    val near = if (end == 0) o.along[si] < skip else o.along[si + 1] > o.along[n - 1] - skip
+                                    if (near) continue
+                                }
+                                val d = PageEdits.distanceToSegment(ex, ey, o.xs[si], o.ys[si], o.xs[si + 1], o.ys[si + 1])
+                                val gap = d - o.half - l.half
+                                if (gap < bestGap) {
+                                    bestGap = gap
+                                    bestDist = d
+                                }
+                            }
+                        }
+                    }
+                    // Touching already, or nothing near to close the gap to.
+                    if (bestGap <= TOUCH || bestGap > 2 * GAP) continue
+                    out += floatArrayOf(ex, ey, bestDist + 1f)
+                }
+            }
+            return out
         }
 
         fun read(bitmap: Bitmap, threshold: Int): BooleanArray {
@@ -476,8 +547,17 @@ object AreaFinder {
 
     private const val MAX_PIXELS = 1_600_000f
 
-    /** Extra half-width the lines are drawn with: gaps up to twice this still close the shape. */
+    /** Gaps up to twice this at the loose end of a line still close the shape. */
     private const val GAP = 3f
+
+    /** An end this close to other ink (page units, edge to edge) touches it: no gap. */
+    private const val TOUCH = 0.6f
+
+    /** Widest half of a line looked for around an end (brushes go up to 40 wide). */
+    private const val MAX_HALF = 20f
+
+    /** A segment spread over more grid cells than this (a huge stroke) is left out of the search. */
+    private const val MAX_CELLS_PER_SEGMENT = 20_000L
 
     /** Mask alpha above which a pixel is a line. */
     private const val WALL = 60

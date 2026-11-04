@@ -1010,6 +1010,7 @@ private fun SizeSlider(c: EditorController, tool: Tool = c.tool) {
             onValueChange = { c.selectSize(it) },
             valueRange = range.min..range.max,
             modifier = Modifier.width(160.dp),
+            valueLabel = { "%.1f".format(it) },
         )
     }
 }

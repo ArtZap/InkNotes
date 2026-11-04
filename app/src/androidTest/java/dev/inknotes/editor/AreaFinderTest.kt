@@ -66,4 +66,38 @@ class AreaFinderTest {
         assertTrue(pieces.any { inside(it, 350f, 350f) })
         assertFalse(pieces.any { inside(it, 430f, 430f) })
     }
+
+    private fun circle(cx: Float, cy: Float, r: Float): PageStroke {
+        val xy = FloatArray(73 * 2)
+        for (k in 0..72) {
+            val a = Math.PI * 2 * k / 72
+            xy[k * 2] = (cx + r * Math.cos(a)).toFloat()
+            xy[k * 2 + 1] = (cy + r * Math.sin(a)).toFloat()
+        }
+        return line(*xy)
+    }
+
+    /** A circle almost touching both sides of a box: the narrow channels beside it are filled too. */
+    @Test
+    fun narrowChannelsBesideACircleAreFilled() {
+        // Box 200..300 wide, circle radius 44 at x 250: 3.5 units of paper either side (lines
+        // 2.5 wide), narrower than the 6 a loose end may stop short by.
+        val strokes = listOf(box(200f, 200f, 300f, 600f), circle(250f, 400f, 44f))
+        val area = AreaFinder.find(strokes, 1000f, 1414f, 250f, 250f)
+        assertNotNull(area)
+        assertTrue("beside the circle, left", inside(area!!, 203f, 400f))
+        assertTrue("beside the circle, right", inside(area, 297f, 400f))
+        assertTrue("below the circle", inside(area, 250f, 550f))
+        assertFalse("inside the circle", inside(area, 250f, 400f))
+    }
+
+    /** A box whose last side stops short of the first: the gap is closed, the tap fills it. */
+    @Test
+    fun aGapAtALooseEndStillCloses() {
+        val strokes = listOf(line(200f, 200f, 400f, 200f, 400f, 400f, 200f, 400f, 200f, 205f))
+        val area = AreaFinder.find(strokes, 1000f, 1414f, 300f, 300f)
+        assertNotNull(area)
+        assertTrue(inside(area!!, 300f, 300f))
+        assertFalse(inside(area, 150f, 300f))
+    }
 }

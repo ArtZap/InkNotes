@@ -122,17 +122,44 @@ object Magnet {
             pMax = maxOf(pMax, p.pressure)
         }
         if (pMax - pMin > 0.001f) return null
-        val m = n / 2
-        if (hypot(xs[0] - xs[n - 1], ys[0] - ys[n - 1]) < 2f) return null
-        val c = center(xs[0], ys[0], xs[m], ys[m], xs[n - 1], ys[n - 1]) ?: return null
-        val r = hypot(xs[0] - c[0], ys[0] - c[1])
-        if (r > MAX_ARC_RADIUS) return null
-        val tolerance = maxOf(ARC_TOLERANCE, r * 0.01f)
-        for (i in 0 until n) if (kotlin.math.abs(hypot(xs[i] - c[0], ys[i] - c[1]) - r) > tolerance) return null
-        // Not three points of a polyline that happen to lie on a circle: curved all along.
-        val q = n / 4
-        if (PageEdits.distanceToSegment(xs[q], ys[q], xs[0], ys[0], xs[m], ys[m]) < ARC_TOLERANCE) return null
-        return floatArrayOf(xs[0], ys[0], xs[m], ys[m], xs[n - 1], ys[n - 1])
+        val chord = hypot(xs[0] - xs[n - 1], ys[0] - ys[n - 1])
+        if (chord < 2f) return null
+        // The bend point: farthest from the line through the ends (the middle of a circular
+        // arc; where the two arcs of a bent one meet, see arcThrough).
+        var m = 0
+        var far = -1f
+        for (i in 1 until n - 1) {
+            val d = kotlin.math.abs((xs[i] - xs[0]) * (ys[n - 1] - ys[0]) - (ys[i] - ys[0]) * (xs[n - 1] - xs[0])) / chord
+            if (d > far) {
+                far = d
+                m = i
+            }
+        }
+        if (m == 0 || far < 2 * ARC_TOLERANCE) return null
+        val h = floatArrayOf(xs[0], ys[0], xs[m], ys[m], xs[n - 1], ys[n - 1])
+        val fit = arcThrough(h)
+        if (fit.size <= 6 || fit.size / 2 > 4 * ARC_SEGMENTS + 1) return null
+        val tolerance = maxOf(ARC_TOLERANCE, chord * 0.01f)
+        for (i in 0 until n) if (distanceToLine(xs[i], ys[i], fit) > tolerance) return null
+        // Not three points of a polyline that happen to fit: curved on both sides of the bend
+        // or at least on one.
+        val q1 = m / 2
+        val q2 = (m + n - 1) / 2
+        if (PageEdits.distanceToSegment(xs[q1], ys[q1], xs[0], ys[0], xs[m], ys[m]) < ARC_TOLERANCE &&
+            PageEdits.distanceToSegment(xs[q2], ys[q2], xs[m], ys[m], xs[n - 1], ys[n - 1]) < ARC_TOLERANCE
+        ) {
+            return null
+        }
+        return h
+    }
+
+    /** Distance from ([x], [y]) to the polyline [pl] (x, y pairs). */
+    private fun distanceToLine(x: Float, y: Float, pl: FloatArray): Float {
+        var best = Float.MAX_VALUE
+        for (i in 0 until pl.size - 2 step 2) {
+            best = minOf(best, PageEdits.distanceToSegment(x, y, pl[i], pl[i + 1], pl[i + 2], pl[i + 3]))
+        }
+        return best
     }
 
     private val curves = WeakHashMap<PageStroke, FloatArray>()
@@ -275,47 +302,60 @@ object Magnet {
         return out.toFloatArray()
     }
 
-    /** Centre of the circle through three points, or null when they are (almost) on a line. */
-    private fun center(ax: Float, ay: Float, bx: Float, by: Float, cx: Float, cy: Float): FloatArray? {
-        val d = 2 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by))
-        val span = maxOf(hypot(bx - ax, by - ay), hypot(cx - ax, cy - ay))
-        if (kotlin.math.abs(d) < 1e-3f * span * span) return null
-        val a2 = ax * ax + ay * ay
-        val b2 = bx * bx + by * by
-        val c2 = cx * cx + cy * cy
-        return floatArrayOf(
-            (a2 * (by - cy) + b2 * (cy - ay) + c2 * (ay - by)) / d,
-            (a2 * (cx - bx) + b2 * (ax - cx) + c2 * (bx - ax)) / d,
-        )
-    }
-
     /**
-     * Points along the circular arc from the first point of [h] through the second to the
-     * third (x, y pairs); a straight line when the three are in a row.
+     * Points of the curve from the first point of [h] through the second to the third (x, y
+     * pairs). The middle point is the top of the bend: the curve there runs along the line
+     * between the ends. It is two circular arcs meeting there, each through its end: one circle
+     * (the arc as before) when the point is in the middle, and a sharp bend near one end with a
+     * long sweep to the other (a tick) when it is off to one side. Straight pieces when the
+     * three are in a row.
      */
     fun arcThrough(h: FloatArray): FloatArray {
-        val c = center(h[0], h[1], h[2], h[3], h[4], h[5])
-        if (c == null || hypot(h[0] - c[0], h[1] - c[1]) > MAX_ARC_RADIUS) return floatArrayOf(h[0], h[1], h[4], h[5])
-        val r = hypot(h[0] - c[0], h[1] - c[1])
-        val twoPi = (2 * Math.PI).toFloat()
-        fun ccw(from: Float, to: Float) = ((to - from) % twoPi + twoPi) % twoPi
-        val a0 = kotlin.math.atan2(h[1] - c[1], h[0] - c[0])
-        val am = kotlin.math.atan2(h[3] - c[1], h[2] - c[0])
-        val a1 = kotlin.math.atan2(h[5] - c[1], h[4] - c[0])
-        // The way round from the first end to the other that passes the middle point.
-        val sweep = ccw(a0, a1).let { if (ccw(a0, am) < it) it else it - twoPi }
-        val out = FloatArray((ARC_SEGMENTS + 1) * 2)
-        for (k in 0..ARC_SEGMENTS) {
-            val a = a0 + sweep * k / ARC_SEGMENTS
-            out[k * 2] = c[0] + r * kotlin.math.cos(a)
-            out[k * 2 + 1] = c[1] + r * kotlin.math.sin(a)
+        val ax = h[0].toDouble()
+        val ay = h[1].toDouble()
+        val len = hypot(h[4] - h[0], h[5] - h[1]).toDouble()
+        if (len < 1e-3) return floatArrayOf(h[0], h[1], h[4], h[5])
+        // The line between the ends is the x axis, the first end the origin.
+        val ux = (h[4] - h[0]) / len
+        val uy = (h[5] - h[1]) / len
+        val vx = -uy
+        val vy = ux
+        val px = (h[2] - ax) * ux + (h[3] - ay) * uy
+        val py = (h[2] - ax) * vx + (h[3] - ay) * vy
+        if (kotlin.math.abs(py) < 0.5) return floatArrayOf(h[0], h[1], h[2], h[3], h[4], h[5])
+        // Both arcs turn the same way: the one that runs left to right through the bend.
+        val turn = if (py > 0) -1.0 else 1.0
+        val twoPi = 2 * Math.PI
+        val out = ArrayList<Float>()
+        /** The arc through (qx, 0), level at the bend; from its end to the bend or the other way. */
+        fun piece(qx: Double, toBend: Boolean) {
+            // Centre straight under the bend, as far from it as from (qx, 0).
+            val cy = (py * py - (qx - px) * (qx - px)) / (2 * py)
+            val r = kotlin.math.abs(py - cy)
+            val aEnd = kotlin.math.atan2(-cy, qx - px)
+            val aBend = kotlin.math.atan2(py - cy, 0.0)
+            val (a0, a1) = if (toBend) aEnd to aBend else aBend to aEnd
+            val sweep = turn * (((turn * (a1 - a0)) % twoPi + twoPi) % twoPi)
+            val steps = maxOf(4, kotlin.math.ceil(ARC_SEGMENTS * kotlin.math.abs(sweep) / Math.PI).toInt())
+            for (k in (if (out.isEmpty()) 0 else 1)..steps) {
+                val a = a0 + sweep * k / steps
+                val x = px + r * kotlin.math.cos(a)
+                val y = cy + r * kotlin.math.sin(a)
+                out += (ax + x * ux + y * vx).toFloat()
+                out += (ay + x * uy + y * vy).toFloat()
+            }
         }
-        // Exactly through the ends, whatever the rounding.
+        piece(0.0, toBend = true)
+        val bend = out.size
+        piece(len, toBend = false)
+        // Exactly through the handles, whatever the rounding.
         out[0] = h[0]
         out[1] = h[1]
+        out[bend - 2] = h[2]
+        out[bend - 1] = h[3]
         out[out.size - 2] = h[4]
         out[out.size - 1] = h[5]
-        return out
+        return out.toFloatArray()
     }
 
     /**

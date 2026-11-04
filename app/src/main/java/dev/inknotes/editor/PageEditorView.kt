@@ -424,6 +424,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
     /** Puts page [index] back where [pagePlace] found it (after pages around it moved). */
     fun restorePagePlace(index: Int, place: Float) {
         if (index !in tops.indices) return
+        stopFling()
         val v = FloatArray(9).also(worldToView::getValues)
         v[Matrix.MTRANS_Y] = place - tops[index] * v[Matrix.MSCALE_Y]
         worldToView.setValues(v)
@@ -432,6 +433,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
 
     fun scrollToPage(index: Int) {
         if (index !in tops.indices) return
+        stopFling()
         val v = FloatArray(9).also(worldToView::getValues)
         v[Matrix.MTRANS_Y] = PAGE_MARGIN * density - tops[index] * v[Matrix.MSCALE_X]
         worldToView.setValues(v)
@@ -473,6 +475,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
 
     /** Scrolls [rect] (page coordinates of [page]) to the middle of the screen and marks it briefly. */
     fun flash(page: Int, rect: RectF) {
+        stopFling()
         if (width == 0 || page !in tops.indices) {
             pendingFlash = page to RectF(rect)
             return
@@ -525,6 +528,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
      */
     private fun refit(oldWidth: Int) {
         if (width == 0) return
+        stopFling()
         val v = FloatArray(9).also(worldToView::getValues)
         val s = v[Matrix.MSCALE_X]
         val fitted = abs(s - fitScale) <= fitScale * 0.01f
@@ -1091,6 +1095,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
 
     /** A first pointer (or the pen joining fingers): what it does, and that starting. */
     private fun begin(e: MotionEvent, index: Int) {
+        stopFling()
         mode = classify(e, index)
         // Drawing, erasing or tracing elsewhere lets go of the selection.
         if (mode != Mode.MOVE && mode != Mode.GESTURE && mode != Mode.RULER && (tool != Tool.LASSO || mode != Mode.PATH)) clearSelection()
@@ -2271,6 +2276,63 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         return v[Matrix.MSCALE_X]
     }
 
+    // --- fling: the pages run on after the fingers let go
+
+    private var flingVx = 0f
+    private var flingVy = 0f
+    private var flingAt = 0L
+    private val config = android.view.ViewConfiguration.get(context)
+
+    private val flingStep = object : Runnable {
+        override fun run() {
+            if (flingVx == 0f && flingVy == 0f) return
+            val now = android.view.animation.AnimationUtils.currentAnimationTimeMillis()
+            val dt = ((now - flingAt) / 1000f).coerceIn(0f, 0.05f)
+            flingAt = now
+            // Slowing down evenly in proportion: the distance left is v·τ.
+            val decay = kotlin.math.exp(-dt / FLING_TAU)
+            val dx = flingVx * FLING_TAU * (1 - decay)
+            val dy = flingVy * FLING_TAU * (1 - decay)
+            flingVx *= decay
+            flingVy *= decay
+            val before = FloatArray(9).also(worldToView::getValues)
+            worldToView.postTranslate(dx, dy)
+            applyViewport()
+            val after = FloatArray(9).also(worldToView::getValues)
+            // Up against the end of the pages on an axis: that way it stops.
+            if (abs(dx) > 0.5f && abs(after[Matrix.MTRANS_X] - before[Matrix.MTRANS_X]) < 0.3f * abs(dx)) flingVx = 0f
+            if (abs(dy) > 0.5f && abs(after[Matrix.MTRANS_Y] - before[Matrix.MTRANS_Y]) < 0.3f * abs(dy)) flingVy = 0f
+            if (hypot(flingVx, flingVy) < FLING_STOP_DP * density) {
+                stopFling()
+                return
+            }
+            postOnAnimation(this)
+        }
+    }
+
+    private fun startFling(vx: Float, vy: Float) {
+        val speed = hypot(vx, vy)
+        if (speed < max(config.scaledMinimumFlingVelocity.toFloat(), FLING_MIN_DP * density)) return
+        val k = min(1f, config.scaledMaximumFlingVelocity / speed)
+        flingVx = vx * k
+        flingVy = vy * k
+        flingAt = android.view.animation.AnimationUtils.currentAnimationTimeMillis()
+        removeCallbacks(flingStep)
+        postOnAnimation(flingStep)
+    }
+
+    /** A touch, a jump to a page or a new layout stops the pages where they are. */
+    private fun stopFling() {
+        flingVx = 0f
+        flingVy = 0f
+        removeCallbacks(flingStep)
+    }
+
+    override fun onDetachedFromWindow() {
+        stopFling()
+        super.onDetachedFromWindow()
+    }
+
     /** Clamps zoom and pan so the pages cannot be lost off screen, then updates the inverse. */
     private fun applyViewport() {
         if (width == 0) return
@@ -2334,6 +2396,12 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         private var moveY = 0f
         private var pinch = 0f
 
+        /** Recent places of the fingers (time, x, y), for the speed at which they let go. */
+        private val sampleT = LongArray(SAMPLES)
+        private val sampleX = FloatArray(SAMPLES)
+        private val sampleY = FloatArray(SAMPLES)
+        private var samples = 0
+
         fun start(e: MotionEvent) {
             startTime = e.eventTime
             maxPointers = 1
@@ -2343,11 +2411,39 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             moveY = 0f
             pinch = 0f
             rebase(e, -1)
+            samples = 0
+            sample(e.eventTime)
         }
 
         fun pointersChanged(e: MotionEvent, excludeIndex: Int) {
             maxPointers = max(maxPointers, e.pointerCount - if (excludeIndex >= 0) 1 else 0)
             rebase(e, excludeIndex)
+            // The middle of the fingers jumps when one comes or goes: speed from here on.
+            samples = 0
+            sample(e.eventTime)
+        }
+
+        private fun sample(t: Long) {
+            if (samples == SAMPLES) {
+                System.arraycopy(sampleT, 1, sampleT, 0, SAMPLES - 1)
+                System.arraycopy(sampleX, 1, sampleX, 0, SAMPLES - 1)
+                System.arraycopy(sampleY, 1, sampleY, 0, SAMPLES - 1)
+                samples--
+            }
+            sampleT[samples] = t
+            sampleX[samples] = lastX
+            sampleY[samples] = lastY
+            samples++
+        }
+
+        /** Speed of the fingers (px/s) over their last moments, or null when they had stopped. */
+        private fun velocity(upTime: Long): Pair<Float, Float>? {
+            if (samples < 2 || upTime - sampleT[samples - 1] > FLING_STILL_MS) return null
+            var first = samples - 1
+            while (first > 0 && sampleT[samples - 1] - sampleT[first - 1] <= FLING_WINDOW_MS) first--
+            val dt = (sampleT[samples - 1] - sampleT[first]) / 1000f
+            if (dt <= 0f) return null
+            return (sampleX[samples - 1] - sampleX[first]) / dt to (sampleY[samples - 1] - sampleY[first]) / dt
         }
 
         fun move(e: MotionEvent) {
@@ -2382,6 +2478,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             lastX = x
             lastY = y
             lastSpan = span
+            sample(e.eventTime)
             applyViewport()
         }
 
@@ -2393,7 +2490,17 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                     2 -> listener?.onUndoGesture()
                     3 -> listener?.onRedoGesture()
                 }
+                return
             }
+            // Let go while moving: the page runs on and slows down. Not after a pinch.
+            if (pinch > touchSlop) return
+            var (vx, vy) = velocity(e.eventTime) ?: return
+            when (axis) {
+                ScrollAxis.VERTICAL -> vx = 0f
+                ScrollAxis.HORIZONTAL -> vy = 0f
+                else -> Unit
+            }
+            startFling(vx, vy)
         }
 
         private fun rebase(e: MotionEvent, excludeIndex: Int) {
@@ -2929,6 +3036,20 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         private const val FLASH_MS = 4000L
         private const val DUPLICATE_OFFSET = 24f
         private const val MIN_ZOOM = 0.5f
+
+        /** Finger places kept for the speed at which they let go, and how far back it looks. */
+        private const val SAMPLES = 16
+        private const val FLING_WINDOW_MS = 90L
+
+        /** Fingers resting this long before letting go: no fling. */
+        private const val FLING_STILL_MS = 60L
+
+        /** Time constant of the slowing down (s): a page runs on v·τ after the fingers. */
+        private const val FLING_TAU = 0.4f
+
+        /** Slower than this (dp/s) the pages do not run on, and a run ends. */
+        private const val FLING_MIN_DP = 250f
+        private const val FLING_STOP_DP = 20f
 
         /** How far past their edges the pages go sideways: this share of the view's width. */
         private const val SIDE_PAN = 0.5f

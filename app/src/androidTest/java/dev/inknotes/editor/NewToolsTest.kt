@@ -353,6 +353,26 @@ class NewToolsTest {
         save("arc-bent.png")
     }
 
+    /** The bend point pulled to one side: a sharp bend there, a long sweep to the other end (a tick). */
+    @Test
+    fun anArcBendsWhereItsBendPointIs() {
+        val h = floatArrayOf(300f, 500f, 340f, 620f, 700f, 450f)
+        val pts = Magnet.arcThrough(h)
+        // Through the three handles, lowest near the bend point, not in the middle.
+        var lowest = 1
+        for (i in 1 until pts.size step 2) if (pts[i] > pts[lowest]) lowest = i
+        assertEquals(620f, pts[lowest], 2f)
+        assertEquals(340f, pts[lowest - 1], 15f)
+        val arc = Magnet.restroke(template(), pts)
+        // Still an arc: its handles are where they were put.
+        val back = Magnet.arc(arc)!!
+        assertEquals(340f, back[2], 1f)
+        assertEquals(620f, back[3], 1f)
+        // In the middle it is the circular arc it always was.
+        val half = Magnet.arcThrough(floatArrayOf(300f, 600f, 500f, 400f, 700f, 600f))
+        for (i in half.indices step 2) assertEquals(200f, kotlin.math.hypot(half[i] - 500f, half[i + 1] - 600f), 0.01f)
+    }
+
     @Test
     fun aCurveHasPointsAtItsEndsAndBends() = onMain {
         // An S: two bends the other way round each.

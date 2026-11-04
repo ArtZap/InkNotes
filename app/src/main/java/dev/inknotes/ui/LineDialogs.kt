@@ -192,6 +192,7 @@ fun SelectionWidthButton(c: EditorController) {
                     onValueChangeFinished = { c.endSelectionLineWidth() },
                     valueRange = PageEditorView.MIN_LINE_WIDTH..MAX_SELECTION_WIDTH,
                     modifier = Modifier.width(220.dp),
+                    valueLabel = { "%.1f".format(it) },
                 )
             }
         }
