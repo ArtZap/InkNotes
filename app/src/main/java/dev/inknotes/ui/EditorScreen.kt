@@ -113,6 +113,9 @@ fun EditorScreen(
     themeMode: ThemeMode,
     onThemeModeChange: (ThemeMode) -> Unit,
     onClose: () -> Unit,
+    tabs: List<EditorController> = emptyList(),
+    onTab: (EditorController) -> Unit = {},
+    onCloseTab: (EditorController) -> Unit = {},
 ) {
     BackHandler(onBack = onClose)
     DisposableEffect(controller) {
@@ -161,6 +164,7 @@ fun EditorScreen(
             .background(MaterialTheme.colorScheme.surface)
             .safeDrawingPadding()
     ) {
+        if (tabs.size > 1) TabStrip(controller, tabs, onTab, onCloseTab, onLibrary = onClose)
         TopRow(
             c = controller,
             pagesShown = showPages,
@@ -874,6 +878,45 @@ private fun ToolOptions(c: EditorController, onPickColor: () -> Unit, onHatchSet
                 Text("Коснитесь внутри фигуры", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
+    }
+}
+
+/** Open notebooks as tabs: tap to switch, ✕ to close; the library is one tap away. */
+@Composable
+private fun TabStrip(
+    current: EditorController,
+    tabs: List<EditorController>,
+    onTab: (EditorController) -> Unit,
+    onCloseTab: (EditorController) -> Unit,
+    onLibrary: () -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp, vertical = 2.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        for (t in tabs) {
+            val selected = t === current
+            Row(
+                Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant)
+                    .clickable { onTab(t) }
+                    .padding(start = 12.dp, end = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    t.notebook.title,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                    fontSize = 14.sp,
+                    modifier = Modifier.widthIn(max = 200.dp),
+                )
+                TextButton(onClick = { onCloseTab(t) }, contentPadding = PaddingValues(horizontal = 6.dp)) { Text("✕", fontSize = 13.sp) }
+            }
+        }
+        TextButton(onClick = onLibrary) { Text("+ Тетрадь") }
     }
 }
 

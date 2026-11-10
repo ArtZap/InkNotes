@@ -258,22 +258,35 @@ class EditorController(
         v.source = this
         updateUndo()
         pendingHit?.let(::showHit)
+        if (pendingHit == null) returnPlace?.let { (page, place) -> handler.post { view?.restorePagePlace(page, place) } }
         pendingHit = null
         math.onReady = { requestMath() }
         handler.post(mathRunnable)
     }
 
+    /** The editor screen went away (another tab, or the library): the notebook stays open. */
     fun detach() {
         flush()
+        // Where it was, to come back to in this tab.
+        view?.let { v -> returnPlace = pageIndex to (v.pagePlace(pageIndex) ?: 0f) }
         math.onReady = null
         handler.removeCallbacks(mathRunnable)
         view?.listener = null
         view = null
+    }
+
+    /** The notebook's tab is closed: nothing of it runs any more. */
+    fun close() {
+        detach()
         pdfPages.close()
         thumbExec.shutdown()
         loader.shutdown()
         imageExec.shutdown()
+        cardExec.shutdown()
     }
+
+    /** Page and its place on screen when the tab was left. */
+    private var returnPlace: Pair<Int, Float>? = null
 
     // ------------------------------------------------------------ page source
 
