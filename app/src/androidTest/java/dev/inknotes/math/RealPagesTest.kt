@@ -35,6 +35,7 @@ class RealPagesTest {
                 when (val v = a.answer) {
                     is Answer.Text -> v.lines.joinToString(" | ")
                     is Answer.Graph -> "graph"
+                    is Answer.Surface -> "surface"
                     is Answer.Grid -> "grid"
                 }
             }

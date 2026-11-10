@@ -2815,6 +2815,19 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                         drawGraph(canvas, a, ans, color)
                         graphShapes[a]?.box?.let { bounds(a).set(it) }
                     }
+                    is Answer.Surface -> {
+                        val box = RectF(a.x, a.y, a.x + a.size * Plot.WIDTH, a.y + a.size * Plot.HEIGHT)
+                        graphFill.color = if (dark) 0x1882AAFF else 0x0D1A56DB
+                        canvas.drawRoundRect(box, a.size * 0.25f, a.size * 0.25f, graphFill)
+                        // Drawn once into a picture: hundreds of patches every frame would slow scrolling.
+                        if (dark != surfaceDark) {
+                            surfaceDark = dark
+                            surfaceBitmaps.clear()
+                        }
+                        val bmp = surfaceBitmaps.getOrPut(a) { SurfaceArt.bitmap(ans, SURFACE_PX, color, dark) }
+                        canvas.drawBitmap(bmp, null, box, surfacePaint)
+                        bounds(a).set(box)
+                    }
                     is Answer.Grid -> {
                         val rows = ans.rows
                         val cols = rows[0].size
@@ -2898,6 +2911,9 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         }
 
         private val graphShapes = java.util.WeakHashMap<PageAnswer, GraphShape>()
+        private val surfaceBitmaps = java.util.WeakHashMap<PageAnswer, Bitmap>()
+        private var surfaceDark = false
+        private val surfacePaint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
 
         /** Where each answer was last drawn (page units), to find the one a finger taps. */
         private val answerBounds = java.util.WeakHashMap<PageAnswer, RectF>()
@@ -3234,6 +3250,9 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         /** How far (on screen) line ends, corners and moved things are pulled to stick. */
         private const val MAGNET_DP = 16f
         private const val MAX_ANCHORS = 64
+
+        /** Width of the picture a surface answer is drawn into. */
+        private const val SURFACE_PX = 900
 
         /** Objects a dragged selection is lined up with (beyond that, the first ones). */
         private const val MAX_GUIDE_TARGETS = 400

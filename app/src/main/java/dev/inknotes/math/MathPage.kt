@@ -93,7 +93,10 @@ object MathPage {
             val l = readings(left, eq.h, eq.cy, reader, Prefer.FIRST).let { all -> all.firstOrNull { it is Expr.Apply && graphParam(it) != null } ?: all.firstOrNull() } ?: continue
             // y = 2x + 1 is a formula in x: "2+1" (fewest letters) would lose it.
             // y = 5x − 1: a formula in x ("5x−1", not "bx−I" or "5−1").
+            val surface = (l as? Expr.Sym)?.name?.equals("z", ignoreCase = true) == true
             val r = graphParam(l)?.let { v -> readings(right, eq.h, eq.cy, reader, Prefer.GRAPH, variable = v.ifEmpty { "x" }).firstOrNull() }
+                // z = x² + y²: about letters, not the reading with fewest of them.
+                ?: (if (surface) read(right, eq.h, eq.cy, reader, Prefer.FIRST) else null)
                 ?: read(right, eq.h, eq.cy, reader, Prefer.NUMBERS) ?: continue
             if (Calc.isDefinition(l)) defs += Def(i, l, r) else single += Def(i, l, r)
         }
@@ -146,8 +149,13 @@ object MathPage {
         class Area(val left: Float, val top: Float, val right: Float, val bottom: Float)
         val graphs = ArrayList<Area>()
         for (d in defs) {
-            val param = graphParam(d.left) ?: continue
-            val graph = runCatching { Calc.graph(d.right, envAt(d.index), param.ifEmpty { null }) }.getOrNull() ?: continue
+            val param = graphParam(d.left)
+            val graph: Answer = when {
+                param != null -> runCatching { Calc.graph(d.right, envAt(d.index), param.ifEmpty { null }) }.getOrNull()
+                // z = x² + y²: a surface.
+                (d.left as? Expr.Sym)?.name?.equals("z", ignoreCase = true) == true -> runCatching { Calc.surface(d.right, envAt(d.index)) }.getOrNull()
+                else -> null
+            } ?: continue
             val eq = ordered[d.index]
             val lineInk = side(eq, -1, eqs, rest, limit = null) + side(eq, 1, eqs, rest, limit = null)
             val lineLeft = lineInk.minOfOrNull { it.left } ?: eq.left

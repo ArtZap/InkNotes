@@ -67,7 +67,7 @@ object FormulaBench {
         return when (a) {
             is Answer.Text -> a.lines.joinToString(";")
             is Answer.Grid -> a.rows.toString()
-            is Answer.Graph -> null
+            is Answer.Graph, is Answer.Surface -> null
         }
     }
 

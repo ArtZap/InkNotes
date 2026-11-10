@@ -21,6 +21,21 @@ sealed class Answer {
         override fun toString() = "Graph($variable: ${Printer.number(x0.toDouble())}…${Printer.number(x1.toDouble())}, " +
             "${Printer.number(y0.toDouble())}…${Printer.number(y1.toDouble())}, ${segments.size} parts)"
     }
+
+    /** z = f(x, y) over a square: heights [zs] on a [Plot3D.N]² grid (row by row of y; NaN: undefined). */
+    class Surface(
+        val xv: String,
+        val yv: String,
+        val x0: Float,
+        val x1: Float,
+        val y0: Float,
+        val y1: Float,
+        val z0: Float,
+        val z1: Float,
+        val zs: FloatArray,
+    ) : Answer() {
+        override fun toString() = "Surface($xv, $yv: z ${Printer.number(z0.toDouble())}…${Printer.number(z1.toDouble())})"
+    }
 }
 
 /** Variables and functions defined on a page so far (`a = 5`, `f(x) = x² + 1`), in writing order. */
@@ -110,6 +125,18 @@ object Calc {
     }
 
     private val TRIG = Regex("sin|cos|tg|ctg")
+
+    /** The surface of `z = [right]` when, with the page's definitions, it is a formula in two letters. */
+    fun surface(right: Expr, env: Env): Answer.Surface? {
+        val r = runCatching { Algebra.simplify(resolve(right, env, emptySet(), Flags())) }.getOrNull() ?: return null
+        if (containsMatrix(r)) return null
+        val vars = Algebra.freeVars(r).filter { it !in Algebra.CONSTANTS }.sorted()
+        if (vars.size != 2) return null
+        // x before y, whatever letters they are.
+        val (xv, yv) = vars[0] to vars[1]
+        val trig = TRIG.containsMatchIn(runCatching { Printer.expr(r) }.getOrDefault(""))
+        return Plot3D.of({ x, y -> Numeric.scalar(r, mapOf(xv to x, yv to y)) }, xv, yv, trig)
+    }
 
     /** Solves equations `left = right` in their unknowns (names not defined above). */
     fun solve(equations: List<Pair<Expr, Expr>>, env: Env): Answer {
