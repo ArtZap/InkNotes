@@ -114,6 +114,36 @@ class MathNotes(private val enabledPref: () -> Boolean, private val setEnabledPr
         }
     }
 
+    /**
+     * A wrong answer as a test case: the page's ink, every run the reader was asked about with
+     * what it read, the answer at ([x], [y]) and the one [expected]. JSON, read back by
+     * MathReportTest in the unit tests; [onDone] on the main thread (null: nothing to save).
+     */
+    fun report(strokes: List<PageStroke>, pageWidth: Float, x: Float, y: Float, expected: String, onDone: (String?) -> Unit) {
+        if (state != State.Ready) return onDone(null)
+        runCatching {
+            exec.execute {
+                val json = runCatching {
+                    val ink = toInk(strokes)
+                    val reads = LinkedHashMap<List<Int>, List<String>>()
+                    val recorder = RunReader { run, h -> read(run, h).also { reads[run.map { it.order }.sorted()] = it } }
+                    MathPage.analyze(ink, recorder, pageWidth)
+                    fun q(t: String) = "\"" + t.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n") + "\""
+                    fun floats(a: FloatArray) = a.joinToString(",") { "%.2f".format(java.util.Locale.ROOT, it) }
+                    buildString {
+                        append("{\"pageWidth\":").append(pageWidth).append(",\"x\":").append(x).append(",\"y\":").append(y)
+                        append(",\"expected\":").append(q(expected)).append(",\n\"strokes\":[")
+                        append(ink.joinToString(",\n") { "{\"o\":${it.order},\"x\":[${floats(it.xs)}],\"y\":[${floats(it.ys)}]}" })
+                        append("],\n\"reads\":[")
+                        append(reads.entries.joinToString(",\n") { (k, v) -> "{\"s\":[${k.joinToString(",")}],\"t\":[${v.joinToString(",") { q(it) }}]}" })
+                        append("]}\n")
+                    }
+                }.getOrNull()
+                main.post { onDone(json) }
+            }
+        }.onFailure { onDone(null) }
+    }
+
     internal fun toInk(strokes: List<PageStroke>): List<Ink> {
         val out = ArrayList<Ink>()
         val input = StrokeInput()

@@ -962,6 +962,26 @@ class EditorController(
     /** The answer a finger tapped, shown with how it was found (null: none). */
     var tappedAnswer by mutableStateOf<PageAnswer?>(null)
 
+    /**
+     * Saves the page of [answer] as a test case with the answer it should have given, and offers
+     * to send the file ([onReady] gets a shareable link). Kept in the app's files too.
+     */
+    fun reportWrongAnswer(context: Context, answer: PageAnswer, expected: String, onReady: (Uri) -> Unit) {
+        val pageId = mathAnswers.entries.firstOrNull { (_, list) -> list.any { it === answer } }?.key ?: return showStatus("Страница ответа не найдена")
+        val doc = docs[pageId] ?: return
+        showStatus("Сохраняю пример…")
+        math.report(doc.strokes, notebook.pageWidthUnits(pageId), answer.x, answer.y, expected) { json ->
+            if (json == null) return@report showStatus("Не удалось сохранить пример")
+            val name = "math-report-${java.text.SimpleDateFormat("yyyyMMdd-HHmmss", java.util.Locale.ROOT).format(java.util.Date())}.json"
+            runCatching { context.getExternalFilesDir("math-reports")?.let { File(it, name).writeText(json) } }
+            val shared = File(context.cacheDir, "shared").apply { mkdirs() }
+            val file = File(shared, name)
+            runCatching { file.writeText(json) }.onFailure { return@report showStatus("Не удалось сохранить пример") }
+            showStatus("Пример сохранён")
+            onReady(FileProvider.getUriForFile(context, context.packageName + ".files", file))
+        }
+    }
+
     override fun onAnswerTapped(answer: PageAnswer) {
         tappedAnswer = answer
     }

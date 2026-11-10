@@ -48,12 +48,38 @@ fun AnswerDialog(c: EditorController, a: PageAnswer, onDismiss: () -> Unit) {
         is Answer.Surface -> "Поверхность z(${ans.xv}, ${ans.yv}): ${ans.xv}, ${ans.yv} от ${Printer.number(ans.x0.toDouble())} до ${Printer.number(ans.x1.toDouble())}, " +
             "z от ${Printer.number(ans.z0.toDouble())} до ${Printer.number(ans.z1.toDouble())}"
     }
+    var reporting by remember { mutableStateOf(false) }
+    var expected by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (a.error) "Не получилось" else "Ответ") },
         text = {
             Column(Modifier.heightIn(max = 460.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 (a.answer as? Answer.Surface)?.let { SurfaceView(it) }
+                if (reporting) {
+                    OutlinedTextField(
+                        expected,
+                        { expected = it },
+                        singleLine = true,
+                        label = { Text("Каким должен быть ответ") },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Text(
+                        "Страница сохранится как пример для проверки распознавания: штрихи, прочтения и верный ответ. Файл можно отправить разработчику.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Button(enabled = expected.isNotBlank(), onClick = {
+                        c.reportWrongAnswer(context, a, expected.trim()) { uri ->
+                            val send = android.content.Intent(android.content.Intent.ACTION_SEND)
+                                .setType("application/json")
+                                .putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                                .addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            context.startActivity(android.content.Intent.createChooser(send, "Отправить пример"))
+                        }
+                        onDismiss()
+                    }) { Text("Сохранить пример") }
+                }
                 Text(text, style = MaterialTheme.typography.titleMedium)
                 val steps = a.steps
                 if (!steps.isNullOrEmpty()) {
@@ -73,6 +99,9 @@ fun AnswerDialog(c: EditorController, a: PageAnswer, onDismiss: () -> Unit) {
         confirmButton = { Button(onClick = onDismiss) { Text("Закрыть") } },
         dismissButton = {
             Column {
+                if (!reporting && a.answer !is Answer.Graph && a.answer !is Answer.Surface) {
+                    TextButton(onClick = { reporting = true }) { Text("Неверно…") }
+                }
                 TextButton(onClick = {
                     val clip = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                     clip.setPrimaryClip(ClipData.newPlainText("Ответ", (listOf(text) + a.steps.orEmpty()).joinToString("\n")))
