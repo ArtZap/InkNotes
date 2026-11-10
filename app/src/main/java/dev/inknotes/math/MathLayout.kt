@@ -879,32 +879,32 @@ object Tune {
     @JvmField var joinOverlap = 0.35f
 
     /** …when no farther apart vertically than this. */
-    @JvmField var joinGap = 0.3f
+    @JvmField var joinGap = 0.156f
 
     /** An exponent: its bottom no lower than this part of the symbol before it from the top. */
-    @JvmField var supAbove = 0.15f
-    @JvmField var supSmall = 0.85f
+    @JvmField var supAbove = 0.206f
+    @JvmField var supSmall = 1.6f
     @JvmField var supRaised = 0.3f
-    @JvmField var supBottom = 0.55f
+    @JvmField var supBottom = 0.605f
 
     /** An exponent written only a little raised (x2 for x²). */
     @JvmField var supLowSize = 0.7f
-    @JvmField var supLowBottom = 0.6f
-    @JvmField var supLowMiddle = 0.4f
+    @JvmField var supLowBottom = 0.66f
+    @JvmField var supLowMiddle = 0.484f
 
     /** An index: smaller than this, its top below the middle line by [subTop], its bottom by [subBottom]. */
-    @JvmField var subSize = 0.75f
-    @JvmField var subTop = 0.05f
-    @JvmField var subBottom = 0.6f
+    @JvmField var subSize = 1.03f
+    @JvmField var subTop = 0.036f
+    @JvmField var subBottom = 0.54f
 
     /** A fraction bar at least this wide; numerator and denominator within [fracReach] of it, their parts within [fracStep]. */
     @JvmField var barWidth = 0.45f
-    @JvmField var fracReach = 0.8f
-    @JvmField var fracStep = 0.45f
+    @JvmField var fracReach = 1.237f
+    @JvmField var fracStep = 0.557f
 
     @JvmField var integralMin = 1.15f
     @JvmField var parenMin = 0.95f
-    @JvmField var tall = 1.45f
+    @JvmField var tall = 1.305f
 
     /** Widest gap between symbols of one side of "=". */
     @JvmField var sideGap = 1.8f
