@@ -131,6 +131,12 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
 
         /** Space was inserted (or not): the one-shot mode is over. */
         fun onSpaceDone() {}
+
+        /** New writing on page [page] covering [bounds] (page units): sound being recorded is tied to it. */
+        fun onInkAdded(page: Int, bounds: RectF) {}
+
+        /** Plays the sound recorded while the writing at ([x], [y]) was made; false when there is none. */
+        fun listenAt(page: Int, x: Float, y: Float): Boolean = false
     }
 
     /** The notebook's pages; documents are loaded lazily as pages scroll into view. */
@@ -162,6 +168,9 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
 
         /** Rectangles of the links on page [index] (shown with a frame; a finger tap follows them). */
         fun links(index: Int): List<RectF> = emptyList()
+
+        /** Writing on page [index] that has sound to it, shown while listening by touch is on. */
+        fun soundMarks(index: Int): List<RectF> = emptyList()
 
         /** Follows the link at ([x], [y]) of page [index]; false when there is none. */
         fun followLink(index: Int, x: Float, y: Float): Boolean = false
@@ -435,6 +444,11 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
     }
     private val flashPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x55FFB300 }
     private val spacePaint = Paint()
+    private val soundPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        color = 0xAAFF6D00.toInt()
+        strokeCap = Paint.Cap.ROUND
+    }
     private val linkPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         color = 0xAA2979FF.toInt()
@@ -1482,7 +1496,9 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             } else {
                 null
             }
-            doc.add(PageStroke(wet.kind, aligned ?: stored, wet.dash))
+            val added = PageStroke(wet.kind, aligned ?: stored, wet.dash)
+            doc.add(added)
+            PageEdits.bounds(added)?.let { listener?.onInkAdded(wet.page, it) }
         }
         inProgressView.removeFinishedStrokes(strokes.keys)
         pageLayer.invalidate()
@@ -1573,6 +1589,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         }
         val shapeStrokes = paths.map { path -> PageStroke(kind, Stroke(brush, shapeInputs(path, pressure)), if (kind == InkKind.DASHED) wet.dash else null) }
         doc?.let { it.edit(strokes = it.strokes + shapeStrokes, fills = it.fills + shapeFills) }
+        shapeStrokes.mapNotNull { PageEdits.bounds(it) }.reduceOrNull { a, b -> RectF(a).apply { union(b) } }?.let { listener?.onInkAdded(wet.page, it) }
         performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
         changed()
     }
@@ -1811,6 +1828,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             return
         }
         if (source?.followLink(page, p[0], p[1]) == true) return
+        if (listener?.listenAt(page, p[0], p[1]) == true) return
         if (tool == Tool.AREA) autoArea(page, p[0], p[1]) else selectAt(page, p[0], p[1])
     }
 
@@ -3248,6 +3266,11 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                 linkPaint.pathEffect = android.graphics.DashPathEffect(floatArrayOf(3f * density / scale, 3f * density / scale), 0f)
                 val pad = 2f * density / scale
                 for (r in links) canvas.drawRoundRect(r.left - pad, r.top - pad, r.right + pad, r.bottom + pad, 3 * pad, 3 * pad, linkPaint)
+            }
+            source?.soundMarks(i)?.takeIf { it.isNotEmpty() }?.let { marks ->
+                val scale = currentScale()
+                soundPaint.strokeWidth = 2f * density / scale
+                for (r in marks) canvas.drawLine(r.left, r.bottom + 2f * density / scale, r.right, r.bottom + 2f * density / scale, soundPaint)
             }
             val flash = flashRect
             if (flash != null && flashPage == i) canvas.drawRoundRect(flash, FLASH_PAD, FLASH_PAD, flashPaint)

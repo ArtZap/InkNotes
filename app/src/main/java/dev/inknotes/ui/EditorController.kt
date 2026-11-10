@@ -277,6 +277,8 @@ class EditorController(
 
     /** The notebook's tab is closed: nothing of it runs any more. */
     fun close() {
+        stopRecording()
+        stopPlaying()
         detach()
         pdfPages.close()
         thumbExec.shutdown()
@@ -374,6 +376,173 @@ class EditorController(
     }
 
     /** A stamp at the middle of the screen, selected so it can be dragged into place. */
+    // ------------------------------------------------------------------- sound
+
+    /** When the recording under way began (ms since 1970), or null. */
+    var recordingSince by mutableStateOf<Long?>(null)
+        private set
+    private var recorder: android.media.MediaRecorder? = null
+    private var recordingFile: File? = null
+    private val pendingMarks = ArrayList<dev.inknotes.data.AudioMark>()
+
+    /** Playing: which recording; [playPosition] polled by the screen. */
+    var playing by mutableStateOf<dev.inknotes.data.Recording?>(null)
+        private set
+    var playPaused by mutableStateOf(false)
+        private set
+    private var player: android.media.MediaPlayer? = null
+
+    /** A finger tap on writing made during a recording plays it from that moment. */
+    var listenByTouch by mutableStateOf(false)
+        private set
+
+    fun toggleListenByTouch() {
+        listenByTouch = !listenByTouch
+        if (listenByTouch && notebook.audioMarks.isEmpty()) showStatus("Пока нечего слушать: запишите звук и пишите во время записи")
+        view?.refresh()
+    }
+
+    fun startRecording(context: Context) {
+        if (recorder != null) return
+        stopPlaying()
+        val file = repo.newRecordingFile(notebook)
+        val r = if (android.os.Build.VERSION.SDK_INT >= 31) android.media.MediaRecorder(context) else @Suppress("DEPRECATION") android.media.MediaRecorder()
+        val ok = runCatching {
+            r.setAudioSource(android.media.MediaRecorder.AudioSource.MIC)
+            r.setOutputFormat(android.media.MediaRecorder.OutputFormat.MPEG_4)
+            r.setAudioEncoder(android.media.MediaRecorder.AudioEncoder.AAC)
+            r.setAudioEncodingBitRate(64_000)
+            r.setAudioSamplingRate(44_100)
+            r.setOutputFile(file.path)
+            r.prepare()
+            r.start()
+        }.isSuccess
+        if (!ok) {
+            runCatching { r.release() }
+            file.delete()
+            showStatus("Не удалось начать запись")
+            return
+        }
+        recorder = r
+        recordingFile = file
+        pendingMarks.clear()
+        recordingSince = System.currentTimeMillis()
+    }
+
+    fun stopRecording() {
+        val r = recorder ?: return
+        val since = recordingSince ?: return
+        val file = recordingFile ?: return
+        recorder = null
+        recordingSince = null
+        recordingFile = null
+        val ok = runCatching { r.stop() }.isSuccess
+        runCatching { r.release() }
+        if (!ok) {
+            // Stopped right after starting: nothing was recorded.
+            file.delete()
+            return
+        }
+        val rec = dev.inknotes.data.Recording(file.name, since, System.currentTimeMillis() - since)
+        notebook = repo.addRecording(notebook, rec, pendingMarks.toList())
+        pendingMarks.clear()
+        showStatus("Запись сохранена: касание написанного во время неё включает звук")
+        view?.refresh()
+    }
+
+    override fun onInkAdded(page: Int, bounds: android.graphics.RectF) {
+        val since = recordingSince ?: return
+        val file = recordingFile ?: return
+        val pageId = notebook.pageIds.getOrNull(page) ?: return
+        val at = System.currentTimeMillis() - since
+        val last = pendingMarks.lastOrNull()
+        // Strokes of one word or formula, written one after another, are one mark.
+        if (last != null && last.pageId == pageId && at - last.atMs < MARK_JOIN_MS &&
+            bounds.left < last.right + MARK_JOIN_GAP && bounds.right > last.left - MARK_JOIN_GAP &&
+            bounds.top < last.bottom + MARK_JOIN_GAP && bounds.bottom > last.top - MARK_JOIN_GAP
+        ) {
+            pendingMarks[pendingMarks.lastIndex] = last.copy(
+                left = minOf(last.left, bounds.left), top = minOf(last.top, bounds.top),
+                right = maxOf(last.right, bounds.right), bottom = maxOf(last.bottom, bounds.bottom),
+            )
+        } else {
+            pendingMarks += dev.inknotes.data.AudioMark(pageId, bounds.left, bounds.top, bounds.right, bounds.bottom, file.name, at)
+        }
+    }
+
+    /** Plays [rec] from [fromMs]. */
+    fun play(rec: dev.inknotes.data.Recording, fromMs: Long = 0) {
+        val file = repo.recordingFile(notebook, rec.file) ?: return showStatus("Файл записи не найден")
+        if (playing == rec && player != null) {
+            player?.seekTo(fromMs.toInt().coerceAtLeast(0))
+            player?.start()
+            playPaused = false
+            return
+        }
+        stopPlaying()
+        val p = android.media.MediaPlayer()
+        val ok = runCatching {
+            p.setDataSource(file.path)
+            p.prepare()
+            p.seekTo(fromMs.toInt().coerceAtLeast(0))
+            p.start()
+        }.isSuccess
+        if (!ok) {
+            p.release()
+            return showStatus("Не удалось включить запись")
+        }
+        p.setOnCompletionListener { stopPlaying() }
+        player = p
+        playing = rec
+        playPaused = false
+    }
+
+    fun togglePause() {
+        val p = player ?: return
+        if (p.isPlaying) {
+            p.pause()
+            playPaused = true
+        } else {
+            p.start()
+            playPaused = false
+        }
+    }
+
+    fun seekPlaying(ms: Long) {
+        player?.seekTo(ms.toInt().coerceAtLeast(0))
+    }
+
+    fun playPosition(): Long = runCatching { player?.currentPosition?.toLong() }.getOrNull() ?: 0L
+
+    fun stopPlaying() {
+        player?.let { runCatching { it.stop() }; it.release() }
+        player = null
+        playing = null
+        playPaused = false
+    }
+
+    fun deleteRecording(rec: dev.inknotes.data.Recording) {
+        if (playing == rec) stopPlaying()
+        notebook = repo.deleteRecording(notebook, rec)
+        view?.refresh()
+    }
+
+    override fun listenAt(page: Int, x: Float, y: Float): Boolean {
+        if (!listenByTouch) return false
+        val pageId = notebook.pageIds.getOrNull(page) ?: return false
+        val mark = notebook.audioMarks.lastOrNull { it.pageId == pageId && it.contains(x, y, MARK_SLOP) } ?: return false
+        val rec = notebook.recordings.firstOrNull { it.file == mark.file } ?: return false
+        // A little before the writing began: what was being said then.
+        play(rec, (mark.atMs - LISTEN_LEAD_MS).coerceAtLeast(0))
+        return true
+    }
+
+    override fun soundMarks(index: Int): List<android.graphics.RectF> {
+        if (!listenByTouch) return emptyList()
+        val pageId = notebook.pageIds.getOrNull(index) ?: return emptyList()
+        return notebook.audioMarks.filter { it.pageId == pageId }.map { android.graphics.RectF(it.left, it.top, it.right, it.bottom) }
+    }
+
     // ------------------------------------------------------------------ layers
 
     private fun saveLayers(layers: List<dev.inknotes.data.LayerInfo>, active: Int = notebook.activeLayer) {
@@ -1565,6 +1734,14 @@ class EditorController(
 
         /** A card shows this many line heights above and below its band; a line is at least [CARD_MIN_LINE] units. */
         private const val CARD_CONTEXT = 2.5f
+
+        /** Strokes this close in time (ms) and place (units) make one sound mark; a tap finds one this far off. */
+        private const val MARK_JOIN_MS = 4000L
+        private const val MARK_JOIN_GAP = 60f
+        private const val MARK_SLOP = 6f
+
+        /** Playing from a mark starts this much before the writing. */
+        private const val LISTEN_LEAD_MS = 2000L
 
         /** Height of typed letters, page units (about 4 mm on A4). */
         private const val TEXT_SIZE = 20f

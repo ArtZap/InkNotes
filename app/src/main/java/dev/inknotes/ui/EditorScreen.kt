@@ -133,12 +133,23 @@ fun EditorScreen(
     var showShift by remember { mutableStateOf(false) }
     var showToc by remember { mutableStateOf(false) }
     var showLayers by remember { mutableStateOf(false) }
+    var showRecordings by remember { mutableStateOf(false) }
     var textEdit by remember { mutableStateOf<String?>(null) }
     var textNew by remember { mutableStateOf(false) }
     var pageSizeOf by remember { mutableStateOf<Int?>(null) }
     var pageText by remember { mutableStateOf<List<dev.inknotes.search.TextLine>?>(null) }
     val context = LocalContext.current
     val resolver = context.contentResolver
+    val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) controller.startRecording(context) else controller.showStatus("Без доступа к микрофону записать звук нельзя")
+    }
+    val record = {
+        if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            controller.startRecording(context)
+        } else {
+            micPermission.launch(android.Manifest.permission.RECORD_AUDIO)
+        }
+    }
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) controller.insertImage(uri, resolver)
     }
@@ -182,6 +193,8 @@ fun EditorScreen(
                 MenuItem("Распознанный текст страницы") { controller.currentPageText { pageText = it } }
                 MenuItem("Вставить печатный текст…") { textNew = true }
                 MenuItem(if (controller.insertingSpace) "Вставить место: отменить" else "Вставить место (раздвинуть строки)") { controller.toggleInsertSpace() }
+                if (controller.recordingSince == null) MenuItem("Записать звук") { record() } else MenuItem("Остановить запись") { controller.stopRecording() }
+                MenuItem("Записи звука…") { showRecordings = true }
                 MenuItem("Оглавление…") { showToc = true }
                 MenuItem("Слои (сейчас: ${controller.notebook.layerList().getOrNull(controller.notebook.activeLayer)?.name ?: "Основной"})…") { showLayers = true }
                 MenuItem("Повторение: карточки из маркера подсказок") { controller.openCards() }
@@ -202,6 +215,7 @@ fun EditorScreen(
                 MenuItem("Справка: все инструменты") { showHelp = true }
             },
         )
+        SoundBar(controller)
         ToolRow(controller, onPickColor = { showPicker = true }, onHatchSettings = { showHatch = true }, onSelectionSize = { showSelectionSize = true })
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         Row(Modifier.fillMaxSize()) {
@@ -233,6 +247,7 @@ fun EditorScreen(
     controller.tappedAnswer?.let { AnswerDialog(controller, it, onDismiss = { controller.tappedAnswer = null }) }
     controller.studyCards?.let { CardsDialog(controller, it, onDismiss = { controller.closeCards() }) }
     if (showToc) TocDialog(controller, onDismiss = { showToc = false })
+    if (showRecordings) RecordingsDialog(controller, onRecord = { record() }, onDismiss = { showRecordings = false })
     if (showLayers || controller.showLayersDialog) LayersDialog(controller, onDismiss = { showLayers = false; controller.showLayersDialog = false })
     if (textNew) TypeTextDialog("Печатный текст", "", onDismiss = { textNew = false }) { controller.insertText(it) }
     if (controller.editingText) {
