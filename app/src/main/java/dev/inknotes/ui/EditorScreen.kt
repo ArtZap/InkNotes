@@ -129,6 +129,7 @@ fun EditorScreen(
     var showHelp by remember { mutableStateOf(false) }
     var showShift by remember { mutableStateOf(false) }
     var showToc by remember { mutableStateOf(false) }
+    var showLayers by remember { mutableStateOf(false) }
     var textEdit by remember { mutableStateOf<String?>(null) }
     var textNew by remember { mutableStateOf(false) }
     var pageSizeOf by remember { mutableStateOf<Int?>(null) }
@@ -178,6 +179,7 @@ fun EditorScreen(
                 MenuItem("Вставить печатный текст…") { textNew = true }
                 MenuItem(if (controller.insertingSpace) "Вставить место: отменить" else "Вставить место (раздвинуть строки)") { controller.toggleInsertSpace() }
                 MenuItem("Оглавление…") { showToc = true }
+                MenuItem("Слои (сейчас: ${controller.notebook.layerList().getOrNull(controller.notebook.activeLayer)?.name ?: "Основной"})…") { showLayers = true }
                 MenuItem("Повторение: карточки из маркера подсказок") { controller.openCards() }
                 MenuItem("Поделиться файлом тетради", InkIcons.Share) { share() }
                 MenuItem("Сохранить файл тетради…") { saveLauncher.launch("${controller.fileName(controller.notebook.title)}.inknote") }
@@ -227,6 +229,7 @@ fun EditorScreen(
     controller.tappedAnswer?.let { AnswerDialog(controller, it, onDismiss = { controller.tappedAnswer = null }) }
     controller.studyCards?.let { CardsDialog(controller, it, onDismiss = { controller.closeCards() }) }
     if (showToc) TocDialog(controller, onDismiss = { showToc = false })
+    if (showLayers || controller.showLayersDialog) LayersDialog(controller, onDismiss = { showLayers = false; controller.showLayersDialog = false })
     if (textNew) TypeTextDialog("Печатный текст", "", onDismiss = { textNew = false }) { controller.insertText(it) }
     if (controller.editingText) {
         TypeTextDialog("Изменить текст", controller.selectedText.orEmpty(), onDismiss = { controller.editingText = false }) { controller.editSelectedText(it) }
@@ -913,6 +916,10 @@ private fun SelectionMoreButton(c: EditorController) {
             DropdownMenuItem(text = { Text("Ссылка на страницу…") }, onClick = {
                 open = false
                 c.showLinkDialog = true
+            })
+            DropdownMenuItem(text = { Text("На слой…") }, onClick = {
+                open = false
+                c.showLayersDialog = true
             })
         }
     }

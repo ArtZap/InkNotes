@@ -63,9 +63,42 @@ enum class InkKind {
  * Identity matters: selection and undo track elements by reference, so no data class.
  * [dash] is the pattern of a [InkKind.DASHED] line (null: the stock dashes of older notes).
  */
-class PageStroke(val kind: InkKind, val stroke: Stroke, val dash: DashStyle? = null) {
-    /** The same line with another stroke (moved, recoloured, cut…), its dash pattern kept. */
-    fun with(stroke: Stroke, kind: InkKind = this.kind) = PageStroke(kind, stroke, if (kind == InkKind.DASHED) dash else null)
+class PageStroke(val kind: InkKind, val stroke: Stroke, val dash: DashStyle? = null, val layer: Int = Layers.active) {
+    /** The same line with another stroke (moved, recoloured, cut…), its dash pattern and layer kept. */
+    fun with(stroke: Stroke, kind: InkKind = this.kind) = PageStroke(kind, stroke, if (kind == InkKind.DASHED) dash else null, layer)
+
+    fun onLayer(layer: Int) = PageStroke(kind, stroke, dash, layer)
+}
+
+/**
+ * Layers of a notebook: every element is on one (0 is the main layer, the only one of notes
+ * made before layers). New elements go onto [active]; hidden layers are not drawn, and neither
+ * hidden nor locked ones are erased, selected or moved.
+ */
+object Layers {
+    const val MAX = 8
+
+    /** Layer that new elements are put on (set by the open notebook). */
+    @Volatile
+    var active = 0
+
+    fun of(x: Any): Int = when (x) {
+        is PageStroke -> x.layer
+        is PageFill -> x.layer
+        is PageImage -> x.layer
+        else -> 0
+    }
+
+    fun onLayer(x: Any, layer: Int): Any = when (x) {
+        is PageStroke -> x.onLayer(layer)
+        is PageFill -> x.copy(layer = layer)
+        is PageImage -> x.onLayer(layer)
+        else -> x
+    }
+
+    /** [c] without the elements of [hidden] layers. */
+    fun visible(c: PageContent, hidden: Set<Int>): PageContent =
+        if (hidden.isEmpty()) c else PageContent(c.strokes.filter { it.layer !in hidden }, c.fills.filter { it.layer !in hidden }, c.images.filter { it.layer !in hidden })
 }
 
 /** Marks a dashed line is made of, repeated; stored by ordinal (page format v11+): only append. */
@@ -188,6 +221,7 @@ class PageFill(
     val color: Int,
     val cuts: List<EraseCut> = emptyList(),
     val style: HatchStyle = HatchStyle.DEFAULT,
+    val layer: Int = Layers.active,
 ) {
     val path: Path by lazy {
         Path().apply {
@@ -231,7 +265,8 @@ class PageFill(
         cuts: List<EraseCut> = this.cuts,
         pattern: FillPattern = this.pattern,
         style: HatchStyle = this.style,
-    ) = PageFill(outline, pattern, color, cuts, style)
+        layer: Int = this.layer,
+    ) = PageFill(outline, pattern, color, cuts, style, layer)
 }
 
 /**
@@ -239,10 +274,21 @@ class PageFill(
  * shown in the rectangle [x], [y], [w], [h] (page units), turned by [rotation] degrees
  * (clockwise) around its centre. Identity matters, like strokes.
  */
-class PageImage(val file: String, val x: Float, val y: Float, val w: Float, val h: Float, val rotation: Float = 0f, val text: PageText? = null) {
+class PageImage(
+    val file: String,
+    val x: Float,
+    val y: Float,
+    val w: Float,
+    val h: Float,
+    val rotation: Float = 0f,
+    val text: PageText? = null,
+    val layer: Int = Layers.active,
+) {
     /** Moved or resized; typed text grows and shrinks with its box (by the smaller side's factor). */
     fun moved(x: Float = this.x, y: Float = this.y, w: Float = this.w, h: Float = this.h, rotation: Float = this.rotation) =
-        PageImage(file, x, y, w, h, rotation, text?.let { t -> if (w == this.w && h == this.h) t else t.copy(size = (t.size * minOf(w / this.w, h / this.h)).coerceIn(PageText.MIN_SIZE, PageText.MAX_SIZE)) })
+        PageImage(file, x, y, w, h, rotation, text?.let { t -> if (w == this.w && h == this.h) t else t.copy(size = (t.size * minOf(w / this.w, h / this.h)).coerceIn(PageText.MIN_SIZE, PageText.MAX_SIZE)) }, layer)
+
+    fun onLayer(layer: Int) = PageImage(file, x, y, w, h, rotation, text, layer)
 
     val isText get() = text != null
 
@@ -252,8 +298,8 @@ class PageImage(val file: String, val x: Float, val y: Float, val w: Float, val 
         /** "File" name of a text box: it has no file, the name only tells it apart. */
         const val TEXT_PREFIX = "txt-"
 
-        fun textBox(text: PageText, x: Float, y: Float, w: Float, h: Float, rotation: Float = 0f) =
-            PageImage(TEXT_PREFIX + java.util.UUID.randomUUID(), x, y, w, h, rotation, text)
+        fun textBox(text: PageText, x: Float, y: Float, w: Float, h: Float, rotation: Float = 0f, layer: Int = Layers.active) =
+            PageImage(TEXT_PREFIX + java.util.UUID.randomUUID(), x, y, w, h, rotation, text, layer)
     }
 }
 
@@ -405,7 +451,7 @@ object PageCodec {
         data.writeInt(MAGIC)
         data.writeInt(
             when {
-                content.images.any { it.isText } -> 12
+                content.images.any { it.isText } || anyLayer(content) -> 12
                 content.strokes.any { it.dash != null } -> 11
                 content.strokes.any { it.kind == InkKind.LINE || it.kind == InkKind.SPOILER } || content.fills.any { it.pattern == FillPattern.INK } -> 10
                 content.strokes.any { it.kind == InkKind.PENCIL || it.kind == InkKind.DASHED } -> 9
@@ -454,7 +500,8 @@ object PageCodec {
         // v11: dash patterns, by index of the line (only lines that have one).
         val dashed = content.strokes.withIndex().filter { it.value.dash != null }
         val texts = content.images.filter { it.isText }
-        if (dashed.isNotEmpty() || texts.isNotEmpty()) {
+        val version = if (texts.isNotEmpty() || anyLayer(content)) 12 else 0
+        if (dashed.isNotEmpty() || version >= 12) {
             data.writeInt(dashed.size)
             for ((i, s) in dashed) {
                 val d = s.dash!!
@@ -464,8 +511,8 @@ object PageCodec {
                 data.writeFloat(d.gap)
             }
         }
-        // v12: text boxes, in their place among the pictures (drawn after them).
-        if (texts.isNotEmpty()) {
+        // v12: text boxes, in their place among the pictures (drawn after them), then layers.
+        if (version >= 12) {
             data.writeInt(texts.size)
             for (img in texts) {
                 val t = img.text!!
@@ -478,9 +525,21 @@ object PageCodec {
                 data.writeFloat(img.h)
                 data.writeFloat(img.rotation)
             }
+            // Layers other than the main one: kind (0 line, 1 fill, 2 picture or text), index, layer.
+            val all = (content.strokes.withIndex().map { Triple(0, it.index, it.value.layer) } +
+                content.fills.withIndex().map { Triple(1, it.index, it.value.layer) } +
+                (pictures + texts).withIndex().map { Triple(2, it.index, it.value.layer) }).filter { it.third != 0 }
+            data.writeInt(all.size)
+            for ((kind, i, layer) in all) {
+                data.writeByte(kind)
+                data.writeInt(i)
+                data.writeByte(layer)
+            }
         }
         data.flush()
     }
+
+    private fun anyLayer(c: PageContent) = c.strokes.any { it.layer != 0 } || c.fills.any { it.layer != 0 } || c.images.any { it.layer != 0 }
 
     fun read(file: File): PageContent =
         DataInputStream(BufferedInputStream(file.inputStream())).use { data ->
@@ -497,7 +556,7 @@ object PageCodec {
                 if (!size.isFinite() || size <= 0f || size > 1000f) throw IOException("bad brush size")
                 val bytes = ByteArray(data.readCount(MAX_STROKE_BYTES)).also(data::readFully)
                 val inputs = StrokeInputBatch.decode(ByteArrayInputStream(bytes))
-                PageStroke(kind, Stroke(InkBrushes.create(kind, color, size), inputs))
+                PageStroke(kind, Stroke(InkBrushes.create(kind, color, size), inputs), layer = 0)
             }
             val fills = if (version < 2) {
                 emptyList()
@@ -535,7 +594,7 @@ object PageCodec {
                         if (points.size < 2 || !radius.isFinite() || radius <= 0f) throw IOException("bad erase cut")
                         EraseCut(points, radius)
                     }
-                    PageFill(outline, pattern, color, cuts, style)
+                    PageFill(outline, pattern, color, cuts, style, layer = 0)
                 }
             }
             val images = if (version < 6) {
@@ -551,7 +610,7 @@ object PageCodec {
                     }
                     val rotation = if (version >= 7) data.readFloat() else 0f
                     if (!rotation.isFinite()) throw IOException("bad image rotation")
-                    PageImage(file, v[0], v[1], v[2], v[3], ((rotation % 360f) + 360f) % 360f)
+                    PageImage(file, v[0], v[1], v[2], v[3], ((rotation % 360f) + 360f) % 360f, layer = 0)
                 }
             }
             if (version >= 11) {
@@ -562,7 +621,7 @@ object PageCodec {
                     val gap = data.readFloat()
                     if (i !in strokes.indices || !dash.isFinite() || !gap.isFinite()) throw IOException("bad dash style")
                     val s = strokes[i]
-                    if (s.kind == InkKind.DASHED) strokes[i] = PageStroke(s.kind, s.stroke, DashStyle(pattern, dash, gap).sane())
+                    if (s.kind == InkKind.DASHED) strokes[i] = PageStroke(s.kind, s.stroke, DashStyle(pattern, dash, gap).sane(), s.layer)
                 }
             }
             val texts = if (version < 12) {
@@ -575,10 +634,26 @@ object PageCodec {
                     val v = FloatArray(5) { data.readFloat() }
                     if (!size.isFinite() || size < PageText.MIN_SIZE || size > PageText.MAX_SIZE) throw IOException("bad text size")
                     if (v.any { !it.isFinite() || it > MAX_COORD || it < -MAX_COORD } || v[2] < 1f || v[3] < 1f) throw IOException("bad text box")
-                    PageImage.textBox(PageText(text, size, color), v[0], v[1], v[2], v[3], ((v[4] % 360f) + 360f) % 360f)
+                    PageImage.textBox(PageText(text, size, color), v[0], v[1], v[2], v[3], ((v[4] % 360f) + 360f) % 360f, layer = 0)
                 }
             }
-            PageContent(strokes, fills, images + texts)
+            val fillList = fills.toMutableList()
+            val imageList = (images + texts).toMutableList()
+            if (version >= 12) {
+                repeat(data.readCount(MAX_ELEMENTS)) {
+                    val kind = data.readUnsignedByte()
+                    val i = data.readInt()
+                    val layer = data.readUnsignedByte()
+                    if (layer >= Layers.MAX) throw IOException("bad layer")
+                    when (kind) {
+                        0 -> if (i in strokes.indices) strokes[i] = strokes[i].onLayer(layer) else throw IOException("bad layer index")
+                        1 -> if (i in fillList.indices) fillList[i] = fillList[i].copy(layer = layer) else throw IOException("bad layer index")
+                        2 -> if (i in imageList.indices) imageList[i] = imageList[i].onLayer(layer) else throw IOException("bad layer index")
+                        else -> throw IOException("bad layer kind")
+                    }
+                }
+            }
+            PageContent(strokes, fillList, imageList)
         }
 
     private fun writeFloats(data: DataOutputStream, values: FloatArray) {

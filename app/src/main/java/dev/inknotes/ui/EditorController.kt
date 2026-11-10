@@ -249,6 +249,7 @@ class EditorController(
 
     fun attach(v: PageEditorView) {
         view = v
+        dev.inknotes.data.Layers.active = notebook.activeLayer
         rulerShown = false
         v.listener = this
         v.dark = dark
@@ -360,6 +361,83 @@ class EditorController(
     }
 
     /** A stamp at the middle of the screen, selected so it can be dragged into place. */
+    // ------------------------------------------------------------------ layers
+
+    private fun saveLayers(layers: List<dev.inknotes.data.LayerInfo>, active: Int = notebook.activeLayer) {
+        notebook = repo.setLayers(notebook, layers, active)
+        dev.inknotes.data.Layers.active = notebook.activeLayer
+        view?.clearSelection()
+        syncView()
+        invalidateThumbnails()
+    }
+
+    /** Writing goes onto layer [i] from now on (shown and unlocked, so it can be seen). */
+    fun setActiveLayer(i: Int) {
+        val list = notebook.layerList().toMutableList()
+        if (i !in list.indices) return
+        list[i] = list[i].copy(visible = true, locked = false)
+        saveLayers(list, i)
+    }
+
+    fun toggleLayerVisible(i: Int) {
+        val list = notebook.layerList().toMutableList()
+        if (i !in list.indices) return
+        list[i] = list[i].copy(visible = !list[i].visible)
+        saveLayers(list)
+        if (!list[i].visible && i == notebook.activeLayer) showStatus("Новое пишется на скрытый слой: выберите другой")
+    }
+
+    fun toggleLayerLocked(i: Int) {
+        val list = notebook.layerList().toMutableList()
+        if (i !in list.indices) return
+        list[i] = list[i].copy(locked = !list[i].locked)
+        saveLayers(list)
+    }
+
+    fun addLayer(name: String) {
+        val list = notebook.layerList()
+        if (list.size >= dev.inknotes.data.Layers.MAX) return showStatus("Не больше ${dev.inknotes.data.Layers.MAX} слоёв")
+        saveLayers(list + dev.inknotes.data.LayerInfo(name.trim().ifEmpty { "Слой ${list.size + 1}" }), list.size)
+    }
+
+    fun renameLayer(i: Int, name: String) {
+        val list = notebook.layerList().toMutableList()
+        if (i !in list.indices || name.isBlank()) return
+        list[i] = list[i].copy(name = name.trim())
+        saveLayers(list)
+    }
+
+    /** Removes layer [i]; what is on it moves to the main layer (layers after it move down one). */
+    fun deleteLayer(i: Int) {
+        val list = notebook.layerList()
+        if (i <= 0 || i !in list.indices) return
+        flush()
+        fun map(l: Int) = when {
+            l == i -> 0
+            l > i -> l - 1
+            else -> l
+        }
+        editsTogether {
+            for (pageId in notebook.pageIds) {
+                val doc = docFor(pageId)
+                if (doc.strokes.none { it.layer >= i } && doc.fills.none { it.layer >= i } && doc.images.none { it.layer >= i }) continue
+                doc.edit(
+                    doc.strokes.map { if (it.layer >= i) it.onLayer(map(it.layer)) else it },
+                    doc.fills.map { if (it.layer >= i) it.copy(layer = map(it.layer)) else it },
+                    doc.images.map { if (it.layer >= i) it.onLayer(map(it.layer)) else it },
+                )
+            }
+        }
+        saveLayers(list.filterIndexed { k, _ -> k != i }, map(notebook.activeLayer))
+        view?.refresh()
+    }
+
+    fun moveSelectionToLayer(i: Int) {
+        if (i !in notebook.layerList().indices) return
+        view?.moveSelectionToLayer(i)
+        showStatus("Перенесено на слой «${notebook.layerList()[i].name}»")
+    }
+
     // ------------------------------------------------------------- typed text
 
     var editingText by mutableStateOf(false)
@@ -893,6 +971,7 @@ class EditorController(
     /** Dialogs asked for from the selection bar. */
     var showLinkDialog by mutableStateOf(false)
     var showAddBookmark by mutableStateOf(false)
+    var showLayersDialog by mutableStateOf(false)
 
     fun goToBookmark(b: dev.inknotes.data.Bookmark) = goToPage(notebook.pageIds.indexOf(b.pageId), b.y)
 
@@ -1083,7 +1162,7 @@ class EditorController(
         val content = docs[pageId]?.content() ?: repo.loadPage(notebook, pageId)
         // New elements: selection and undo go by identity, so the pages share none.
         val copy = PageContent(
-            content.strokes.map { PageStroke(it.kind, it.stroke, it.dash) },
+            content.strokes.map { PageStroke(it.kind, it.stroke, it.dash, it.layer) },
             content.fills.map { it.copy() },
             content.images.map { it.moved() },
         )
@@ -1147,7 +1226,8 @@ class EditorController(
             this.pageHeight = pageHeight
             this.pageWidth = pageWidth
             drawBackground(canvas, edgeWidth = 0f)
-            drawContent(canvas, c.strokes, c.fills, scale, c.images, loadImage = { file -> imageCache.get(file) ?: thumbImages.getOrPut(file) { repo.loadImage(nb, file, THUMB_IMAGE_SIDE) } })
+            val shown = dev.inknotes.data.Layers.visible(c, nb.hiddenLayers())
+            drawContent(canvas, shown.strokes, shown.fills, scale, shown.images, loadImage = { file -> imageCache.get(file) ?: thumbImages.getOrPut(file) { repo.loadImage(nb, file, THUMB_IMAGE_SIDE) } })
         }
         return bitmap
     }
@@ -1448,6 +1528,8 @@ class EditorController(
         v.eraserMode = eraserMode
         v.eraserTarget = eraserTarget
         if (v.insertingSpace != insertingSpace) v.insertingSpace = insertingSpace
+        v.hiddenLayers = notebook.hiddenLayers()
+        v.frozenLayers = notebook.frozenLayers()
         v.fillPattern = fillPattern
         v.fillStyle = fillStyle
         v.fillColor = fillColor

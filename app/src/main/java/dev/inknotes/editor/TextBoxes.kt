@@ -43,5 +43,5 @@ object TextBoxes {
 
     /** The same box with new text (or size), its width kept and its height fitted. */
     fun edited(img: PageImage, text: PageText): PageImage =
-        PageImage(img.file, img.x, img.y, img.w, height(text, img.w), img.rotation, text)
+        PageImage(img.file, img.x, img.y, img.w, height(text, img.w), img.rotation, text, img.layer)
 }

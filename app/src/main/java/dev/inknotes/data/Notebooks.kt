@@ -99,6 +99,9 @@ data class PageLink(
     fun contains(x: Float, y: Float) = x in left..right && y in top..bottom
 }
 
+/** A layer of a notebook (see [Layers]): its name, and whether it is shown and can be changed. */
+data class LayerInfo(val name: String, val visible: Boolean = true, val locked: Boolean = false)
+
 data class Notebook(
     val id: String,
     val title: String,
@@ -123,7 +126,18 @@ data class Notebook(
     /** Table of contents, in the order of the pages. */
     val toc: List<Bookmark> = emptyList(),
     val links: List<PageLink> = emptyList(),
+    /** Layers by number; empty: only the main one, shown and unlocked. */
+    val layers: List<LayerInfo> = emptyList(),
+    /** Layer new writing goes onto. */
+    val activeLayer: Int = 0,
 ) {
+    fun layerList(): List<LayerInfo> = layers.ifEmpty { listOf(LayerInfo(MAIN_LAYER)) }
+
+    fun hiddenLayers(): Set<Int> = layers.withIndex().filter { !it.value.visible }.map { it.index }.toSet()
+
+    /** Layers whose elements cannot be erased, selected or moved (locked or hidden). */
+    fun frozenLayers(): Set<Int> = layers.withIndex().filter { !it.value.visible || it.value.locked }.map { it.index }.toSet()
+
     fun plasticKindOrDefault(): Int = plasticKind ?: ((id.hashCode() ushr 3 and 0x7fffffff) % PLASTIC_KINDS)
 
     fun coverArtOrDefault(): Int = coverArt ?: ((id.hashCode() and 0x7fffffff) % COVER_ARTS)
@@ -152,6 +166,7 @@ data class Notebook(
     fun coverColor(): Int = cover ?: DEFAULT_COVERS[(id.hashCode() and 0x7fffffff) % DEFAULT_COVERS.size]
 
     companion object {
+        const val MAIN_LAYER = "Основной"
         const val PAGE_UNITS = 1000f
         const val MM_PER_POINT = 25.4f / 72f
 
@@ -295,6 +310,11 @@ class NotebookRepository(filesDir: File) {
     fun setLinks(nb: Notebook, links: List<PageLink>): Notebook =
         nb.copy(links = links.filter { it.pageId in nb.pageIds && it.target in nb.pageIds }.take(MAX_LINKS), updatedAt = System.currentTimeMillis())
             .also(::writeMeta)
+
+    fun setLayers(nb: Notebook, layers: List<LayerInfo>, active: Int): Notebook {
+        val list = layers.take(Layers.MAX).map { it.copy(name = it.name.take(MAX_TITLE)) }
+        return nb.copy(layers = list, activeLayer = active.coerceIn(0, maxOf(0, list.lastIndex)), updatedAt = System.currentTimeMillis()).also(::writeMeta)
+    }
 
     fun setFavorite(nb: Notebook, favorite: Boolean): Notebook =
         nb.copy(favorite = favorite).also(::writeMeta)
@@ -1269,7 +1289,13 @@ class NotebookRepository(filesDir: File) {
             plasticKind = json.optInt("plasticKind", -1).takeIf { it in 0 until PLASTIC_KINDS },
             toc = json.optJSONArray("toc")?.let { readToc(it, pageIds.toSet()) }.orEmpty(),
             links = json.optJSONArray("links")?.let { readLinks(it, pageIds.toSet()) }.orEmpty(),
-        )
+            layers = json.optJSONArray("layers")?.let { a ->
+                (0 until minOf(a.length(), Layers.MAX)).mapNotNull { i ->
+                    a.optJSONObject(i)?.let { o -> LayerInfo(o.optString("name").take(MAX_TITLE), o.optBoolean("visible", true), o.optBoolean("locked")) }
+                }
+            }.orEmpty(),
+            activeLayer = json.optInt("activeLayer", 0).coerceIn(0, Layers.MAX - 1),
+        ).let { it.copy(activeLayer = it.activeLayer.coerceAtMost(maxOf(0, it.layers.lastIndex))) }
     }
 
     private fun readToc(a: JSONArray, pages: Set<String>): List<Bookmark> = (0 until minOf(a.length(), MAX_TOC)).mapNotNull { i ->
@@ -1345,6 +1371,10 @@ class NotebookRepository(filesDir: File) {
         if (nb.favorite) json.put("favorite", true)
         nb.coverArt?.let { json.put("coverArt", it) }
         nb.plasticKind?.let { json.put("plasticKind", it) }
+        if (nb.layers.isNotEmpty()) {
+            json.put("layers", JSONArray(nb.layers.map { JSONObject().put("name", it.name).put("visible", it.visible).put("locked", it.locked) }))
+            json.put("activeLayer", nb.activeLayer)
+        }
         val toc = nb.toc.filter { it.pageId in nb.pageIds }
         if (toc.isNotEmpty()) {
             json.put("toc", JSONArray(toc.map { JSONObject().put("page", it.pageId).put("y", it.y.toDouble()).put("title", it.title) }))

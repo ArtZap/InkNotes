@@ -248,6 +248,32 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
     /** A zigzag scribbled over writing erases it. */
     var scribbleErase = true
 
+    /** Layers not drawn; and those whose elements are not erased, selected or moved (hidden or locked). */
+    var hiddenLayers: Set<Int> = emptySet()
+        set(value) {
+            if (field == value) return
+            field = value
+            hiddenCache.clear()
+            pageLayer.invalidate()
+        }
+    var frozenLayers: Set<Int> = emptySet()
+
+    private fun editable(x: Any) = frozenLayers.isEmpty() || dev.inknotes.data.Layers.of(x) !in frozenLayers
+
+    /** Elements of hidden layers per page, made again when the page changes. */
+    private val hiddenCache = java.util.WeakHashMap<PageDocument, Pair<Int, Set<Any>>>()
+
+    private fun hiddenOf(doc: PageDocument): Set<Any> {
+        if (hiddenLayers.isEmpty()) return emptySet()
+        hiddenCache[doc]?.takeIf { it.first == doc.revision }?.let { return it.second }
+        val set: MutableSet<Any> = Collections.newSetFromMap(IdentityHashMap())
+        for (x in doc.strokes) if (x.layer in hiddenLayers) set += x
+        for (x in doc.fills) if (x.layer in hiddenLayers) set += x
+        for (x in doc.images) if (x.layer in hiddenLayers) set += x
+        hiddenCache[doc] = doc.revision to set
+        return set
+    }
+
     /** The ruler lying over the pages (world coordinates). */
     val ruler = Ruler()
     var highlighterColor = 0x80FFEB3B.toInt()
@@ -702,7 +728,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             else -> sizeOf(kind)
         }
         val dash = if (kind == InkKind.DASHED) s.dash ?: dashStyle else null
-        return PageStroke(kind, Stroke(InkBrushes.create(kind, s.stroke.brush.colorIntArgb, size), s.stroke.inputs), dash)
+        return PageStroke(kind, Stroke(InkBrushes.create(kind, s.stroke.brush.colorIntArgb, size), s.stroke.inputs), dash, s.layer)
     }
 
     /** Width a line shows (page units): a fountain pen's size is its nib, twice its usual line. */
@@ -752,7 +778,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             when {
                 s !in selected -> s
                 s.kind != InkKind.DASHED -> s.also(newSelection::add)
-                else -> PageStroke(s.kind, s.stroke, style).also(newSelection::add)
+                else -> PageStroke(s.kind, s.stroke, style, s.layer).also(newSelection::add)
             }
         }
         doc.edit(strokes = strokes)
@@ -766,6 +792,20 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
     val selectionPageIndex get() = selectionPage
 
     /** Width and height of the selection in page units, or null with nothing selected. */
+    /** Moves the selection onto [layer]; it stays selected unless that layer is hidden or locked. */
+    fun moveSelectionToLayer(layer: Int) {
+        val doc = doc(selectionPage) ?: return
+        if (selected.isEmpty()) return
+        val moved = ArrayList<Any>()
+        doc.edit(
+            doc.strokes.map { if (it in selected) it.onLayer(layer).also(moved::add) else it },
+            doc.fills.map { if (it in selected) it.copy(layer = layer).also(moved::add) else it },
+            doc.images.map { if (it in selected) it.onLayer(layer).also(moved::add) else it },
+        )
+        if (layer in frozenLayers) reselect(emptyList()) else reselect(moved)
+        changed()
+    }
+
     /** The one text box selected, or null. */
     fun selectedTextBox(): PageImage? = selected.singleOrNull()?.let { it as? PageImage }?.takeIf { it.isText }
 
@@ -1428,7 +1468,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             }
             val doc = doc(wet.page) ?: continue
             if (scribbleErase && (wet.kind == InkKind.PEN || wet.kind == InkKind.PENCIL || wet.kind == InkKind.FOUNTAIN)) {
-                val gone = runCatching { Scribble.covered(stored, doc.strokes) }.getOrNull()
+                val gone = runCatching { Scribble.covered(stored, doc.strokes.filter(::editable)) }.getOrNull()
                 if (gone != null) {
                     val drop: MutableSet<PageStroke> = Collections.newSetFromMap(IdentityHashMap())
                     drop.addAll(gone)
@@ -1605,13 +1645,13 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         // Far strokes are ruled out by their remembered bounds: a full page has thousands.
         val target = eraserTarget
         fun near(s: PageStroke): Boolean {
-            if (!target.strokes(s.kind)) return false
+            if (!target.strokes(s.kind) || !editable(s)) return false
             val b = PageCache.strokeBounds(s) ?: return false
             return PageEdits.segmentNear(b, ax, ay, bx, by, r + s.stroke.brush.size)
         }
         if (eraserMode == EraserMode.WHOLE) {
             strokes = doc.strokes.filterNot { near(it) && PageEdits.strokeTouched(it, ax, ay, bx, by, r) }
-            fills = if (target.fills) doc.fills.filterNot { PageEdits.fillTouched(it, bx, by, r) } else doc.fills
+            fills = if (target.fills) doc.fills.filterNot { editable(it) && PageEdits.fillTouched(it, bx, by, r) } else doc.fills
             changed = strokes.size != doc.strokes.size || fills.size != doc.fills.size
         } else {
             val kept = ArrayList<PageStroke>(doc.strokes.size)
@@ -1626,7 +1666,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             }
             strokes = kept
             fills = doc.fills.map { f ->
-                if (target.fills && PageEdits.segmentNear(f.bounds, ax, ay, bx, by, r)) {
+                if (target.fills && editable(f) && PageEdits.segmentNear(f.bounds, ax, ay, bx, by, r)) {
                     changed = true
                     PageEdits.cutFill(f, ax, ay, bx, by, r)
                 } else {
@@ -1743,9 +1783,9 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         val doc = doc(activePage) ?: return
         val bounds = PageFill(lasso, FillPattern.SOLID, 0).bounds
         val items = ArrayList<Any>()
-        doc.strokes.filterTo(items) { s -> PageCache.strokeBounds(s)?.let { RectF.intersects(it, bounds) } == true && PageEdits.strokeInLasso(s, lasso, bounds) }
-        doc.fills.filterTo(items) { PageEdits.fillInLasso(it, lasso) }
-        doc.images.filterTo(items) { PageEdits.imageInLasso(it, lasso) }
+        doc.strokes.filterTo(items) { s -> editable(s) && PageCache.strokeBounds(s)?.let { RectF.intersects(it, bounds) } == true && PageEdits.strokeInLasso(s, lasso, bounds) }
+        doc.fills.filterTo(items) { editable(it) && PageEdits.fillInLasso(it, lasso) }
+        doc.images.filterTo(items) { editable(it) && PageEdits.imageInLasso(it, lasso) }
         selectionPage = activePage
         reselect(items)
     }
@@ -1787,17 +1827,17 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         }
         selectionPage = page
         // The whole figure first (a stamp, a table, a drawing); a second tap picks a part of it.
-        reselect(Objects.joined(doc, hit))
+        reselect(Objects.joined(doc, hit, ::editable))
     }
 
     /** The topmost stroke, fill or picture at the point (page coordinates), or null. */
     private fun hitAt(doc: PageDocument, x: Float, y: Float): Any? {
         val slop = TAP_SLOP_DP * density / currentScale()
         return doc.strokes.lastOrNull { s ->
-            PageCache.strokeBounds(s)?.let { b -> x >= b.left - slop && x <= b.right + slop && y >= b.top - slop && y <= b.bottom + slop } == true &&
+            editable(s) && PageCache.strokeBounds(s)?.let { b -> x >= b.left - slop && x <= b.right + slop && y >= b.top - slop && y <= b.bottom + slop } == true &&
                 PageEdits.strokeTouched(s, x, y, x, y, slop)
-        } ?: doc.fills.lastOrNull { PageEdits.fillTouched(it, x, y, slop) }
-            ?: doc.images.lastOrNull { PageEdits.bounds(it).contains(x, y) }
+        } ?: doc.fills.lastOrNull { editable(it) && PageEdits.fillTouched(it, x, y, slop) }
+            ?: doc.images.lastOrNull { editable(it) && PageEdits.bounds(it).contains(x, y) }
     }
 
     /** A quick touch inside the selection that did not move it (a finger, or the pen with the lasso). */
@@ -1827,10 +1867,10 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         val hit = doc?.let { hitAt(it, p[0], p[1]) }
         when {
             doc == null || hit == null -> pageLayer.invalidate()
-            hit !in selected -> reselect(Objects.joined(doc, hit))
+            hit !in selected -> reselect(Objects.joined(doc, hit, ::editable))
             selected.size > 1 -> reselect(listOf(hit))
             else -> {
-                val group = Objects.joined(doc, hit)
+                val group = Objects.joined(doc, hit, ::editable)
                 if (group.size > 1) reselect(group) else pageLayer.invalidate()
             }
         }
@@ -2955,19 +2995,21 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                     dragging && connectors.isNotEmpty() && moveKx == 1f && moveKy == 1f && moveAngle == 0f -> Collections.newSetFromMap<Any>(IdentityHashMap()).apply { addAll(selected); addAll(connectorSet) }
                     else -> selected
                 }
+                val hidden = hiddenOf(doc)
+                val out: Set<Any> = if (hidden.isEmpty()) sel else Collections.newSetFromMap<Any>(IdentityHashMap()).apply { addAll(sel); addAll(hidden) }
                 val look = PageCache.Look(widths[i], heights[i], pageRenderer.paper, pageRenderer.dark, pageRenderer.photo, pdf, doc.images.map { src.image(it.file) })
                 // The cached picture holds the paper too: the background is drawn only without it.
-                when (cache.draw(canvas, doc, look, scale, sel, visibleRect(i), if (pdf != null) src.pdfRegion(i) else null) { src.image(it) }) {
+                when (cache.draw(canvas, doc, look, scale, out, visibleRect(i), if (pdf != null) src.pdfRegion(i) else null) { src.image(it) }) {
                     PageCache.Result.DRAWN -> {
                         pageRenderer.drawEdge(canvas, edgeWidth = 1f / scale)
                         canvas.clipRect(0f, 0f, widths[i], heights[i])
-                        drawSpoilers(canvas, doc, toScreen, null, sel)
+                        drawSpoilers(canvas, doc, toScreen, null, out)
                     }
                     // Zoomed in: only what is on screen, a small part of the page.
                     PageCache.Result.ZOOMED -> {
                         pageRenderer.drawBackground(canvas, edgeWidth = 1f / scale)
-                        drawElements(canvas, src, doc, toScreen, visibleRect(i), exclude = sel)
-                        drawSpoilers(canvas, doc, toScreen, visibleRect(i), sel)
+                        drawElements(canvas, src, doc, toScreen, visibleRect(i), exclude = out)
+                        drawSpoilers(canvas, doc, toScreen, visibleRect(i), out)
                     }
                     // A page appearing while scrolling: its thumbnail until the picture is rendered.
                     PageCache.Result.NOT_READY -> {

@@ -45,7 +45,8 @@ object PdfExporter {
                 val size = nb.pageSize(pageId)
                 val widthPt = ref?.width ?: (size.widthMm / Notebook.MM_PER_POINT)
                 val heightPt = ref?.height ?: (size.heightMm / Notebook.MM_PER_POINT)
-                val content = repo.loadPage(nb, pageId)
+                // Hidden layers stay out of the PDF, as they are off the screen.
+                val content = Layers.visible(repo.loadPage(nb, pageId), nb.hiddenLayers())
                 val page = doc.startPage(PdfDocument.PageInfo.Builder(widthPt.roundToInt(), heightPt.roundToInt(), i + 1).create())
                 val widthUnits = nb.pageWidthUnits(pageId)
                 val k = widthPt / widthUnits
