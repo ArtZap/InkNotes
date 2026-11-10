@@ -5,6 +5,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -113,7 +114,12 @@ fun RecognizedTextDialog(initial: String, c: EditorController, onDismiss: () -> 
                 onDismiss()
             }) { Text("Копировать") }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Закрыть") } },
+        dismissButton = {
+            Row {
+                TextButton(onClick = onDismiss) { Text("Закрыть") }
+                TextButton(enabled = text.isNotBlank() && c.selectionCount > 0, onClick = { c.replaceSelectionWithText(text) }) { Text("Заменить почерк текстом") }
+            }
+        },
     )
 }
 

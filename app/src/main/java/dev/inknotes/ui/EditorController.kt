@@ -316,6 +316,7 @@ class EditorController(
     }
 
     override fun image(file: String): Bitmap? {
+        if (file.startsWith(PageImage.TEXT_PREFIX)) return null
         imageCache.get(file)?.let { return it }
         val nb = notebook
         if (imagePending.add(file)) {
@@ -359,6 +360,62 @@ class EditorController(
     }
 
     /** A stamp at the middle of the screen, selected so it can be dragged into place. */
+    // ------------------------------------------------------------- typed text
+
+    var editingText by mutableStateOf(false)
+
+    /** The selection is one text box (it can be edited). */
+    var selectedText by mutableStateOf<String?>(null)
+        private set
+
+    /** Typed text in the middle of the page in view, in the pen's colour. */
+    fun insertText(text: String) {
+        val v = view ?: return
+        if (text.isBlank()) return
+        val page = pageIndex
+        val c = v.visibleCenter(page)
+        val width = pageWidth(page)
+        val t = dev.inknotes.data.PageText(text.take(dev.inknotes.data.PageText.MAX_CHARS), TEXT_SIZE, penColor)
+        val box = dev.inknotes.editor.TextBoxes.box(t, 0f, 0f, width * 0.7f)
+        v.insert(page, images = listOf(box.moved(x = (c[0] - box.w / 2).coerceIn(0f, width - box.w), y = c[1] - box.h / 2)))
+    }
+
+    fun editSelectedText(text: String) {
+        val v = view ?: return
+        val old = v.selectedTextBox() ?: return
+        if (text.isBlank()) {
+            v.deleteSelection()
+            return
+        }
+        v.replaceTextBox(dev.inknotes.editor.TextBoxes.edited(old, old.text!!.copy(text = text.take(dev.inknotes.data.PageText.MAX_CHARS))))
+    }
+
+    /** Changes the size of the selected text's letters (×[k]), its box fitted again. */
+    fun scaleSelectedText(k: Float) {
+        val v = view ?: return
+        val old = v.selectedTextBox() ?: return
+        val t = old.text!!
+        v.replaceTextBox(dev.inknotes.editor.TextBoxes.edited(old, t.copy(size = (t.size * k).coerceIn(dev.inknotes.data.PageText.MIN_SIZE, dev.inknotes.data.PageText.MAX_SIZE))))
+    }
+
+    /**
+     * The selected handwriting replaced by [text] typed in its place: as wide as the writing,
+     * letters about as tall as its lines, in the colour of its ink.
+     */
+    fun replaceSelectionWithText(text: String) {
+        val v = view ?: return
+        val r = v.selectionRect() ?: return
+        if (text.isBlank()) return
+        val ink = v.selectedInk()
+        val lines = text.lines().count { it.isNotBlank() }.coerceAtLeast(1)
+        val size = (r.height() / lines * 0.55f).coerceIn(10f, 80f)
+        val color = ink.groupingBy { it.stroke.brush.colorIntArgb }.eachCount().maxByOrNull { it.value }?.key ?: penColor
+        val t = dev.inknotes.data.PageText(text.take(dev.inknotes.data.PageText.MAX_CHARS), size, color)
+        val w = maxOf(r.width(), size * 3)
+        v.replaceSelection(PageImage.textBox(t, r.left, r.top, w, dev.inknotes.editor.TextBoxes.height(t, w)))
+        recognizedText = null
+    }
+
     fun insertStamp(stamp: Stamps.Stamp) {
         val v = view ?: return
         val page = pageIndex
@@ -1285,6 +1342,7 @@ class EditorController(
         selectionIsTable = count > 0 && view?.selectionIsTable() == true
         selectionLineKinds = if (count > 0) view?.selectedLineKinds().orEmpty() else emptySet()
         selectionLineWidth = if (count > 0) view?.selectionLineWidth() else null
+        selectedText = if (count == 1) view?.selectedTextBox()?.text?.text else null
     }
 
     /** The selected lines drawn as [kind]: neon as an ordinary pen line, a pen line as pencil… */
@@ -1412,6 +1470,9 @@ class EditorController(
 
         /** A card shows this many line heights above and below its band; a line is at least [CARD_MIN_LINE] units. */
         private const val CARD_CONTEXT = 2.5f
+
+        /** Height of typed letters, page units (about 4 mm on A4). */
+        private const val TEXT_SIZE = 20f
         private const val CARD_MIN_LINE = 24f
         private const val IMAGE_CACHE_BYTES = 64 * 1024 * 1024
         private const val THUMB_IMAGE_SIDE = 256

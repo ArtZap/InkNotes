@@ -60,6 +60,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -127,6 +129,8 @@ fun EditorScreen(
     var showHelp by remember { mutableStateOf(false) }
     var showShift by remember { mutableStateOf(false) }
     var showToc by remember { mutableStateOf(false) }
+    var textEdit by remember { mutableStateOf<String?>(null) }
+    var textNew by remember { mutableStateOf(false) }
     var pageSizeOf by remember { mutableStateOf<Int?>(null) }
     var pageText by remember { mutableStateOf<List<dev.inknotes.search.TextLine>?>(null) }
     val context = LocalContext.current
@@ -171,6 +175,7 @@ fun EditorScreen(
                 MenuItem("Размер и ориентация страницы…", InkIcons.PageSize) { pageSizeOf = controller.pageIndex }
                 MenuItem("Отступ страницы слева или справа…") { showShift = true }
                 MenuItem("Распознанный текст страницы") { controller.currentPageText { pageText = it } }
+                MenuItem("Вставить печатный текст…") { textNew = true }
                 MenuItem(if (controller.insertingSpace) "Вставить место: отменить" else "Вставить место (раздвинуть строки)") { controller.toggleInsertSpace() }
                 MenuItem("Оглавление…") { showToc = true }
                 MenuItem("Повторение: карточки из маркера подсказок") { controller.openCards() }
@@ -222,6 +227,10 @@ fun EditorScreen(
     controller.tappedAnswer?.let { AnswerDialog(controller, it, onDismiss = { controller.tappedAnswer = null }) }
     controller.studyCards?.let { CardsDialog(controller, it, onDismiss = { controller.closeCards() }) }
     if (showToc) TocDialog(controller, onDismiss = { showToc = false })
+    if (textNew) TypeTextDialog("Печатный текст", "", onDismiss = { textNew = false }) { controller.insertText(it) }
+    if (controller.editingText) {
+        TypeTextDialog("Изменить текст", controller.selectedText.orEmpty(), onDismiss = { controller.editingText = false }) { controller.editSelectedText(it) }
+    }
     if (controller.showLinkDialog) LinkDialog(controller, onDismiss = { controller.showLinkDialog = false })
     if (controller.showAddBookmark) AddBookmarkDialog(controller, onDismiss = { controller.showAddBookmark = false })
     if (showHelp) HelpDialog(onDismiss = { showHelp = false })
@@ -865,6 +874,31 @@ private fun ToolOptions(c: EditorController, onPickColor: () -> Unit, onHatchSet
     }
 }
 
+/** Typing text for the page (new, or editing a text box). */
+@Composable
+private fun TypeTextDialog(title: String, initial: String, onDismiss: () -> Unit, onDone: (String) -> Unit) {
+    var text by remember { mutableStateOf(initial) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            OutlinedTextField(
+                text,
+                { text = it },
+                modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp, max = 360.dp),
+                placeholder = { Text("Текст") },
+            )
+        },
+        confirmButton = {
+            Button(onClick = {
+                onDone(text)
+                onDismiss()
+            }) { Text("Готово") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } },
+    )
+}
+
 /** Less frequent things to do with the selection: contents, link. */
 @Composable
 private fun SelectionMoreButton(c: EditorController) {
@@ -924,7 +958,13 @@ private fun SelectionOptions(c: EditorController, onPickColor: () -> Unit, onHat
     IconAction(InkIcons.FlipHorizontal, "Отразить слева направо", { c.flipSelection(horizontal = true) })
     IconAction(InkIcons.FlipVertical, "Отразить сверху вниз", { c.flipSelection(horizontal = false) })
     IconAction(InkIcons.Ruler, "Размер в миллиметрах", onSelectionSize)
-    TextButton(onClick = { c.recognizeSelection() }) { Text("Текст") }
+    if (c.selectedText != null) {
+        TextButton(onClick = { c.editingText = true }) { Text("Изменить текст") }
+        TextButton(onClick = { c.scaleSelectedText(1f / 1.2f) }) { Text("А−") }
+        TextButton(onClick = { c.scaleSelectedText(1.2f) }) { Text("А+") }
+    } else {
+        TextButton(onClick = { c.recognizeSelection() }) { Text("Текст") }
+    }
     SelectionMoreButton(c)
     IconAction(InkIcons.Duplicate, "Дублировать", { c.duplicateSelection() })
     IconAction(InkIcons.Delete, "Удалить выделенное", { c.deleteSelection() })

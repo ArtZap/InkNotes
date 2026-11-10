@@ -522,7 +522,14 @@ class PageRenderer {
         val r = RectF(img.x, img.y, img.x + img.w, img.y + img.h)
         canvas.save()
         if (img.rotation != 0f) canvas.rotate(img.rotation, r.centerX(), r.centerY())
-        if (bitmap != null) {
+        val text = img.text
+        if (text != null) {
+            val color = InkColors.forPaper(text.color, inkOnDark)
+            val layout = textLayouts[img]?.takeIf { it.first == color }?.second
+                ?: TextBoxes.layout(text, img.w, color).also { textLayouts[img] = color to it }
+            canvas.translate(img.x, img.y)
+            layout.draw(canvas)
+        } else if (bitmap != null) {
             canvas.drawBitmap(bitmap, null, r, bitmapPaint)
         } else {
             edgePaint.strokeWidth = 1f
@@ -558,6 +565,7 @@ class PageRenderer {
     }
 
     private val spoilerBands = WeakHashMap<PageStroke, Stroke>()
+    private val textLayouts = WeakHashMap<PageImage, Pair<Int, android.text.StaticLayout>>()
     private val spoilerTints = WeakHashMap<PageStroke, Stroke>()
 
     /** Light and dark specks laid only over the band drawn just before (SRC_ATOP). */

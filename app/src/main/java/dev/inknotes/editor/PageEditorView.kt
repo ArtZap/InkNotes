@@ -766,6 +766,27 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
     val selectionPageIndex get() = selectionPage
 
     /** Width and height of the selection in page units, or null with nothing selected. */
+    /** The one text box selected, or null. */
+    fun selectedTextBox(): PageImage? = selected.singleOrNull()?.let { it as? PageImage }?.takeIf { it.isText }
+
+    /** Puts [img] in place of the selected text box (same page), keeping it selected. */
+    fun replaceTextBox(img: PageImage) {
+        val old = selectedTextBox() ?: return
+        val doc = doc(selectionPage) ?: return
+        doc.edit(images = doc.images.map { if (it === old) img else it })
+        reselect(listOf(img))
+        changed()
+    }
+
+    /** The selection gives way to [img] (handwriting turned into typed text), in one step. */
+    fun replaceSelection(img: PageImage) {
+        val doc = doc(selectionPage) ?: return
+        if (selected.isEmpty()) return
+        doc.edit(doc.strokes.filterNot { it in selected }, doc.fills.filterNot { it in selected }, doc.images.filterNot { it in selected } + img)
+        reselect(listOf(img))
+        changed()
+    }
+
     /** Bounds of the selection on its page (before any drag in progress). */
     fun selectionRect(): RectF? = rawSelectionBounds()?.let(::RectF)
 

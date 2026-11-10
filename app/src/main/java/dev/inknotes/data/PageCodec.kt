@@ -239,12 +239,30 @@ class PageFill(
  * shown in the rectangle [x], [y], [w], [h] (page units), turned by [rotation] degrees
  * (clockwise) around its centre. Identity matters, like strokes.
  */
-class PageImage(val file: String, val x: Float, val y: Float, val w: Float, val h: Float, val rotation: Float = 0f) {
+class PageImage(val file: String, val x: Float, val y: Float, val w: Float, val h: Float, val rotation: Float = 0f, val text: PageText? = null) {
+    /** Moved or resized; typed text grows and shrinks with its box (by the smaller side's factor). */
     fun moved(x: Float = this.x, y: Float = this.y, w: Float = this.w, h: Float = this.h, rotation: Float = this.rotation) =
-        PageImage(file, x, y, w, h, rotation)
+        PageImage(file, x, y, w, h, rotation, text?.let { t -> if (w == this.w && h == this.h) t else t.copy(size = (t.size * minOf(w / this.w, h / this.h)).coerceIn(PageText.MIN_SIZE, PageText.MAX_SIZE)) })
+
+    val isText get() = text != null
 
     companion object {
         val NAME = Regex("img-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.(jpg|png)")
+
+        /** "File" name of a text box: it has no file, the name only tells it apart. */
+        const val TEXT_PREFIX = "txt-"
+
+        fun textBox(text: PageText, x: Float, y: Float, w: Float, h: Float, rotation: Float = 0f) =
+            PageImage(TEXT_PREFIX + java.util.UUID.randomUUID(), x, y, w, h, rotation, text)
+    }
+}
+
+/** Typed text on the page (page format v12): drawn in the box of its [PageImage], [size] page units high letters. */
+data class PageText(val text: String, val size: Float, val color: Int) {
+    companion object {
+        const val MIN_SIZE = 3f
+        const val MAX_SIZE = 400f
+        const val MAX_CHARS = 20_000
     }
 }
 
@@ -340,7 +358,7 @@ object InkBrushes {
 /**
  * Page file: header, strokes (ink kind, colour, size, raw pointer inputs in androidx.ink's
  * compact encoding), then fills (v2+, with a [HatchStyle] since v3, its line type since v4).
- * v5 adds the fountain pen ink kind, v6 placed images (drawn under everything else), v7 their rotation, v8 the neon ink kind (written only by pages that have neon, so older apps still read the rest), v9 the pencil and dashed kinds (likewise), v10 even lines and the hint marker (likewise), v11 dash patterns of dashed lines (likewise, after the pictures). The brush family is not stored; it is rebuilt from
+ * v5 adds the fountain pen ink kind, v6 placed images (drawn under everything else), v7 their rotation, v8 the neon ink kind (written only by pages that have neon, so older apps still read the rest), v9 the pencil and dashed kinds (likewise), v10 even lines and the hint marker (likewise), v11 dash patterns of dashed lines (likewise, after the pictures), v12 typed text boxes (likewise, after the dash patterns). The brush family is not stored; it is rebuilt from
  * the kind, so stock brush upgrades apply to old notes.
  */
 /** A page written by a newer app version (not a corrupt file). */
@@ -348,7 +366,7 @@ class NewerFormatException(message: String) : IOException(message)
 
 object PageCodec {
     private const val MAGIC = 0x494E4B50 // "INKP"
-    private const val VERSION = 11
+    private const val VERSION = 12
 
     /** v2 pattern ordinals: SOLID, DIAGONAL, CROSS, HORIZONTAL, DOTS (all with fixed looks). */
     private val V2_PATTERNS = listOf(
@@ -387,6 +405,7 @@ object PageCodec {
         data.writeInt(MAGIC)
         data.writeInt(
             when {
+                content.images.any { it.isText } -> 12
                 content.strokes.any { it.dash != null } -> 11
                 content.strokes.any { it.kind == InkKind.LINE || it.kind == InkKind.SPOILER } || content.fills.any { it.pattern == FillPattern.INK } -> 10
                 content.strokes.any { it.kind == InkKind.PENCIL || it.kind == InkKind.DASHED } -> 9
@@ -422,8 +441,9 @@ object PageCodec {
                 writeFloats(data, cut.points)
             }
         }
-        data.writeInt(content.images.size)
-        for (img in content.images) {
+        val pictures = content.images.filter { !it.isText }
+        data.writeInt(pictures.size)
+        for (img in pictures) {
             data.writeUTF(img.file)
             data.writeFloat(img.x)
             data.writeFloat(img.y)
@@ -433,7 +453,8 @@ object PageCodec {
         }
         // v11: dash patterns, by index of the line (only lines that have one).
         val dashed = content.strokes.withIndex().filter { it.value.dash != null }
-        if (dashed.isNotEmpty()) {
+        val texts = content.images.filter { it.isText }
+        if (dashed.isNotEmpty() || texts.isNotEmpty()) {
             data.writeInt(dashed.size)
             for ((i, s) in dashed) {
                 val d = s.dash!!
@@ -441,6 +462,21 @@ object PageCodec {
                 data.writeByte(d.pattern.ordinal)
                 data.writeFloat(d.dash)
                 data.writeFloat(d.gap)
+            }
+        }
+        // v12: text boxes, in their place among the pictures (drawn after them).
+        if (texts.isNotEmpty()) {
+            data.writeInt(texts.size)
+            for (img in texts) {
+                val t = img.text!!
+                data.writeUTF(t.text.take(PageText.MAX_CHARS))
+                data.writeFloat(t.size)
+                data.writeInt(t.color)
+                data.writeFloat(img.x)
+                data.writeFloat(img.y)
+                data.writeFloat(img.w)
+                data.writeFloat(img.h)
+                data.writeFloat(img.rotation)
             }
         }
         data.flush()
@@ -529,7 +565,20 @@ object PageCodec {
                     if (s.kind == InkKind.DASHED) strokes[i] = PageStroke(s.kind, s.stroke, DashStyle(pattern, dash, gap).sane())
                 }
             }
-            PageContent(strokes, fills, images)
+            val texts = if (version < 12) {
+                emptyList()
+            } else {
+                List(data.readCount(MAX_IMAGES)) {
+                    val text = data.readUTF()
+                    val size = data.readFloat()
+                    val color = data.readInt()
+                    val v = FloatArray(5) { data.readFloat() }
+                    if (!size.isFinite() || size < PageText.MIN_SIZE || size > PageText.MAX_SIZE) throw IOException("bad text size")
+                    if (v.any { !it.isFinite() || it > MAX_COORD || it < -MAX_COORD } || v[2] < 1f || v[3] < 1f) throw IOException("bad text box")
+                    PageImage.textBox(PageText(text, size, color), v[0], v[1], v[2], v[3], ((v[4] % 360f) + 360f) % 360f)
+                }
+            }
+            PageContent(strokes, fills, images + texts)
         }
 
     private fun writeFloats(data: DataOutputStream, values: FloatArray) {
