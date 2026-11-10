@@ -171,6 +171,7 @@ fun EditorScreen(
                 MenuItem("Размер и ориентация страницы…", InkIcons.PageSize) { pageSizeOf = controller.pageIndex }
                 MenuItem("Отступ страницы слева или справа…") { showShift = true }
                 MenuItem("Распознанный текст страницы") { controller.currentPageText { pageText = it } }
+                MenuItem(if (controller.insertingSpace) "Вставить место: отменить" else "Вставить место (раздвинуть строки)") { controller.toggleInsertSpace() }
                 MenuItem("Оглавление…") { showToc = true }
                 MenuItem("Повторение: карточки из маркера подсказок") { controller.openCards() }
                 MenuItem("Поделиться файлом тетради", InkIcons.Share) { share() }

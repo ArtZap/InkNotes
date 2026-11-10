@@ -122,6 +122,15 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
 
         /** Edits made by [block] (on several pages) undo as one step. */
         fun editsTogether(block: () -> Unit) = block()
+
+        /**
+         * A new page right after page [after] (for what no longer fits on it when space was
+         * inserted); returns its index, or null when it cannot be made.
+         */
+        fun addPageAfter(after: Int): Int? = null
+
+        /** Space was inserted (or not): the one-shot mode is over. */
+        fun onSpaceDone() {}
     }
 
     /** The notebook's pages; documents are loaded lazily as pages scroll into view. */
@@ -273,7 +282,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
     private val density = resources.displayMetrics.density
     private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop.toFloat()
 
-    private enum class Mode { NONE, DRAW, SNAPPED, ERASE, GESTURE, PATH, MOVE, LASER, RULER, RULER_DRAW }
+    private enum class Mode { NONE, DRAW, SNAPPED, ERASE, GESTURE, PATH, MOVE, LASER, RULER, RULER_DRAW, SPACE }
 
     private var mode = Mode.NONE
 
@@ -399,6 +408,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         pageLayer.invalidate()
     }
     private val flashPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x55FFB300 }
+    private val spacePaint = Paint()
     private val linkPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         color = 0xAA2979FF.toInt()
@@ -1065,6 +1075,10 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                 }
                 Mode.RULER -> moveRuler(e)
                 Mode.RULER_DRAW -> forEachSample(e) { x, y, _ -> rulerDrawTo(x, y) }
+                Mode.SPACE -> {
+                    val i = e.findPointerIndex(activePointerId)
+                    if (i >= 0) spaceTo(toPage(spacePage, e.getX(i), e.getY(i))[1])
+                }
                 Mode.NONE, Mode.SNAPPED -> Unit
             }
 
@@ -1086,6 +1100,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                     Mode.LASER -> laser.end()
                     Mode.RULER -> endRulerMove()
                     Mode.RULER_DRAW -> endRulerDraw()
+                    Mode.SPACE -> endSpace()
                     Mode.NONE, Mode.SNAPPED -> Unit
                 }
                 mode = Mode.NONE
@@ -1121,6 +1136,10 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                     Mode.RULER -> endRulerMove()
                     Mode.RULER_DRAW -> {
                         rulerEdge = 0
+                        pageLayer.invalidate()
+                    }
+                    Mode.SPACE -> {
+                        spaceY0 = Float.NaN
                         pageLayer.invalidate()
                     }
                     else -> Unit
@@ -1165,6 +1184,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             }
             Mode.RULER -> startRulerMove(e)
             Mode.RULER_DRAW -> startRulerDraw(e, index)
+            Mode.SPACE -> startSpace(e, index)
             Mode.NONE, Mode.SNAPPED -> Unit
         }
     }
@@ -1186,6 +1206,10 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             (MotionEvent.BUTTON_STYLUS_PRIMARY or MotionEvent.BUTTON_STYLUS_SECONDARY) != 0
         if (tops.isEmpty()) return Mode.GESTURE
         val world = floatArrayOf(e.getX(index), e.getY(index)).also(viewToWorld::mapPoints)
+        if (insertingSpace && (pen || toolType == MotionEvent.TOOL_TYPE_FINGER)) {
+            activePage = pageAt(e.getX(index), e.getY(index))
+            return Mode.SPACE
+        }
 
         // Fingers on the ruler move it.
         if (!pen && !eraserEnd && ruler.hit(world[0], world[1])) return Mode.RULER
@@ -1822,6 +1846,105 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
 
     // One worker, ending when idle: nothing to shut down when the editor goes away.
     private val areaExec = java.util.concurrent.ThreadPoolExecutor(0, 1, 10, java.util.concurrent.TimeUnit.SECONDS, java.util.concurrent.LinkedBlockingQueue())
+
+    // --- inserting space
+
+    /**
+     * One-shot mode: the next stroke down the page (pen or finger) opens that much room at the
+     * place it began, moving everything below down; a stroke up closes empty room. What no
+     * longer fits goes to a new page after this one.
+     */
+    var insertingSpace = false
+        set(value) {
+            field = value
+            if (!value) spaceY0 = Float.NaN
+            pageLayer.invalidate()
+        }
+    private var spacePage = 0
+    private var spaceY0 = Float.NaN
+    private var spaceDy = 0f
+
+    private fun startSpace(e: MotionEvent, index: Int) {
+        activePointerId = e.getPointerId(index)
+        spacePage = activePage
+        spaceY0 = toPage(spacePage, e.getX(index), e.getY(index))[1].coerceIn(0f, source?.pageHeight(spacePage) ?: 0f)
+        spaceDy = 0f
+        pageLayer.invalidate()
+    }
+
+    private fun spaceTo(y: Float) {
+        val doc = doc(spacePage) ?: return
+        var dy = y - spaceY0
+        // Closing room: no further than the nearest writing below the line reaching what is above.
+        if (dy < 0f) dy = max(dy, -closableSpace(doc, spaceY0))
+        spaceDy = dy
+        pageLayer.invalidate()
+    }
+
+    /** Elements whose middle is below [y0]: they move. */
+    private fun below(doc: PageDocument, y0: Float): Triple<List<PageStroke>, List<PageFill>, List<PageImage>> = Triple(
+        doc.strokes.filter { (PageCache.strokeBounds(it)?.centerY() ?: -1f) >= y0 },
+        doc.fills.filter { it.bounds.centerY() >= y0 },
+        doc.images.filter { PageEdits.bounds(it).centerY() >= y0 },
+    )
+
+    /** Free paper between [y0] and the first element below it, and above it the last one reaching down. */
+    private fun closableSpace(doc: PageDocument, y0: Float): Float {
+        val (s, f, i) = below(doc, y0)
+        val moving: Set<Any> = Collections.newSetFromMap<Any>(IdentityHashMap()).apply { addAll(s); addAll(f); addAll(i) }
+        val topBelow = (s.mapNotNull { PageCache.strokeBounds(it)?.top } + f.map { it.bounds.top } + i.map { PageEdits.bounds(it).top }).minOrNull() ?: return 0f
+        val bottomAbove = (
+            doc.strokes.filter { it !in moving }.mapNotNull { PageCache.strokeBounds(it)?.bottom } +
+                doc.fills.filter { it !in moving }.map { it.bounds.bottom } + doc.images.filter { it !in moving }.map { PageEdits.bounds(it).bottom }
+            ).filter { it <= topBelow }.maxOrNull() ?: 0f
+        return max(0f, topBelow - max(bottomAbove, 0f) - SPACE_GAP)
+    }
+
+    private fun endSpace() {
+        val page = spacePage
+        val y0 = spaceY0
+        val dy = spaceDy
+        spaceY0 = Float.NaN
+        insertingSpace = false
+        listener?.onSpaceDone()
+        val doc = doc(page)
+        if (doc == null || y0.isNaN() || abs(dy) < 1f) {
+            pageLayer.invalidate()
+            return
+        }
+        val (s, f, i) = below(doc, y0)
+        val t = PageEdits.Transform.translation(0f, dy)
+        val height = source?.pageHeight(page) ?: PAGE_H
+        val bottomOf = { x: Any -> when (x) { is PageStroke -> PageCache.strokeBounds(x)?.bottom ?: 0f; is PageFill -> x.bounds.bottom; else -> PageEdits.bounds(x as PageImage).bottom } }
+        val over: Set<Any> = Collections.newSetFromMap<Any>(IdentityHashMap()).apply {
+            if (dy > 0f) for (x in s + f + i) if (bottomOf(x) + dy > height - SPACE_GAP) add(x)
+        }
+        val moved = Collections.newSetFromMap<Any>(IdentityHashMap()).apply { addAll(s); addAll(f); addAll(i) }
+        val edit = {
+            if (over.isNotEmpty()) {
+                // What no longer fits keeps its layout at the top of a new page.
+                val next = listener?.addPageAfter(page)
+                val dst = next?.let(::doc)
+                if (next != null && dst != null) {
+                    val topOf = { x: Any -> when (x) { is PageStroke -> PageCache.strokeBounds(x)?.top ?: 0f; is PageFill -> x.bounds.top; else -> PageEdits.bounds(x as PageImage).top } }
+                    val top = over.minOf(topOf)
+                    val shift = PageEdits.Transform.translation(0f, SPACE_TOP - top)
+                    dst.edit(
+                        dst.strokes + s.filter { it in over }.map { PageEdits.transform(it, shift) },
+                        dst.fills + f.filter { it in over }.map { PageEdits.transform(it, shift) },
+                        dst.images + i.filter { it in over }.map { PageEdits.transform(it, shift) },
+                    )
+                }
+            }
+            doc.edit(
+                doc.strokes.filter { it !in over }.map { if (it in moved) PageEdits.transform(it, t) else it },
+                doc.fills.filter { it !in over }.map { if (it in moved) PageEdits.transform(it, t) else it },
+                doc.images.filter { it !in over }.map { if (it in moved) PageEdits.transform(it, t) else it },
+            )
+        }
+        listener?.editsTogether(edit) ?: edit()
+        changed()
+    }
 
     // --- dragging the selection
 
@@ -2961,6 +3084,15 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
 
         /** Area preview, lasso/outline being traced and selection frame of page [i]. */
         private fun drawOverlays(canvas: Canvas, i: Int) {
+            if (!spaceY0.isNaN() && spacePage == i) {
+                val w = source?.pageWidth(i) ?: PAGE_W
+                val y1 = spaceY0 + spaceDy
+                spacePaint.color = if (spaceDy >= 0f) 0x302979FF else 0x30E53935
+                canvas.drawRect(0f, min(spaceY0, y1), w, max(spaceY0, y1), spacePaint)
+                guidePaint.strokeWidth = 1.5f * density / currentScale()
+                guidePaint.pathEffect = null
+                canvas.drawLine(0f, spaceY0, w, spaceY0, guidePaint)
+            }
             source?.links(i)?.takeIf { it.isNotEmpty() }?.let { links ->
                 val scale = currentScale()
                 linkPaint.strokeWidth = 1.2f * density / scale
@@ -3250,6 +3382,10 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         /** How far (on screen) line ends, corners and moved things are pulled to stick. */
         private const val MAGNET_DP = 16f
         private const val MAX_ANCHORS = 64
+
+        /** Space kept between writing and a closed gap or the page's bottom edge, and where moved-over writing starts on a new page. */
+        private const val SPACE_GAP = 6f
+        private const val SPACE_TOP = 40f
 
         /** Width of the picture a surface answer is drawn into. */
         private const val SURFACE_PX = 900

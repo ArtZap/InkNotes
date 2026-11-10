@@ -915,6 +915,30 @@ class EditorController(
 
     fun addPageAfterCurrent() = addPageAt(pageIndex + 1)
 
+    /** The next stroke down a page opens room there (see [PageEditorView.insertingSpace]). */
+    var insertingSpace by mutableStateOf(false)
+        private set
+
+    fun toggleInsertSpace() {
+        insertingSpace = !insertingSpace
+        if (insertingSpace) showStatus("Проведите вниз от места, где нужна строка; вверх — убрать пустое место")
+        syncView()
+    }
+
+    override fun onSpaceDone() {
+        insertingSpace = false
+    }
+
+    override fun addPageAfter(after: Int): Int? {
+        if (after !in notebook.pageIds.indices) return null
+        val pageId = notebook.pageIds[after]
+        val size = pageId.takeIf { it !in notebook.pdfPages }?.let(notebook::pageSize) ?: PageSize.DEFAULT
+        notebook = repo.insertPage(notebook, after + 1, size)
+        view?.relayout()
+        showStatus("Не поместившееся — на новой странице ${after + 2}")
+        return after + 1
+    }
+
     fun addPageAt(index: Int) {
         flush()
         // A new page continues the one before it: same paper size and orientation.
@@ -1365,6 +1389,7 @@ class EditorController(
         v.eraserRadiusDp = eraserSize
         v.eraserMode = eraserMode
         v.eraserTarget = eraserTarget
+        if (v.insertingSpace != insertingSpace) v.insertingSpace = insertingSpace
         v.fillPattern = fillPattern
         v.fillStyle = fillStyle
         v.fillColor = fillColor
