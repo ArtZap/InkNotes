@@ -80,6 +80,25 @@ const val COVER_ARTS = 6
 /** Number of plastic covers of the notebook style. */
 const val PLASTIC_KINDS = 3
 
+/** An entry of the table of contents: [title] at [y] page units from the top of page [pageId]. */
+data class Bookmark(val pageId: String, val y: Float, val title: String)
+
+/**
+ * A link: a finger tap on the rectangle [left]…[bottom] of page [pageId] goes to page [target]
+ * ([targetY] units from its top). Shared with the notebook.
+ */
+data class PageLink(
+    val pageId: String,
+    val left: Float,
+    val top: Float,
+    val right: Float,
+    val bottom: Float,
+    val target: String,
+    val targetY: Float = 0f,
+) {
+    fun contains(x: Float, y: Float) = x in left..right && y in top..bottom
+}
+
 data class Notebook(
     val id: String,
     val title: String,
@@ -101,6 +120,9 @@ data class Notebook(
     val coverArt: Int? = null,
     /** Kind of plastic cover in the notebook style (0 until [PLASTIC_KINDS]); null = picked from the id. */
     val plasticKind: Int? = null,
+    /** Table of contents, in the order of the pages. */
+    val toc: List<Bookmark> = emptyList(),
+    val links: List<PageLink> = emptyList(),
 ) {
     fun plasticKindOrDefault(): Int = plasticKind ?: ((id.hashCode() ushr 3 and 0x7fffffff) % PLASTIC_KINDS)
 
@@ -261,6 +283,18 @@ class NotebookRepository(filesDir: File) {
 
     fun setPlasticKind(nb: Notebook, kind: Int?): Notebook =
         nb.copy(plasticKind = kind?.takeIf { it in 0 until PLASTIC_KINDS }, updatedAt = System.currentTimeMillis()).also(::writeMeta)
+
+    /** Keeps the entries in page order, top to bottom; entries of missing pages are dropped. */
+    fun setToc(nb: Notebook, toc: List<Bookmark>): Notebook {
+        val order = nb.pageIds.withIndex().associate { it.value to it.index }
+        val sorted = toc.filter { it.pageId in order }.sortedWith(compareBy({ order[it.pageId] }, { it.y }))
+            .map { it.copy(title = it.title.take(MAX_TITLE)) }.take(MAX_TOC)
+        return nb.copy(toc = sorted, updatedAt = System.currentTimeMillis()).also(::writeMeta)
+    }
+
+    fun setLinks(nb: Notebook, links: List<PageLink>): Notebook =
+        nb.copy(links = links.filter { it.pageId in nb.pageIds && it.target in nb.pageIds }.take(MAX_LINKS), updatedAt = System.currentTimeMillis())
+            .also(::writeMeta)
 
     fun setFavorite(nb: Notebook, favorite: Boolean): Notebook =
         nb.copy(favorite = favorite).also(::writeMeta)
@@ -428,6 +462,8 @@ class NotebookRepository(filesDir: File) {
             pageIds = nb.pageIds - pageId,
             pdfPages = nb.pdfPages - pageId,
             pageSizes = nb.pageSizes - pageId,
+            toc = nb.toc.filter { it.pageId != pageId },
+            links = nb.links.filter { it.pageId != pageId && it.target != pageId },
             updatedAt = System.currentTimeMillis(),
         )
         writeMeta(updated)
@@ -1231,7 +1267,25 @@ class NotebookRepository(filesDir: File) {
             favorite = json.optBoolean("favorite"),
             coverArt = json.optInt("coverArt", -1).takeIf { it in 0 until COVER_ARTS },
             plasticKind = json.optInt("plasticKind", -1).takeIf { it in 0 until PLASTIC_KINDS },
+            toc = json.optJSONArray("toc")?.let { readToc(it, pageIds.toSet()) }.orEmpty(),
+            links = json.optJSONArray("links")?.let { readLinks(it, pageIds.toSet()) }.orEmpty(),
         )
+    }
+
+    private fun readToc(a: JSONArray, pages: Set<String>): List<Bookmark> = (0 until minOf(a.length(), MAX_TOC)).mapNotNull { i ->
+        val o = a.optJSONObject(i) ?: return@mapNotNull null
+        val page = o.optString("page").takeIf { it in pages } ?: return@mapNotNull null
+        val y = o.optDouble("y", 0.0).toFloat().takeIf { it.isFinite() } ?: 0f
+        Bookmark(page, y.coerceIn(0f, MAX_Y), o.optString("title").take(MAX_TITLE))
+    }
+
+    private fun readLinks(a: JSONArray, pages: Set<String>): List<PageLink> = (0 until minOf(a.length(), MAX_LINKS)).mapNotNull { i ->
+        val o = a.optJSONObject(i) ?: return@mapNotNull null
+        val page = o.optString("page").takeIf { it in pages } ?: return@mapNotNull null
+        val target = o.optString("target").takeIf { it in pages } ?: return@mapNotNull null
+        val r = listOf("l", "t", "r", "b", "ty").map { o.optDouble(it, 0.0).toFloat() }
+        if (r.any { !it.isFinite() || it < -MAX_Y || it > MAX_Y } || r[2] <= r[0] || r[3] <= r[1]) return@mapNotNull null
+        PageLink(page, r[0], r[1], r[2], r[3], target, r[4].coerceAtLeast(0f))
     }
 
     private fun readPageSizes(json: JSONObject): Map<String, PageSize> =
@@ -1291,6 +1345,22 @@ class NotebookRepository(filesDir: File) {
         if (nb.favorite) json.put("favorite", true)
         nb.coverArt?.let { json.put("coverArt", it) }
         nb.plasticKind?.let { json.put("plasticKind", it) }
+        val toc = nb.toc.filter { it.pageId in nb.pageIds }
+        if (toc.isNotEmpty()) {
+            json.put("toc", JSONArray(toc.map { JSONObject().put("page", it.pageId).put("y", it.y.toDouble()).put("title", it.title) }))
+        }
+        val links = nb.links.filter { it.pageId in nb.pageIds && it.target in nb.pageIds }
+        if (links.isNotEmpty()) {
+            json.put(
+                "links",
+                JSONArray(
+                    links.map {
+                        JSONObject().put("page", it.pageId).put("l", it.left.toDouble()).put("t", it.top.toDouble())
+                            .put("r", it.right.toDouble()).put("b", it.bottom.toDouble()).put("target", it.target).put("ty", it.targetY.toDouble())
+                    },
+                ),
+            )
+        }
         val sizes = nb.pageSizes.filter { (id, size) -> id in nb.pageIds && size != PageSize.DEFAULT }
         if (sizes.isNotEmpty()) {
             val o = JSONObject()
@@ -1327,6 +1397,11 @@ class NotebookRepository(filesDir: File) {
         const val DELETED_AT = "deleted-at"
         const val TEXT_INDEX = "text.json"
         const val CARDS = "cards.tsv"
+        const val MAX_TOC = 2000
+        const val MAX_LINKS = 5000
+
+        /** Places within a few page heights: anything farther is not from this app. */
+        const val MAX_Y = 100_000f
         const val MAX_PHOTO_SIDE = 2048
 
         /** notebook.json and archive manifests are a few kilobytes; anything far bigger is not ours. */

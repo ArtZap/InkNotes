@@ -150,6 +150,12 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
 
         /** Answers computed after "=" on page [index]. */
         fun answers(index: Int): List<PageAnswer> = emptyList()
+
+        /** Rectangles of the links on page [index] (shown with a frame; a finger tap follows them). */
+        fun links(index: Int): List<RectF> = emptyList()
+
+        /** Follows the link at ([x], [y]) of page [index]; false when there is none. */
+        fun followLink(index: Int, x: Float, y: Float): Boolean = false
     }
 
     var listener: Listener? = null
@@ -393,6 +399,10 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         pageLayer.invalidate()
     }
     private val flashPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x55FFB300 }
+    private val linkPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        color = 0xAA2979FF.toInt()
+    }
     private val guidePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         color = GUIDE_COLOR
@@ -454,11 +464,13 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         applyViewport()
     }
 
-    fun scrollToPage(index: Int) {
+    /** Page [index] at the top of the view, or the place [y] units down it (a bit below the top edge). */
+    fun scrollToPage(index: Int, y: Float = 0f) {
         if (index !in tops.indices) return
         stopFling()
         val v = FloatArray(9).also(worldToView::getValues)
-        v[Matrix.MTRANS_Y] = PAGE_MARGIN * density - tops[index] * v[Matrix.MSCALE_X]
+        val margin = if (y > 0f) 3 * PAGE_MARGIN * density else PAGE_MARGIN * density
+        v[Matrix.MTRANS_Y] = margin - (tops[index] + y) * v[Matrix.MSCALE_X]
         worldToView.setValues(v)
         applyViewport()
     }
@@ -744,6 +756,9 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
     val selectionPageIndex get() = selectionPage
 
     /** Width and height of the selection in page units, or null with nothing selected. */
+    /** Bounds of the selection on its page (before any drag in progress). */
+    fun selectionRect(): RectF? = rawSelectionBounds()?.let(::RectF)
+
     fun selectionSize(): Pair<Float, Float>? = rawSelectionBounds()?.let { it.width() to it.height() }
 
     /**
@@ -1709,6 +1724,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             listener?.onAnswerTapped(it)
             return
         }
+        if (source?.followLink(page, p[0], p[1]) == true) return
         if (tool == Tool.AREA) autoArea(page, p[0], p[1]) else selectAt(page, p[0], p[1])
     }
 
@@ -2929,6 +2945,13 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
 
         /** Area preview, lasso/outline being traced and selection frame of page [i]. */
         private fun drawOverlays(canvas: Canvas, i: Int) {
+            source?.links(i)?.takeIf { it.isNotEmpty() }?.let { links ->
+                val scale = currentScale()
+                linkPaint.strokeWidth = 1.2f * density / scale
+                linkPaint.pathEffect = android.graphics.DashPathEffect(floatArrayOf(3f * density / scale, 3f * density / scale), 0f)
+                val pad = 2f * density / scale
+                for (r in links) canvas.drawRoundRect(r.left - pad, r.top - pad, r.right + pad, r.bottom + pad, 3 * pad, 3 * pad, linkPaint)
+            }
             val flash = flashRect
             if (flash != null && flashPage == i) canvas.drawRoundRect(flash, FLASH_PAD, FLASH_PAD, flashPaint)
             val area = pendingArea

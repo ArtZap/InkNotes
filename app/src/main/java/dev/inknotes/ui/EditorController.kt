@@ -826,9 +826,91 @@ class EditorController(
         handwriting.pageText(notebook, notebook.pageIds[pageIndex], onResult)
     }
 
-    fun goToPage(index: Int) {
+    fun goToPage(index: Int, y: Float = 0f) {
         if (index !in notebook.pageIds.indices) return
-        view?.scrollToPage(index)
+        view?.scrollToPage(index, y)
+    }
+
+    // ------------------------------------------------------ contents and links
+
+    /** Dialogs asked for from the selection bar. */
+    var showLinkDialog by mutableStateOf(false)
+    var showAddBookmark by mutableStateOf(false)
+
+    fun goToBookmark(b: dev.inknotes.data.Bookmark) = goToPage(notebook.pageIds.indexOf(b.pageId), b.y)
+
+    /** A new entry of the table of contents at the selection (or the top of the current page). */
+    fun addBookmark(title: String, page: Int, y: Float) {
+        val pageId = notebook.pageIds.getOrNull(page) ?: return
+        notebook = repo.setToc(notebook, notebook.toc + dev.inknotes.data.Bookmark(pageId, y, title.trim().ifEmpty { "Страница ${page + 1}" }))
+        showStatus("Добавлено в оглавление")
+    }
+
+    fun renameBookmark(b: dev.inknotes.data.Bookmark, title: String) {
+        notebook = repo.setToc(notebook, notebook.toc.map { if (it == b) it.copy(title = title.trim().ifEmpty { it.title }) else it })
+    }
+
+    fun deleteBookmark(b: dev.inknotes.data.Bookmark) {
+        notebook = repo.setToc(notebook, notebook.toc - b)
+    }
+
+    /** Where a new entry or link from the selection goes: its page and top; else the page in view. */
+    fun selectionPlace(): Pair<Int, android.graphics.RectF?> {
+        val v = view
+        val r = if (selectionCount > 0) v?.selectionRect() else null
+        return (if (r != null && v != null) v.selectionPageIndex else pageIndex) to r
+    }
+
+    /** The selection's handwriting as text (for the title of an entry), or null when it cannot be read. */
+    fun selectionText(onResult: (String?) -> Unit) {
+        val ink = view?.selectedInk().orEmpty()
+        if (ink.isEmpty() || handwriting.state != HandwritingIndex.State.Ready) return onResult(null)
+        handwriting.recognizeText(ink) { onResult(it?.lines()?.firstOrNull { l -> l.isNotBlank() }?.trim()) }
+    }
+
+    /** Makes the selection a link to page [target] (at [targetY]). */
+    fun linkSelection(target: Int, targetY: Float = 0f) {
+        val (page, r) = selectionPlace()
+        val pageId = notebook.pageIds.getOrNull(page) ?: return
+        val targetId = notebook.pageIds.getOrNull(target) ?: return
+        if (r == null) return
+        val link = dev.inknotes.data.PageLink(pageId, r.left, r.top, r.right, r.bottom, targetId, targetY)
+        // A new link over an old one replaces it.
+        notebook = repo.setLinks(notebook, notebook.links.filterNot { it.pageId == pageId && overlaps(it, r) } + link)
+        view?.clearSelection()
+        view?.refresh()
+        showStatus("Ссылка на страницу ${target + 1}: коснитесь её пальцем")
+    }
+
+    /** Links under the selection. */
+    fun selectionLinks(): List<dev.inknotes.data.PageLink> {
+        val (page, r) = selectionPlace()
+        val pageId = notebook.pageIds.getOrNull(page) ?: return emptyList()
+        if (r == null) return emptyList()
+        return notebook.links.filter { it.pageId == pageId && overlaps(it, r) }
+    }
+
+    fun removeLinks(links: List<dev.inknotes.data.PageLink>) {
+        notebook = repo.setLinks(notebook, notebook.links - links.toSet())
+        view?.refresh()
+    }
+
+    private fun overlaps(l: dev.inknotes.data.PageLink, r: android.graphics.RectF) =
+        l.left < r.right && l.right > r.left && l.top < r.bottom && l.bottom > r.top
+
+    override fun links(index: Int): List<android.graphics.RectF> {
+        val pageId = notebook.pageIds.getOrNull(index) ?: return emptyList()
+        return notebook.links.filter { it.pageId == pageId }.map { android.graphics.RectF(it.left, it.top, it.right, it.bottom) }
+    }
+
+    override fun followLink(index: Int, x: Float, y: Float): Boolean {
+        val pageId = notebook.pageIds.getOrNull(index) ?: return false
+        val link = notebook.links.lastOrNull { it.pageId == pageId && it.contains(x, y) } ?: return false
+        val target = notebook.pageIds.indexOf(link.target)
+        if (target < 0) return false
+        goToPage(target, link.targetY)
+        showStatus("Страница ${target + 1}")
+        return true
     }
 
     fun addPageAfterCurrent() = addPageAt(pageIndex + 1)

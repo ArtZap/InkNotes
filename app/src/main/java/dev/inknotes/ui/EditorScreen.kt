@@ -126,6 +126,7 @@ fun EditorScreen(
     var showSelectionSize by remember { mutableStateOf(false) }
     var showHelp by remember { mutableStateOf(false) }
     var showShift by remember { mutableStateOf(false) }
+    var showToc by remember { mutableStateOf(false) }
     var pageSizeOf by remember { mutableStateOf<Int?>(null) }
     var pageText by remember { mutableStateOf<List<dev.inknotes.search.TextLine>?>(null) }
     val context = LocalContext.current
@@ -170,6 +171,7 @@ fun EditorScreen(
                 MenuItem("Размер и ориентация страницы…", InkIcons.PageSize) { pageSizeOf = controller.pageIndex }
                 MenuItem("Отступ страницы слева или справа…") { showShift = true }
                 MenuItem("Распознанный текст страницы") { controller.currentPageText { pageText = it } }
+                MenuItem("Оглавление…") { showToc = true }
                 MenuItem("Повторение: карточки из маркера подсказок") { controller.openCards() }
                 MenuItem("Поделиться файлом тетради", InkIcons.Share) { share() }
                 MenuItem("Сохранить файл тетради…") { saveLauncher.launch("${controller.fileName(controller.notebook.title)}.inknote") }
@@ -215,6 +217,9 @@ fun EditorScreen(
     controller.recognizedText?.let { RecognizedTextDialog(it, controller, onDismiss = { controller.recognizedText = null }) }
     controller.tappedAnswer?.let { AnswerDialog(controller, it, onDismiss = { controller.tappedAnswer = null }) }
     controller.studyCards?.let { CardsDialog(controller, it, onDismiss = { controller.closeCards() }) }
+    if (showToc) TocDialog(controller, onDismiss = { showToc = false })
+    if (controller.showLinkDialog) LinkDialog(controller, onDismiss = { controller.showLinkDialog = false })
+    if (controller.showAddBookmark) AddBookmarkDialog(controller, onDismiss = { controller.showAddBookmark = false })
     if (showHelp) HelpDialog(onDismiss = { showHelp = false })
     if (showShift) PageShiftDialog(controller, onDismiss = { showShift = false })
     if (showBackground) BackgroundDialog(controller, onDismiss = { showBackground = false })
@@ -856,6 +861,25 @@ private fun ToolOptions(c: EditorController, onPickColor: () -> Unit, onHatchSet
     }
 }
 
+/** Less frequent things to do with the selection: contents, link. */
+@Composable
+private fun SelectionMoreButton(c: EditorController) {
+    Box {
+        var open by remember { mutableStateOf(false) }
+        TextButton(onClick = { open = true }) { Text("Ещё ▾") }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            DropdownMenuItem(text = { Text("В оглавление…") }, onClick = {
+                open = false
+                c.showAddBookmark = true
+            })
+            DropdownMenuItem(text = { Text("Ссылка на страницу…") }, onClick = {
+                open = false
+                c.showLinkDialog = true
+            })
+        }
+    }
+}
+
 /** What the eraser takes: everything, or only the pen, the marker or hatching. */
 @Composable
 private fun EraserTargetButton(c: EditorController) {
@@ -897,6 +921,7 @@ private fun SelectionOptions(c: EditorController, onPickColor: () -> Unit, onHat
     IconAction(InkIcons.FlipVertical, "Отразить сверху вниз", { c.flipSelection(horizontal = false) })
     IconAction(InkIcons.Ruler, "Размер в миллиметрах", onSelectionSize)
     TextButton(onClick = { c.recognizeSelection() }) { Text("Текст") }
+    SelectionMoreButton(c)
     IconAction(InkIcons.Duplicate, "Дублировать", { c.duplicateSelection() })
     IconAction(InkIcons.Delete, "Удалить выделенное", { c.deleteSelection() })
 }
