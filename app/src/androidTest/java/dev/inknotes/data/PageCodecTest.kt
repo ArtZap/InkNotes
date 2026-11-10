@@ -45,6 +45,38 @@ class PageCodecTest {
         assertEquals(null, read[2].dash)
     }
 
+    /** Text boxes and layers survive a round trip as v12; pages without them keep their old version. */
+    @Test
+    fun textAndLayersRoundTrip() {
+        val batch = androidx.ink.strokes.MutableStrokeInputBatch()
+        for (i in 0..10) batch.add(androidx.ink.brush.InputToolType.STYLUS, i * 10f, 50f, i * 8L)
+        fun stroke(layer: Int, dash: DashStyle? = null) =
+            PageStroke(if (dash != null) InkKind.DASHED else InkKind.PEN, androidx.ink.strokes.Stroke(InkBrushes.create(InkKind.PEN, Color.BLACK, 3f), batch), dash, layer)
+        fun version(f: File) = java.io.DataInputStream(f.inputStream()).use { it.readInt(); it.readInt() }
+        val text = PageImage.textBox(PageText("Теорема 1\nформула", 20f, Color.BLUE), 40f, 60f, 300f, 50f, layer = 2)
+        val style = DashStyle(DashPattern.DOT, 10f, 5f)
+        val content = PageContent(
+            listOf(stroke(0), stroke(1), stroke(3, style)),
+            listOf(PageFill(square, FillPattern.LINES, Color.RED, layer = 1)),
+            listOf(text),
+        )
+        val file = File(dir, "v12.ink")
+        file.outputStream().use { PageCodec.write(it, content) }
+        assertEquals(12, version(file))
+        val read = PageCodec.read(file)
+        assertEquals(listOf(0, 1, 3), read.strokes.map { it.layer })
+        assertEquals(style, read.strokes[2].dash)
+        assertEquals(1, read.fills.single().layer)
+        val t = read.images.single()
+        assertEquals("Теорема 1\nформула", t.text?.text)
+        assertEquals(2, t.layer)
+        assertEquals(300f, t.w)
+        // A page on the main layer only, without text, stays as it was.
+        val plain = File(dir, "plain12.ink")
+        plain.outputStream().use { PageCodec.write(it, PageContent(listOf(stroke(0)), emptyList())) }
+        assertEquals(7, version(plain))
+    }
+
     /** Neon survives a round trip; pages without it stay readable by v7 apps. */
     @Test
     fun neonInkRoundTripAndVersion() {
