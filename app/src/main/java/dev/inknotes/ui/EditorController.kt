@@ -155,6 +155,15 @@ class EditorController(
         private set
     var eraserMode by mutableStateOf(EraserMode.WHOLE)
         private set
+
+    /** What the eraser takes (everything, only the marker…); back to everything when the notebook is opened. */
+    var eraserTarget by mutableStateOf(dev.inknotes.editor.EraserTarget.ALL)
+        private set
+
+    fun selectEraserTarget(t: dev.inknotes.editor.EraserTarget) {
+        eraserTarget = t
+        syncView()
+    }
     var fillPattern by mutableStateOf(prefs.hatchPattern)
         private set
     var fillStyle by mutableStateOf(prefs.hatchStyle)
@@ -1150,6 +1159,7 @@ class EditorController(
         v.straightHighlighter = straightHighlighter
         v.eraserRadiusDp = eraserSize
         v.eraserMode = eraserMode
+        v.eraserTarget = eraserTarget
         v.fillPattern = fillPattern
         v.fillStyle = fillStyle
         v.fillColor = fillColor

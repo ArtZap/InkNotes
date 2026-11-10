@@ -96,7 +96,7 @@ object MathLayout {
         // Brackets, ∫ and √ hold other symbols without being part of them; a plain upright
         // (the stem of d, a 1) is not one of them.
         val containers = strokes.filter {
-            tallShape(Glyph(listOf(it)), h) in CONTAINER_SHAPES || isRadical(it, h)
+            (tallShape(Glyph(listOf(it)), h) in CONTAINER_SHAPES && !crossedUpright(it, strokes, h)) || isRadical(it, h)
         }.toSet()
         val rings = BooleanArray(strokes.size) { ring(strokes[it], h) }
         val parent = IntArray(strokes.size) { it }
@@ -129,13 +129,13 @@ object MathLayout {
             val crossing = yGap <= 0f && (a.cx in b.left..b.right || b.cx in a.left..a.right)
             // A dash joins what it touches (the top of a 5, the bar of T or π); over a gap it is
             // a bar of its own (√, an overline).
-            val stackGap = if ((a.isDash && a.width > 0.5f * h) || (b.isDash && b.width > 0.5f * h)) 0.1f * h else 0.3f * h
+            val stackGap = if ((a.isDash && a.width > 0.5f * h) || (b.isDash && b.width > 0.5f * h)) 0.1f * h else Tune.joinGap * h
             // Two whole symbols one above the other (an exponent written over the next letter, 8
             // over a d) are taller together than any symbol: not the parts of one, like the
             // loops of an 8 or a B.
             val stacked = yGap >= -0.05f * h && !a.isDash && !b.isDash && min(a.height, b.height) >= 0.4f * h &&
                 max(a.bottom, b.bottom) - min(a.top, b.top) > 1.3f * h
-            val joined = ((xOverlap > 0.35f * narrow || crossing) && yGap < stackGap && !stacked) ||
+            val joined = ((xOverlap > Tune.joinOverlap * narrow || crossing) && yGap < stackGap && !stacked) ||
                 // the flag of 1, the bar of a crossed 7 or z: a short straight tick touching a stroke
                 tick(a, b, h) || tick(b, a, h) ||
                 // the top bar of a 5 drawn as its own stroke, just touching the body's top end
@@ -145,6 +145,19 @@ object MathLayout {
             if (joined) parent[find(i)] = find(j)
         }
         return strokes.indices.groupBy(::find).values.map { idx -> G(Glyph(idx.map { strokes[it] })) }
+    }
+
+    /**
+     * The upright of a "+" drawn a little curved, about as tall as the digits: a short dash
+     * crosses it near both middles. It looks like a bracket on its own but holds nothing.
+     */
+    internal fun crossedUpright(s: Ink, all: List<Ink>, h: Float): Boolean {
+        if (s.height >= TALL * h) return false
+        return all.any { d ->
+            d !== s && d.isDash && d.width in 0.4f * s.height..2f * s.height &&
+                d.cy in s.top + 0.2f * s.height..s.bottom - 0.2f * s.height &&
+                s.cx in d.left + 0.2f * d.width..d.right - 0.2f * d.width
+        }
     }
 
     /** A small closed loop: a degree sign (or the letter o written small). */
@@ -256,6 +269,33 @@ object MathLayout {
         if ((low until s.ys.size).none { s.ys[it] < s.top + 0.2f * s.height }) return false
         // The tick starts well below the top bar, and the bar is at the right.
         return leftY / leftN > s.top + 0.35f * s.height && topMax > s.right - 0.1f * s.width
+    }
+
+    /**
+     * √ drawn in two or three touching strokes (a short down stroke, a long up stroke, the bar):
+     * a bar over at least half of it reaching its right end, the lowest point in its left part
+     * and the left end well below the bar.
+     */
+    internal fun radicalOfParts(g: Glyph, h: Float): Boolean {
+        if (g.strokes.size !in 2..3) return false
+        val b = g.box
+        if (b.width < 0.9f * h || b.height < 0.6f * h) return false
+        val bar = g.strokes.firstOrNull { it.isDash && it.width >= 0.5f * b.width && it.cy < b.top + 0.18f * b.height && it.right > b.right - 0.1f * b.width }
+            ?: return false
+        var lowX = 0f
+        var lowY = -Float.MAX_VALUE
+        var leftY = 0f
+        var leftN = 0
+        for (s in g.strokes) {
+            if (s === bar) continue
+            // The rest is the tick: no wider than the part of the sign left of the bar's middle.
+            if (s.cx > bar.cx) return false
+            for (k in s.xs.indices) {
+                if (s.ys[k] > lowY) { lowY = s.ys[k]; lowX = s.xs[k] }
+                if (s.xs[k] < b.left + 0.15f * b.width) { leftY += s.ys[k]; leftN++ }
+            }
+        }
+        return leftN > 0 && lowX < b.left + 0.6f * b.width && lowY > b.top + 0.6f * b.height && leftY / leftN > b.top + 0.3f * b.height
     }
 
     /** Shape of a tall symbol: ( ) | { } ∫, or null. */
@@ -540,22 +580,22 @@ object MathLayout {
         private fun level(b: Box, ref: Box?, axis: Float): Level {
             if (ref == null) return Level.BASE
             // Written wholly above the top of the symbol before it: an exponent of almost any size.
-            if (b.bottom <= ref.top + 0.15f * ref.height && b.height < 1.2f * max(ref.height, 0.75f * h) && b.width < 3 * h) return Level.SUP
-            val small = b.height < 0.85f * max(ref.height, 0.75f * h)
+            if (b.bottom <= ref.top + Tune.supAbove * ref.height && b.height < 1.2f * max(ref.height, 0.75f * h) && b.width < 3 * h) return Level.SUP
+            val small = b.height < Tune.supSmall * max(ref.height, 0.75f * h)
             // A dash is raised only when clearly above the symbol before it (x⁻¹), not a + or − beside it.
             val dash = b.width >= 2.2f * max(b.height, 0.5f)
-            val raisedBy = if (dash) 0.15f else 0.3f
-            if (small && b.bottom < ref.top + 0.55f * ref.height && b.cy < ref.top + raisedBy * ref.height) return Level.SUP
+            val raisedBy = if (dash) 0.15f else Tune.supRaised
+            if (small && b.bottom < ref.top + Tune.supBottom * ref.height && b.cy < ref.top + raisedBy * ref.height) return Level.SUP
             // An exponent written only a little raised (x2 for x²): small, its bottom clearly
             // above the baseline, and not a dot or sign in the middle of the line.
-            if (!dash && b.height < 0.7f * max(ref.height, 0.75f * h) && max(b.width, b.height) >= 0.25f * h &&
-                b.bottom < ref.top + 0.6f * ref.height && b.cy < ref.top + 0.4f * ref.height && b.bottom < axis
+            if (!dash && b.height < Tune.supLowSize * max(ref.height, 0.75f * h) && max(b.width, b.height) >= 0.25f * h &&
+                b.bottom < ref.top + Tune.supLowBottom * ref.height && b.cy < ref.top + Tune.supLowMiddle * ref.height && b.bottom < axis
             ) {
                 return Level.SUP
             }
             // A decimal comma hangs a little below the line; it is not an index.
             val comma = b.height < 0.35f * h && b.width < 0.6f * b.height && b.top > axis + 0.15f * h
-            if (small && !comma && b.height < 0.75f * h && max(b.width, b.height) >= 0.22f * h && b.top > axis + 0.05f * h && b.bottom > axis + 0.6f * h) return Level.SUB
+            if (small && !comma && b.height < Tune.subSize * h && max(b.width, b.height) >= 0.22f * h && b.top > axis + Tune.subTop * h && b.bottom > axis + Tune.subBottom * h) return Level.SUB
             return Level.BASE
         }
 
@@ -610,7 +650,7 @@ object MathLayout {
         private fun fractions(pool: MutableList<Item>): MutableList<Item> {
             val inks = pool.filterIsInstance<G>().flatMap { it.glyph.strokes }
             val bars = pool.filterIsInstance<G>().filter {
-                it.glyph.isDash && (it.box.width >= 0.45f * h || isBar(it.glyph.strokes[0], inks, h))
+                it.glyph.isDash && (it.box.width >= Tune.barWidth * h || isBar(it.glyph.strokes[0], inks, h))
             }.sortedByDescending { it.box.width }
             for (bar in bars) {
                 if (bar !in pool) continue
@@ -630,7 +670,7 @@ object MathLayout {
                         grew = false
                         for (c in cand) {
                             if (c in got) continue
-                            if (vGap(c.box, bb) <= 0.8f * h || got.any { vGap(c.box, it.box) <= 0.45f * h }) {
+                            if (vGap(c.box, bb) <= Tune.fracReach * h || got.any { vGap(c.box, it.box) <= Tune.fracStep * h }) {
                                 got += c
                                 grew = true
                             }
@@ -685,7 +725,8 @@ object MathLayout {
                 pool.removeAll(inner.toSet() + bar + tick)
                 pool += Root(Box.ofBoxes(inner.map { it.box } + bb + tick.box), inner)
             }
-            for (r in pool.filterIsInstance<G>().filter { it.glyph.strokes.size == 1 && isRadical(it.glyph.strokes[0], h) }) {
+            for (r in pool.filterIsInstance<G>().filter { (it.glyph.strokes.size == 1 && isRadical(it.glyph.strokes[0], h)) || radicalOfParts(it.glyph, h) }) {
+                if (r !in pool) continue
                 val rb = r.box
                 val inner = pool.filter {
                     it !== r && it.box.cx > rb.left + 0.25f * rb.width && it.box.cx < rb.right + 0.1f * h &&
@@ -819,11 +860,59 @@ object MathLayout {
 
     private val CONTAINER_SHAPES = setOf('(', ')', '∫', '{', '}')
     private val BRACKETS = setOf('(', ')', '|', '{', '}')
-    private const val INTEGRAL_MIN = 1.15f
+    private val INTEGRAL_MIN get() = Tune.integralMin
 
     /** Round brackets this tall (of the line height) and up are told by their shape. */
-    private const val PAREN_MIN = 0.95f
+    private val PAREN_MIN get() = Tune.parenMin
 
     /** A symbol this many line heights tall is a bracket, integral or brace. */
-    const val TALL = 1.45f
+    val TALL get() = Tune.tall
+}
+
+/**
+ * Thresholds of the layout, in line heights unless said otherwise. Chosen on handwritten
+ * datasets by the formula bench (FormulaBench / LayoutTuner in the unit tests): change them
+ * only with its report in hand.
+ */
+object Tune {
+    /** Strokes overlapping by this part of the narrower one are parts of one symbol… */
+    @JvmField var joinOverlap = 0.35f
+
+    /** …when no farther apart vertically than this. */
+    @JvmField var joinGap = 0.3f
+
+    /** An exponent: its bottom no lower than this part of the symbol before it from the top. */
+    @JvmField var supAbove = 0.15f
+    @JvmField var supSmall = 0.85f
+    @JvmField var supRaised = 0.3f
+    @JvmField var supBottom = 0.55f
+
+    /** An exponent written only a little raised (x2 for x²). */
+    @JvmField var supLowSize = 0.7f
+    @JvmField var supLowBottom = 0.6f
+    @JvmField var supLowMiddle = 0.4f
+
+    /** An index: smaller than this, its top below the middle line by [subTop], its bottom by [subBottom]. */
+    @JvmField var subSize = 0.75f
+    @JvmField var subTop = 0.05f
+    @JvmField var subBottom = 0.6f
+
+    /** A fraction bar at least this wide; numerator and denominator within [fracReach] of it, their parts within [fracStep]. */
+    @JvmField var barWidth = 0.45f
+    @JvmField var fracReach = 0.8f
+    @JvmField var fracStep = 0.45f
+
+    @JvmField var integralMin = 1.15f
+    @JvmField var parenMin = 0.95f
+    @JvmField var tall = 1.45f
+
+    /** Widest gap between symbols of one side of "=". */
+    @JvmField var sideGap = 1.8f
+
+    fun values(): Map<String, Float> = Tune::class.java.declaredFields.filter { it.type == Float::class.javaPrimitiveType }
+        .associate { it.name to it.getFloat(this) }
+
+    fun set(name: String, v: Float) {
+        Tune::class.java.getDeclaredField(name).setFloat(this, v)
+    }
 }

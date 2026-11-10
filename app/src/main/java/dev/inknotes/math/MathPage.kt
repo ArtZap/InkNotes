@@ -854,6 +854,11 @@ object MathPage {
             if (c.top <= bandBottom && c.bottom >= bandTop && c.height < 8 * h && c !in otherLine) {
                 chain += c
                 frontier = if (dir < 0) min(frontier, c.left) else max(frontier, c.right)
+            } else if (bridge(c, cand, bandTop, bandBottom, h) && c !in otherLine) {
+                // The bar of a root (or an overline) reaching far past its content: the
+                // content under it is near too.
+                chain += c
+                frontier = if (dir < 0) min(frontier, c.left) else max(frontier, c.right)
             }
         }
         if (chain.isEmpty()) return chain
@@ -891,6 +896,11 @@ object MathPage {
         return members
     }
 
+    /** A long bar just above the line with symbols of the line under it (√ over 2 + √2). */
+    private fun bridge(c: Ink, cand: List<Ink>, bandTop: Float, bandBottom: Float, h: Float): Boolean =
+        c.isDash && c.width > 1.2f * h && c.bottom < bandTop && c.bottom > bandTop - 1.2f * h &&
+            cand.any { o -> o !== c && o.top <= bandBottom && o.bottom >= bandTop && o.cx in c.left..c.right && o.top > c.cy }
+
     private const val MAX_STROKE = 600f
     private const val MIN_EQ_WIDTH = 3.5f
     private const val MAX_EQ_WIDTH = 160f
@@ -898,7 +908,7 @@ object MathPage {
 
     /** An inequality sign is the size of a letter, not of a drawing. */
     private const val MAX_SIGN = 120f
-    private const val GAP = 1.8f
+    private val GAP get() = Tune.sideGap
     private const val MAX_CANDIDATES = 6
     private const val MAX_COMBINATIONS = 40
     private const val MAX_READINGS = 6

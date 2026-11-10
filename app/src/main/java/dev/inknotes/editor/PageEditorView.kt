@@ -59,6 +59,24 @@ enum class Tool { PEN, FOUNTAIN, HIGHLIGHTER, ERASER, LASSO, AREA, NEON, LASER, 
 
 enum class EraserMode { WHOLE, PARTIAL }
 
+/** What the eraser takes: everything, or only one kind (the marker without the text under it). */
+enum class EraserTarget(val title: String) {
+    ALL("Всё"),
+    INK("Только ручка"),
+    MARKER("Только маркер"),
+    FILLS("Только штриховка"),
+    ;
+
+    fun strokes(kind: InkKind) = when (this) {
+        ALL -> true
+        INK -> kind.isInk
+        MARKER -> kind == InkKind.HIGHLIGHTER || kind == InkKind.SPOILER
+        FILLS -> false
+    }
+
+    val fills get() = this == ALL || this == FILLS
+}
+
 /** Which way a selection handle resizes: in proportion, or only wider or taller. */
 private enum class Axis { BOTH, X, Y }
 
@@ -179,6 +197,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         }
 
     var eraserMode = EraserMode.WHOLE
+    var eraserTarget = EraserTarget.ALL
 
     /**
      * Eyedropper: the next touch (pen or finger) picks the colour under it from what is on
@@ -374,6 +393,10 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         pageLayer.invalidate()
     }
     private val flashPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x55FFB300 }
+    private val guidePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        color = GUIDE_COLOR
+    }
 
     init {
         setBackgroundColor(PaperStyle.LIGHT.desk)
@@ -1519,13 +1542,15 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         val strokes: List<PageStroke>
         val fills: List<PageFill>
         // Far strokes are ruled out by their remembered bounds: a full page has thousands.
+        val target = eraserTarget
         fun near(s: PageStroke): Boolean {
+            if (!target.strokes(s.kind)) return false
             val b = PageCache.strokeBounds(s) ?: return false
             return PageEdits.segmentNear(b, ax, ay, bx, by, r + s.stroke.brush.size)
         }
         if (eraserMode == EraserMode.WHOLE) {
             strokes = doc.strokes.filterNot { near(it) && PageEdits.strokeTouched(it, ax, ay, bx, by, r) }
-            fills = doc.fills.filterNot { PageEdits.fillTouched(it, bx, by, r) }
+            fills = if (target.fills) doc.fills.filterNot { PageEdits.fillTouched(it, bx, by, r) } else doc.fills
             changed = strokes.size != doc.strokes.size || fills.size != doc.fills.size
         } else {
             val kept = ArrayList<PageStroke>(doc.strokes.size)
@@ -1540,7 +1565,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             }
             strokes = kept
             fills = doc.fills.map { f ->
-                if (PageEdits.segmentNear(f.bounds, ax, ay, bx, by, r)) {
+                if (target.fills && PageEdits.segmentNear(f.bounds, ax, ay, bx, by, r)) {
                     changed = true
                     PageEdits.cutFill(f, ax, ay, bx, by, r)
                 } else {
@@ -1824,6 +1849,8 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             return
         }
         if (rotating || resizing) return
+        moveBounds = RectF(raw)
+        guideBoxes = guideTargets(doc)
         // What the selection can stick to, and its own points that stick.
         val anchors = ArrayList<Float>()
         for (s in doc.strokes) if (s in selected) Magnet.points(s)?.let { for (v in it) anchors += v }
@@ -1843,6 +1870,72 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
     private fun clearSnap() {
         snapX = Float.NaN
         snapY = Float.NaN
+        guideLines = FloatArray(0)
+    }
+
+    /** Selection bounds when the drag began, and what its edges and middle may line up with. */
+    private var moveBounds = RectF()
+    private var guideBoxes: List<RectF> = emptyList()
+
+    /** Guides shown while dragging: x0, y0, x1, y1 of each line, in page units. */
+    private var guideLines = FloatArray(0)
+
+    /**
+     * Boxes of what a moved selection lines up with: pictures, hatching and even lines (shapes,
+     * stamps, tables) that are not selected, and the page itself (its edges and middle).
+     */
+    private fun guideTargets(doc: PageDocument): List<RectF> {
+        val out = ArrayList<RectF>()
+        out += RectF(0f, 0f, source?.pageWidth(selectionPage) ?: PAGE_W, source?.pageHeight(selectionPage) ?: PAGE_W)
+        for (img in doc.images) if (img !in selected) out += PageEdits.bounds(img)
+        for (f in doc.fills) if (f !in selected && f.pattern != FillPattern.INK) out += RectF(f.bounds)
+        for (st in doc.strokes) {
+            if (st in selected || st.kind != InkKind.LINE) continue
+            PageCache.strokeBounds(st)?.let { b -> if (b.width() > 4f || b.height() > 4f) out += RectF(b) }
+            if (out.size > MAX_GUIDE_TARGETS) break
+        }
+        return out
+    }
+
+    /**
+     * Lines the dragged selection up with another object: its left edge, middle or right edge
+     * with one of theirs, likewise top, middle and bottom. Returns the shift that does it and
+     * records the guides to draw.
+     */
+    private fun guideMove(dx: Float, dy: Float, reach: Float): FloatArray {
+        val b = moveBounds
+        if (b.isEmpty && b.width() <= 0f && b.height() <= 0f) return floatArrayOf(0f, 0f)
+        val mine = floatArrayOf(b.left + dx, b.centerX() + dx, b.right + dx)
+        val mineY = floatArrayOf(b.top + dy, b.centerY() + dy, b.bottom + dy)
+        var bestX = reach
+        var shiftX = 0f
+        var lineX: RectF? = null
+        var atX = 0f
+        var bestY = reach
+        var shiftY = 0f
+        var lineY: RectF? = null
+        var atY = 0f
+        for (t in guideBoxes) {
+            val theirs = floatArrayOf(t.left, t.centerX(), t.right)
+            val theirsY = floatArrayOf(t.top, t.centerY(), t.bottom)
+            for (m in mine) for (v in theirs) {
+                val d = abs(v - m)
+                if (d < bestX) { bestX = d; shiftX = v - m; lineX = t; atX = v }
+            }
+            for (m in mineY) for (v in theirsY) {
+                val d = abs(v - m)
+                if (d < bestY) { bestY = d; shiftY = v - m; lineY = t; atY = v }
+            }
+        }
+        val lines = ArrayList<Float>()
+        val top = b.top + dy + shiftY
+        val bottom = b.bottom + dy + shiftY
+        val left = b.left + dx + shiftX
+        val right = b.right + dx + shiftX
+        lineX?.let { t -> lines += listOf(atX, min(t.top, top), atX, max(t.bottom, bottom)) }
+        lineY?.let { t -> lines += listOf(min(t.left, left), atY, max(t.right, right), atY) }
+        guideLines = lines.toFloatArray()
+        return floatArrayOf(shiftX, shiftY)
     }
 
     /** Distance of the rotate handle above the selection frame, in page units. */
@@ -1928,8 +2021,12 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
     /** Pulls the moved selection so its nearest point sticks to a line end, corner or line. */
     private fun magnetMove() {
         clearSnap()
-        val targets = moveTargets ?: return
         val reach = MAGNET_DP * density / currentScale()
+        val targets = moveTargets
+        if (targets == null) {
+            snapToGuides(reach)
+            return
+        }
         var best = Float.MAX_VALUE
         var cx = 0f
         var cy = 0f
@@ -1948,10 +2045,22 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                 snapY = snap.y
             }
         }
-        if (best == Float.MAX_VALUE) return
+        if (best == Float.MAX_VALUE) {
+            // Nothing to connect to: line up with other objects instead.
+            snapToGuides(reach)
+            return
+        }
         snapPage = selectionPage
         moveDx += cx
         moveDy += cy
+    }
+
+    private fun snapToGuides(reach: Float) {
+        if (guideBoxes.isEmpty()) return
+        val shift = guideMove(moveDx, moveDy, GUIDE_REACH * reach)
+        moveDx += shift[0]
+        moveDy += shift[1]
+        snapPage = selectionPage
     }
 
     private fun endMove() {
@@ -2983,10 +3092,17 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             canvas.restore()
         }
 
-        /** Ring where the moved line or corner snapped. */
+        /** Ring where the moved line or corner snapped; guides the selection lines up along. */
         private fun drawSnap(canvas: Canvas, page: Int) {
-            if (snapX.isNaN() || snapPage != page) return
+            if (snapPage != page) return
             val scale = currentScale()
+            val g = guideLines
+            if (g.isNotEmpty()) {
+                guidePaint.strokeWidth = 1.5f * density / scale
+                guidePaint.pathEffect = android.graphics.DashPathEffect(floatArrayOf(6f * density / scale, 4f * density / scale), 0f)
+                for (i in g.indices step 4) canvas.drawLine(g[i], g[i + 1], g[i + 2], g[i + 3], guidePaint)
+            }
+            if (snapX.isNaN()) return
             handlePaint.style = Paint.Style.STROKE
             handlePaint.strokeWidth = 2f * density / scale
             handlePaint.color = SNAP_COLOR
@@ -3095,6 +3211,13 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         /** How far (on screen) line ends, corners and moved things are pulled to stick. */
         private const val MAGNET_DP = 16f
         private const val MAX_ANCHORS = 64
+
+        /** Objects a dragged selection is lined up with (beyond that, the first ones). */
+        private const val MAX_GUIDE_TARGETS = 400
+
+        /** Guides catch the selection from a little closer than line ends do. */
+        private const val GUIDE_REACH = 0.6f
+        private const val GUIDE_COLOR = 0xFFE040FB.toInt()
         private const val SNAP_RING_DP = 9f
         private const val SNAP_COLOR = 0xFFE65100.toInt()
         private const val CORNER_DP = 6f

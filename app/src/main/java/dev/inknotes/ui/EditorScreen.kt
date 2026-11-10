@@ -821,6 +821,7 @@ private fun ToolOptions(c: EditorController, onPickColor: () -> Unit, onHatchSet
                 onClick = { c.selectEraserMode(EraserMode.PARTIAL) },
                 label = { Text("Частично") },
             )
+            EraserTargetButton(c)
         }
         Tool.LASSO -> Text(
             "Обведите пером то, что нужно выделить, или коснитесь объекта пальцем",
@@ -848,6 +849,27 @@ private fun ToolOptions(c: EditorController, onPickColor: () -> Unit, onHatchSet
                 IconAction(InkIcons.Close, "Отменить область", { c.cancelArea() })
             } else {
                 Text("Коснитесь внутри фигуры", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+}
+
+/** What the eraser takes: everything, or only the pen, the marker or hatching. */
+@Composable
+private fun EraserTargetButton(c: EditorController) {
+    Box {
+        var open by remember { mutableStateOf(false) }
+        TextButton(onClick = { open = true }) { Text("Стирает: ${c.eraserTarget.title.lowercase().removePrefix("только ")} ▾") }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            for (t in dev.inknotes.editor.EraserTarget.entries) {
+                DropdownMenuItem(
+                    text = { Text(t.title) },
+                    leadingIcon = { if (t == c.eraserTarget) Text("✓") },
+                    onClick = {
+                        open = false
+                        c.selectEraserTarget(t)
+                    },
+                )
             }
         }
     }
