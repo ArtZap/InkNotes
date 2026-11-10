@@ -1130,6 +1130,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                         moveAngle = 0f
                         vertexPoints = null
                         vertexIndex = -1
+                        connectors = emptyList()
                         clearSnap()
                         pageLayer.invalidate()
                     }
@@ -1946,6 +1947,73 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         changed()
     }
 
+    // --- lines and arrows that follow what they connect
+
+    /**
+     * A straight line or arrow not selected with one or both ends on the selection: the ends
+     * on it move with it ([moveStart], [moveEnd]); [startHead], [endHead] are arrowheads there.
+     */
+    private class Connector(
+        val line: PageStroke,
+        val pts: FloatArray,
+        val moveStart: Boolean,
+        val moveEnd: Boolean,
+        val startHead: PageFill?,
+        val endHead: PageFill?,
+    )
+
+    private var connectors: List<Connector> = emptyList()
+    private val connectorSet: Set<Any> get() = connectors.flatMapTo(Collections.newSetFromMap(IdentityHashMap())) { listOfNotNull(it.line, it.startHead, it.endHead) }
+
+    private fun findConnectors(doc: PageDocument): List<Connector> {
+        val tol = CONNECT_DP * density / currentScale()
+        val targets = Magnet.targets(doc.strokes.filter { it in selected })
+        val boxes = doc.images.filter { it in selected }.map { PageEdits.bounds(it) } +
+            doc.fills.filter { it in selected && it.pattern != FillPattern.INK }.map { RectF(it.bounds) }
+        fun touches(x: Float, y: Float) = targets.snap(x, y, tol) != null ||
+            boxes.any { x in it.left - tol..it.right + tol && y in it.top - tol..it.bottom + tol }
+        val heads = doc.fills.filter { it !in selected && it.pattern == FillPattern.INK && it.outline.size == 6 && it.cuts.isEmpty() }
+        val out = ArrayList<Connector>()
+        for (st in doc.strokes) {
+            if (st in selected || (st.kind != InkKind.LINE && st.kind != InkKind.DASHED)) continue
+            val pl = Magnet.polyline(st) ?: continue
+            if (pl.size < 4) continue
+            val n = pl.size
+            fun headAt(x: Float, y: Float) = heads.firstOrNull { PageEdits.inside(x, y, it.outline) }
+            val sh = headAt(pl[0], pl[1])
+            val eh = headAt(pl[n - 2], pl[n - 1])
+            val ms = touches(pl[0], pl[1]) || (sh != null && touches(sh.outline[0], sh.outline[1]))
+            val me = touches(pl[n - 2], pl[n - 1]) || (eh != null && touches(eh.outline[0], eh.outline[1]))
+            if (ms || me) out += Connector(st, pl, ms, me, sh, eh)
+            if (out.size >= MAX_CONNECTORS) break
+        }
+        return out
+    }
+
+    /** The connector's line and heads with its attached ends moved by ([dx], [dy]). */
+    private fun follow(c: Connector, dx: Float, dy: Float): Pair<FloatArray, List<PageFill>> {
+        val p = c.pts.copyOf()
+        val n = p.size
+        if (c.moveStart) { p[0] += dx; p[1] += dy }
+        if (c.moveEnd) { p[n - 2] += dx; p[n - 1] += dy }
+        // Both ends on the selection: the whole line moves, bends included.
+        if (c.moveStart && c.moveEnd) for (k in 2 until n - 2 step 2) { p[k] += dx; p[k + 1] += dy }
+        val heads = ArrayList<PageFill>()
+        fun head(h: PageFill?, ex: Float, ey: Float, px: Float, py: Float, oldEx: Float, oldEy: Float) {
+            h ?: return
+            val o = h.outline
+            val len = hypot(o[0] - (o[2] + o[4]) / 2, o[1] - (o[3] + o[5]) / 2)
+            val reach = hypot(o[0] - oldEx, o[1] - oldEy)
+            val d = hypot(ex - px, ey - py).coerceAtLeast(1e-3f)
+            val tx = ex + (ex - px) / d * reach
+            val ty = ey + (ey - py) / d * reach
+            heads += h.copy(outline = arrowHead(px, py, tx, ty, len))
+        }
+        head(c.startHead, p[0], p[1], p[2], p[3], c.pts[0], c.pts[1])
+        head(c.endHead, p[n - 2], p[n - 1], p[n - 4], p[n - 3], c.pts[n - 2], c.pts[n - 1])
+        return p to heads
+    }
+
     // --- dragging the selection
 
     private fun startMove(e: MotionEvent, index: Int) {
@@ -1966,6 +2034,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         turnX = raw.centerX()
         turnY = raw.centerY()
         clearSnap()
+        connectors = emptyList()
         val doc = doc(selectionPage)
         moveTargets = null
         moveAnchors = FloatArray(0)
@@ -1988,6 +2057,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             return
         }
         if (rotating || resizing) return
+        connectors = findConnectors(doc)
         moveBounds = RectF(raw)
         guideBoxes = guideTargets(doc)
         // What the selection can stick to, and its own points that stick.
@@ -2258,11 +2328,22 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             return
         }
         val moved = ArrayList<Any>()
+        // Lines and arrows with an end on the selection follow a plain move.
+        val follows = IdentityHashMap<Any, Any>()
+        if (kx == 1f && ky == 1f && angle == 0f) {
+            for (c in connectors) {
+                val (pts, heads) = follow(c, dx, dy)
+                follows[c.line] = Magnet.restroke(c.line, pts)
+                var k = 0
+                for (h in listOfNotNull(c.startHead, c.endHead)) follows[h] = heads[k++]
+            }
+        }
+        connectors = emptyList()
         val strokes = doc.strokes.map { s ->
-            if (s in selected) PageEdits.transform(s, t).also(moved::add) else s
+            if (s in selected) PageEdits.transform(s, t).also(moved::add) else (follows[s] as? PageStroke) ?: s
         }
         val fills = doc.fills.map { f ->
-            if (f in selected) PageEdits.transform(f, t).also(moved::add) else f
+            if (f in selected) PageEdits.transform(f, t).also(moved::add) else (follows[f] as? PageFill) ?: f
         }
         val images = doc.images.map { img ->
             if (img in selected) PageEdits.transform(img, t).also(moved::add) else img
@@ -2847,7 +2928,12 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                     canvas.restore()
                     continue
                 }
-                val sel: Set<Any> = if (i == selectionPage && selected.isNotEmpty()) selected else emptySet()
+                val sel: Set<Any> = when {
+                    i != selectionPage || selected.isEmpty() -> emptySet()
+                    // Lines that follow the dragged selection are drawn with it, as they will be.
+                    dragging && connectors.isNotEmpty() && moveKx == 1f && moveKy == 1f && moveAngle == 0f -> Collections.newSetFromMap<Any>(IdentityHashMap()).apply { addAll(selected); addAll(connectorSet) }
+                    else -> selected
+                }
                 val look = PageCache.Look(widths[i], heights[i], pageRenderer.paper, pageRenderer.dark, pageRenderer.photo, pdf, doc.images.map { src.image(it.file) })
                 // The cached picture holds the paper too: the background is drawn only without it.
                 when (cache.draw(canvas, doc, look, scale, sel, visibleRect(i), if (pdf != null) src.pdfRegion(i) else null) { src.image(it) }) {
@@ -3258,6 +3344,18 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             pageRenderer.drawInk(canvas, doc.strokes.filter { it in selected && it.kind.isInk }, toScreen)
             for (s in doc.strokes) if (s in selected && s.kind == InkKind.SPOILER) pageRenderer.drawSpoiler(canvas, s, toScreen, s in revealed)
             canvas.restore()
+            if (moveKx == 1f && moveKy == 1f && moveAngle == 0f) {
+                for (c in connectors) {
+                    val (pts, heads) = follow(c, moveDx, moveDy)
+                    previewPaint.color = InkColors.forPaper(c.line.stroke.brush.colorIntArgb, dark)
+                    previewPaint.strokeWidth = c.line.stroke.brush.size
+                    tracePath.rewind()
+                    tracePath.moveTo(pts[0], pts[1])
+                    for (k in 2 until pts.size step 2) tracePath.lineTo(pts[k], pts[k + 1])
+                    canvas.drawPath(tracePath, previewPaint)
+                    pageRenderer.drawFills(canvas, heads)
+                }
+            }
             drawOverlays(canvas, page)
             drawSnap(canvas, page)
             canvas.restore()
@@ -3382,6 +3480,10 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         /** How far (on screen) line ends, corners and moved things are pulled to stick. */
         private const val MAGNET_DP = 16f
         private const val MAX_ANCHORS = 64
+
+        /** An end of a line this close (dp) to the selection is attached to it; at most so many lines follow. */
+        private const val CONNECT_DP = 6f
+        private const val MAX_CONNECTORS = 100
 
         /** Space kept between writing and a closed gap or the page's bottom edge, and where moved-over writing starts on a new page. */
         private const val SPACE_GAP = 6f
