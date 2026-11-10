@@ -75,6 +75,7 @@ object Calc {
      * word ending in "=" in ordinary notes, or `x + 1 =`).
      */
     fun evaluate(e: Expr, env: Env): Answer? {
+        if (Parser.units && Units.involved(e, env)) Units.answer(e, env)?.let { return it }
         val flags = Flags()
         val r = resolve(e, env, emptySet(), flags)
         val free = Algebra.freeVars(r)

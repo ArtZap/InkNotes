@@ -1324,6 +1324,18 @@ class EditorController(
         requestMath()
     }
 
+    /** Units after numbers and physical constants in formulas; recomputed at once. */
+    var mathUnits by mutableStateOf(prefs.mathUnits.also { dev.inknotes.math.Parser.units = it })
+        private set
+
+    fun toggleMathUnits() {
+        mathUnits = !mathUnits
+        prefs.mathUnits = mathUnits
+        dev.inknotes.math.Parser.units = mathUnits
+        mathRevision.clear()
+        requestMath()
+    }
+
     private fun applyNumbers(fractions: Boolean) {
         Printer.numbers = if (fractions) Printer.Numbers.FRACTION else Printer.Numbers.DECIMAL
     }

@@ -494,7 +494,8 @@ object MathPage {
     }
 
     /** Letters of [e] standing for numbers: the T of a transposed matrix is not one. */
-    private fun letters(e: Expr): Set<String> = if (transposes(e)) Algebra.freeVars(e) - "T" else Algebra.freeVars(e)
+    private fun letters(e: Expr): Set<String> =
+        (if (transposes(e)) Algebra.freeVars(e) - "T" else Algebra.freeVars(e)).filterTo(LinkedHashSet()) { !it.startsWith(Units.PREFIX) }
 
     private fun transposes(e: Expr): Boolean = when (e) {
         is Expr.Pow -> (e.exp == Expr.Sym("T") && e.base is Expr.Mat) || transposes(e.base)

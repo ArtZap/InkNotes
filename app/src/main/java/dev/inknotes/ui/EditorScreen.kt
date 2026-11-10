@@ -179,6 +179,9 @@ fun EditorScreen(
                 MenuItem(if (controller.fractionAnswers) "Ответы: обыкновенные дроби (1/3)" else "Ответы: десятичные дроби (0,333…)") {
                     controller.toggleFractionAnswers()
                 }
+                MenuItem(if (controller.mathUnits) "Единицы и константы в формулах: вкл." else "Единицы и константы в формулах: выкл.") {
+                    controller.toggleMathUnits()
+                }
                 MenuItem("Тема: ${themeMode.title.lowercase()}", themeIcon(themeMode)) {
                     onThemeModeChange(ThemeMode.entries[(themeMode.ordinal + 1) % ThemeMode.entries.size])
                 }
