@@ -40,6 +40,7 @@ import dev.inknotes.editor.PageDocument
 import dev.inknotes.editor.PageEditorView
 import dev.inknotes.editor.PdfRegion
 import dev.inknotes.editor.PageRenderer
+import dev.inknotes.editor.PageEdits
 import dev.inknotes.editor.PenButtonBinding
 import dev.inknotes.editor.Stamps
 import dev.inknotes.editor.Tool
@@ -983,7 +984,7 @@ class EditorController(
             this.pageHeight = pageHeight
             this.pageWidth = pageWidth
             drawBackground(canvas, edgeWidth = 0f)
-            drawContent(canvas, c.strokes, c.fills, scale, c.images) { file -> imageCache.get(file) ?: thumbImages.getOrPut(file) { repo.loadImage(nb, file, THUMB_IMAGE_SIDE) } }
+            drawContent(canvas, c.strokes, c.fills, scale, c.images, loadImage = { file -> imageCache.get(file) ?: thumbImages.getOrPut(file) { repo.loadImage(nb, file, THUMB_IMAGE_SIDE) } })
         }
         return bitmap
     }
@@ -999,6 +1000,116 @@ class EditorController(
     private fun invalidateThumbnails() {
         thumbRevision.clear()
         thumbnailTick++
+    }
+
+    // ------------------------------------------------------------- flash cards
+
+    /** A band of the hint marker as a card: [band] hides the answer, [area] is the part of the page shown. */
+    class StudyCard(val pageIndex: Int, val pageId: String, val key: String, val band: android.graphics.RectF, val area: android.graphics.RectF)
+
+    /** Cards of the notebook while the review is open (null: closed, empty list: none at all). */
+    var studyCards by mutableStateOf<List<StudyCard>?>(null)
+        private set
+    var cardStates by mutableStateOf<Map<String, dev.inknotes.data.Cards.State>>(emptyMap())
+        private set
+    private val cardPages = HashMap<String, PageContent>()
+    private val cardExec = Executors.newSingleThreadExecutor { r -> Thread(r, "cards") }
+    private val cardRenderer by lazy { PageRenderer() }
+
+    /** Collects the cards of all pages (in the background) and opens the review. */
+    fun openCards() {
+        flush()
+        val nb = notebook
+        // Pages open in the editor are taken as they are now; the rest from their files.
+        val open = nb.pageIds.associateWith { docs[it]?.content() }
+        status = "Собираю карточки…"
+        runCatching {
+            cardExec.execute {
+                val pages = HashMap<String, PageContent>()
+                val cards = ArrayList<StudyCard>()
+                for ((index, pageId) in nb.pageIds.withIndex()) {
+                    val content = open[pageId] ?: runCatching { repo.loadPage(nb, pageId) }.getOrNull() ?: continue
+                    val w = nb.pageWidthUnits(pageId)
+                    val h = nb.pageHeightUnits(pageId)
+                    val bands = content.strokes.filter { it.kind == InkKind.SPOILER }
+                    if (bands.isEmpty()) continue
+                    pages[pageId] = content
+                    for (st in bands.sortedWith(compareBy({ PageEdits.bounds(it)?.top ?: 0f }, { PageEdits.bounds(it)?.left ?: 0f }))) {
+                        val b = PageEdits.bounds(st) ?: continue
+                        val line = maxOf(b.height(), CARD_MIN_LINE)
+                        val area = android.graphics.RectF(0f, (b.top - CARD_CONTEXT * line).coerceAtLeast(0f), w, (b.bottom + CARD_CONTEXT * line).coerceAtMost(h))
+                        cards += StudyCard(index, pageId, dev.inknotes.data.Cards.key(pageId, b.left, b.top, b.right, b.bottom), b, area)
+                    }
+                }
+                val states = repo.loadCards(nb.id)
+                handler.post {
+                    status = null
+                    cardPages.clear()
+                    cardPages.putAll(pages)
+                    cardStates = states
+                    studyCards = cards
+                }
+            }
+        }
+    }
+
+    fun closeCards() {
+        studyCards = null
+        cardPages.clear()
+    }
+
+    /** The card's part of the page, the band hidden or [revealed], [widthPx] wide; [onDone] on the main thread. */
+    fun renderCard(card: StudyCard, revealed: Boolean, widthPx: Int, onDone: (ImageBitmap) -> Unit) {
+        val content = cardPages[card.pageId] ?: return
+        val nb = notebook
+        val bg = nb.background(dark)
+        val photo = if (bg.kind == PaperKind.PHOTO) photo(bg.photo) else null
+        val ref = nb.pdfPages[card.pageId]
+        val darkNow = dark
+        runCatching {
+            cardExec.execute {
+                val bitmap = runCatching {
+                    val pageWidth = nb.pageWidthUnits(card.pageId)
+                    val pageHeight = nb.pageHeightUnits(card.pageId)
+                    val k = widthPx / card.area.width()
+                    val bmp = Bitmap.createBitmap(widthPx, maxOf(1, (card.area.height() * k).toInt()), Bitmap.Config.ARGB_8888)
+                    val canvas = Canvas(bmp)
+                    val m = Matrix().apply {
+                        setTranslate(-card.area.left, -card.area.top)
+                        postScale(k, k)
+                    }
+                    canvas.concat(m)
+                    cardRenderer.apply {
+                        this.dark = darkNow
+                        paper = bg
+                        this.photo = photo
+                        pdf = ref?.let { runCatching { pdfPages.renderBlocking(nb, it, (pageWidth * k).toInt().coerceIn(1, 4096)) }.getOrNull() }
+                        this.pageHeight = pageHeight
+                        this.pageWidth = pageWidth
+                        drawBackground(canvas, edgeWidth = 0f)
+                        drawContent(canvas, content.strokes, content.fills, m, content.images, { file -> imageCache.get(file) ?: repo.loadImage(nb, file, THUMB_IMAGE_SIDE * 2) }) { st ->
+                            revealed && PageEdits.bounds(st)?.let { b -> dev.inknotes.data.Cards.key(card.pageId, b.left, b.top, b.right, b.bottom) == card.key } == true
+                        }
+                    }
+                    bmp
+                }.getOrNull() ?: return@execute
+                handler.post { onDone(bitmap.asImageBitmap()) }
+            }
+        }
+    }
+
+    fun gradeCard(card: StudyCard, grade: dev.inknotes.data.Cards.Grade) {
+        val today = dev.inknotes.data.Cards.today()
+        cardStates = cardStates + (card.key to dev.inknotes.data.Cards.grade(cardStates[card.key], grade, today))
+        // Cards of bands no longer on the pages are dropped from the file.
+        val keys = studyCards.orEmpty().map { it.key }.toSet()
+        repo.saveCardsAsync(notebook.id, cardStates.filterKeys { it in keys })
+    }
+
+    /** Leaves the review at the card's page. */
+    fun showCard(card: StudyCard) {
+        closeCards()
+        goToPage(card.pageIndex)
     }
 
     // ------------------------------------------------------------------- keys
@@ -1179,6 +1290,10 @@ class EditorController(
         private const val COLOR_TOLERANCE = 10
         private const val MAX_HISTORY = 500
         private const val THUMB_WIDTH = 240
+
+        /** A card shows this many line heights above and below its band; a line is at least [CARD_MIN_LINE] units. */
+        private const val CARD_CONTEXT = 2.5f
+        private const val CARD_MIN_LINE = 24f
         private const val IMAGE_CACHE_BYTES = 64 * 1024 * 1024
         private const val THUMB_IMAGE_SIDE = 256
         private const val THUMB_IMAGE_CACHE = 64

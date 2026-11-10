@@ -62,7 +62,7 @@ object PdfExporter {
                 val names = content.images.map { it.file }.distinct()
                 val side = if (names.isEmpty()) 0 else sqrt(PAGE_IMAGE_PIXELS / names.size).toInt().coerceIn(MIN_IMAGE_SIDE, MAX_IMAGE_SIDE)
                 val pictures = names.associateWith { repo.loadImage(nb, it, side) }
-                renderer.drawContent(page.canvas, content.strokes, content.fills, detail, content.images) { pictures[it] }
+                renderer.drawContent(page.canvas, content.strokes, content.fills, detail, content.images, loadImage = { pictures[it] })
                 pictures.values.forEach { it?.recycle() }
                 doc.finishPage(page)
                 renderer.pdf?.recycle()

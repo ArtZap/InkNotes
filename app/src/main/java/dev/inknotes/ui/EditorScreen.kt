@@ -170,6 +170,7 @@ fun EditorScreen(
                 MenuItem("Размер и ориентация страницы…", InkIcons.PageSize) { pageSizeOf = controller.pageIndex }
                 MenuItem("Отступ страницы слева или справа…") { showShift = true }
                 MenuItem("Распознанный текст страницы") { controller.currentPageText { pageText = it } }
+                MenuItem("Повторение: карточки из маркера подсказок") { controller.openCards() }
                 MenuItem("Поделиться файлом тетради", InkIcons.Share) { share() }
                 MenuItem("Сохранить файл тетради…") { saveLauncher.launch("${controller.fileName(controller.notebook.title)}.inknote") }
                 MenuItem("Экспорт в PDF…") { exportLauncher.launch("${controller.fileName(controller.notebook.title)}.pdf") }
@@ -213,6 +214,7 @@ fun EditorScreen(
 
     controller.recognizedText?.let { RecognizedTextDialog(it, controller, onDismiss = { controller.recognizedText = null }) }
     controller.tappedAnswer?.let { AnswerDialog(controller, it, onDismiss = { controller.tappedAnswer = null }) }
+    controller.studyCards?.let { CardsDialog(controller, it, onDismiss = { controller.closeCards() }) }
     if (showHelp) HelpDialog(onDismiss = { showHelp = false })
     if (showShift) PageShiftDialog(controller, onDismiss = { showShift = false })
     if (showBackground) BackgroundDialog(controller, onDismiss = { showBackground = false })

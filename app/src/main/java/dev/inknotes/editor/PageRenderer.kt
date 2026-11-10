@@ -583,6 +583,7 @@ class PageRenderer {
         toScreen: Matrix,
         images: List<PageImage> = emptyList(),
         loadImage: (String) -> Bitmap? = { null },
+        revealed: (PageStroke) -> Boolean = { false },
     ) {
         for (img in images) drawImage(canvas, img, loadImage(img.file))
         drawFills(canvas, fills)
@@ -592,7 +593,7 @@ class PageRenderer {
             endHighlighter(canvas)
         }
         drawInk(canvas, strokes, toScreen)
-        for (s in strokes) if (s.kind == InkKind.SPOILER) drawSpoiler(canvas, s, toScreen, revealed = false)
+        for (s in strokes) if (s.kind == InkKind.SPOILER) drawSpoiler(canvas, s, toScreen, revealed = revealed(s))
     }
 
     /** Stroke recoloured for the current paper (see [InkColors.forPaper]), cached per stroke. */

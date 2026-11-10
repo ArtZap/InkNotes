@@ -1130,6 +1130,26 @@ class NotebookRepository(filesDir: File) {
         }
     }
 
+    // ------------------------------------------------- flash cards
+
+    /** Review states of a notebook's cards ([Cards.encode]); empty when none were reviewed. */
+    fun loadCards(nbId: String): Map<String, Cards.State> = onIo {
+        if (!UUID_RE.matches(nbId)) return@onIo emptyMap()
+        val f = File(dir(nbId), CARDS)
+        if (!f.isFile || f.length() > MAX_JSON_BYTES) return@onIo emptyMap()
+        runCatching { Cards.decode(f.readText()) }.getOrDefault(emptyMap())
+    }
+
+    /** Kept on this device only, like the text index: a friend's notebook starts unreviewed. */
+    fun saveCardsAsync(nbId: String, states: Map<String, Cards.State>) {
+        if (!UUID_RE.matches(nbId)) return
+        val text = Cards.encode(states)
+        background {
+            val d = dir(nbId)
+            if (File(d, META).isFile) runCatching { atomicWrite(File(d, CARDS)) { it.write(text.toByteArray()) } }
+        }
+    }
+
     // ------------------------------------------------- handwriting text index
 
     /** Recognized text of a notebook (raw JSON, see HandwritingIndex), or null if none yet. */
@@ -1306,6 +1326,7 @@ class NotebookRepository(filesDir: File) {
         const val TRASH = ".trash"
         const val DELETED_AT = "deleted-at"
         const val TEXT_INDEX = "text.json"
+        const val CARDS = "cards.tsv"
         const val MAX_PHOTO_SIDE = 2048
 
         /** notebook.json and archive manifests are a few kilobytes; anything far bigger is not ours. */
