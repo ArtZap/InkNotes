@@ -83,6 +83,14 @@ class ZoomPad(context: Context, private val host: PageEditorView) : FrameLayout(
 
     fun redraw() = surface.invalidate()
 
+    /** A line being written is dropped (the window is closing). */
+    fun cancelWriting() {
+        strokeId?.let { id -> runCatching { ink.cancelStroke(id) } }
+        strokeId = null
+        dragging = false
+        pressed = -1
+    }
+
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
         if (region.width() > 0f) place(page, region.left, region.top)

@@ -1387,9 +1387,12 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
 
     // --- zoom window
 
-    /** The zoom window at the bottom, while it is open. */
-    internal var zoomPad: ZoomPad? = null
-        private set
+    /**
+     * The zoom window at the bottom, while it is open. Made once and then only hidden: taking
+     * the ink view out of the window while its frame is drawn crashes the render thread.
+     */
+    private var padView: ZoomPad? = null
+    internal val zoomPad: ZoomPad? get() = padView?.takeIf { it.visibility == VISIBLE }
     private var padTouch = false
     private var zoomRegionPage = -1
     private val zoomRegion = RectF()
@@ -1399,22 +1402,26 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
     /** Opens the zoom window on the page in view, the part a little above the middle of the screen. */
     fun openZoomPad() {
         if (zoomPad != null || tops.isEmpty()) return
-        val pad = ZoomPad(context, this)
         val h = max(height * ZoomPad.HEIGHT_SHARE, ZoomPad.MIN_HEIGHT_DP * density).toInt()
-        addView(pad, LayoutParams(LayoutParams.MATCH_PARENT, h, android.view.Gravity.BOTTOM))
-        pad.ink.addFinishedStrokesListener(this)
-        zoomPad = pad
+        val pad = padView ?: ZoomPad(context, this).also {
+            addView(it, LayoutParams(LayoutParams.MATCH_PARENT, h, android.view.Gravity.BOTTOM))
+            it.ink.addFinishedStrokesListener(this)
+            padView = it
+        }
+        if (pad.layoutParams.height != h) pad.layoutParams = pad.layoutParams.apply { height = h }
+        pad.visibility = VISIBLE
         val page = currentPage
         val p = toPage(page, width / 2f, (height - h) / 2f)
-        pad.post { pad.place(page, pageWidthOf(page) * ZoomPad.LEFT_MARGIN, p[1] - pageWidthOf(page) / ZoomPad.DEFAULT_MAGNIFICATION * 0.3f) }
+        val top = max(p[1] - pageWidthOf(page) / ZoomPad.DEFAULT_MAGNIFICATION * 0.3f, pageHeightOf(page) * 0.1f)
+        pad.post { pad.place(page, pageWidthOf(page) * ZoomPad.LEFT_MARGIN, top) }
         listener?.onZoomPadChanged(true)
     }
 
     fun closeZoomPad() {
         val pad = zoomPad ?: return
-        zoomPad = null
+        pad.cancelWriting()
+        pad.visibility = GONE
         padTouch = false
-        removeView(pad)
         zoomRegionPage = -1
         pageLayer.invalidate()
         listener?.onZoomPadChanged(false)
@@ -1609,7 +1616,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             PageEdits.bounds(added)?.let { listener?.onInkAdded(wet.page, it) }
         }
         inProgressView.removeFinishedStrokes(strokes.keys)
-        zoomPad?.ink?.removeFinishedStrokes(strokes.keys)
+        padView?.ink?.removeFinishedStrokes(strokes.keys)
         pageLayer.invalidate()
         zoomPad?.redraw()
         listener?.onDocumentChanged()
