@@ -268,6 +268,7 @@ class EditorController(
     fun attach(v: PageEditorView) {
         view = v
         toolbar = dev.inknotes.data.ToolbarLayout.decode(prefs.toolbarLayout)
+        toolbarIntro = !prefs.toolbarIntroShown
         dev.inknotes.data.Layers.active = notebook.activeLayer
         rulerShown = false
         v.listener = this
