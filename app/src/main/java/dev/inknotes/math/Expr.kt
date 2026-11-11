@@ -185,8 +185,27 @@ class Parser private constructor(private val toks: List<Tok>) {
                 last is Tok.N || unit(last) -> true
                 last is Tok.Op && last.s == "/" -> before is Tok.N || unit(before)
                 last is Tok.Op && last.s == "*" -> unit(before)
+                // 9,8 м/с² written as a fraction: its numerator right after the number…
+                last is Tok.Op && last.s == "{" && before is Tok.Cmd && before.name == "frac" -> out.getOrNull(out.size - 3) is Tok.N
+                // …and its denominator after a numerator of units.
+                last is Tok.Op && last.s == "{" && before is Tok.Op && before.s == "}" -> numeratorHasUnits(out)
                 else -> false
             }
+        }
+
+        /** [out] ends with `\frac{…}{`: the part between the braces holds a unit. */
+        private fun numeratorHasUnits(out: List<Tok>): Boolean {
+            var depth = 0
+            for (k in out.size - 2 downTo 0) {
+                val t = out[k]
+                if (t is Tok.Op && t.s == "}") depth++
+                if (t is Tok.Op && t.s == "{") {
+                    depth--
+                    if (depth == 0) return (out.getOrNull(k - 1) as? Tok.Cmd)?.name == "frac" &&
+                        out.subList(k, out.size - 2).any { it is Tok.Id && it.name.startsWith(Units.PREFIX) }
+                }
+            }
+            return false
         }
 
         /** `xsinx` → x, sin, x; unknown letters are one-letter variables. */

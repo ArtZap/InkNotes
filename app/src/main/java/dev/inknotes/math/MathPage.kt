@@ -90,7 +90,13 @@ object MathPage {
                 continue
             }
             // f(x) among the readings ("flx" first) is a function being defined.
-            val l = readings(left, eq.h, eq.cy, reader, Prefer.FIRST).let { all -> all.firstOrNull { it is Expr.Apply && graphParam(it) != null } ?: all.firstOrNull() } ?: continue
+            val l = readings(left, eq.h, eq.cy, reader, Prefer.FIRST).let { all ->
+                all.firstOrNull { it is Expr.Apply && graphParam(it) != null }
+                    // A lone number before "=" with a formula after it defines nothing: the
+                    // reader took the z or y of z = x² + y² for a 2 or a 4.
+                    ?: all.firstOrNull { it is Expr.Sym && it.name.lowercase() in GRAPH_LETTERS }?.takeIf { all.firstOrNull() is Expr.Num }
+                    ?: all.firstOrNull()
+            } ?: continue
             // y = 2x + 1 is a formula in x: "2+1" (fewest letters) would lose it.
             // y = 5x − 1: a formula in x ("5x−1", not "bx−I" or "5−1").
             val surface = (l as? Expr.Sym)?.name?.equals("z", ignoreCase = true) == true
@@ -451,7 +457,9 @@ object MathPage {
                     Prefer.FIRST -> 0
                     // ∫ v dv rather than ∫ r dv: the integrand is about the variable of dv. Letters
                     // [favored] (a system's unknowns) count for, not against, a reading.
-                    Prefer.NUMBERS -> names.count { it !in favored } - names.count { it in favored } + 2 * oddIntegrals(e)
+                    // With units on, a reading with units (9,8 м/с²) beats one with digits for its letters.
+                    Prefer.NUMBERS -> names.count { it !in favored } - names.count { it in favored } + 2 * oddIntegrals(e) -
+                        (if (Parser.units && Algebra.freeVars(e).any { it.startsWith(Units.PREFIX) }) 1 else 0)
                     // About letters ("2z", not "22"), but not more than the system has unknowns
                     // (x⁶ rather than t^G); 9z rather than oz (o, l, I are digits misread far more often).
                     Prefer.LETTERS -> (if (unknowns > maxLetters) 20 + unknowns else -unknowns) + 2 * names.count { it in RARE_UNKNOWNS }
@@ -463,7 +471,7 @@ object MathPage {
                 }
                 break
             }
-            if (prefer != Prefer.LETTERS && favored.isEmpty() && found.count { it.second == 0 } >= MAX_READINGS) break
+            if (prefer != Prefer.LETTERS && favored.isEmpty() && found.count { it.second <= 0 } >= MAX_READINGS && (!Parser.units || found.any { it.second < 0 })) break
         }
         return found.sortedBy { it.second }.map { it.first }.take(MAX_READINGS)
     }
@@ -909,6 +917,9 @@ object MathPage {
     private fun bridge(c: Ink, cand: List<Ink>, bandTop: Float, bandBottom: Float, h: Float): Boolean =
         c.isDash && c.width > 1.2f * h && c.bottom < bandTop && c.bottom > bandTop - 1.2f * h &&
             cand.any { o -> o !== c && o.top <= bandBottom && o.bottom >= bandTop && o.cx in c.left..c.right && o.top > c.cy }
+
+    /** Letters a graph or surface is defined by (y = …, z = …). */
+    private val GRAPH_LETTERS = setOf("y", "z")
 
     private const val MAX_STROKE = 600f
     private const val MIN_EQ_WIDTH = 3.5f

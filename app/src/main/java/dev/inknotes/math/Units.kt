@@ -41,7 +41,6 @@ object Units {
         Unit("mm", 0.001, dim(m = 1), "мм"),
         Unit("kg", 1.0, dim(kg = 1), "кг"),
         Unit("g", 0.001, dim(kg = 1), "г"),
-        Unit("t", 1000.0, dim(kg = 1), "т"),
         Unit("s", 1.0, dim(s = 1), "с"),
         Unit("min", 60.0, dim(s = 1), "мин"),
         Unit("h", 3600.0, dim(s = 1), "ч"),
@@ -66,9 +65,13 @@ object Units {
 
     /** Spellings, as the reader gives them, of each unit (Cyrillic handwriting read as Latin). */
     private val SPELLINGS: List<Pair<String, String>> = listOf(
-        "m" to "m", "M" to "m", "km" to "km", "kM" to "km", "KM" to "km", "cm" to "cm", "CM" to "cm", "mm" to "mm", "MM" to "mm",
-        "kg" to "kg", "Kg" to "kg", "kr" to "kg", "Kr" to "kg", "g" to "g", "r" to "g", "t" to "t", "T" to "t",
-        "s" to "s", "c" to "s", "min" to "min", "MuH" to "min", "h" to "h", "y" to "h",
+        // м is read as m, M or u (a handwritten м has a hook like u).
+        "m" to "m", "M" to "m", "u" to "m",
+        "km" to "km", "kM" to "km", "KM" to "km", "Km" to "km", "ku" to "km", "Ku" to "km", "kU" to "km",
+        "cm" to "cm", "CM" to "cm", "cu" to "cm", "mm" to "mm", "MM" to "mm", "uu" to "mm",
+        "kg" to "kg", "Kg" to "kg", "kr" to "kg", "Kr" to "kg", "g" to "g",
+        // ч is read as r (г alone, grams, is rare in physics). Not y, z or t: 3y and 2t are letters far more often.
+        "s" to "s", "c" to "s", "min" to "min", "MuH" to "min", "uuH" to "min", "h" to "h", "r" to "h",
         "N" to "N", "H" to "N", "kN" to "kN", "kH" to "kN", "KH" to "kN",
         "J" to "J", "kJ" to "kJ", "W" to "W", "Bm" to "W", "BT" to "W", "Bt" to "W", "kW" to "kW", "kBm" to "kW", "kBT" to "kW",
         "Pa" to "Pa", "Na" to "Pa", "kPa" to "kPa", "kNa" to "kPa", "MPa" to "MPa", "MNa" to "MPa",
@@ -183,7 +186,8 @@ object Units {
      * km), a quotient or product of two of them (km/ч), a named SI unit (Н, Дж), else SI base units.
      */
     fun format(q: Q, used: List<Unit>): String {
-        if (q.dim.none) return Printer.value(q.v)
+        // Measured values in decimals (282,667 км/ч, not 848/3 км/ч).
+        if (q.dim.none) return Printer.number(q.v)
         val written = used.distinctBy { it.name }
         val candidates = buildList {
             for (u in written) if (u.dim == q.dim) add(u.factor to u.shown)
@@ -201,7 +205,7 @@ object Units {
         } else {
             first ?: (1.0 to text(q.dim))
         }
-        return Printer.value(q.v / factor) + " " + name
+        return Printer.number(q.v / factor) + " " + name
     }
 
     private val NAMED = listOf("N", "J", "W", "Pa", "C", "V", "Ohm").mapNotNull { UNITS[it] }

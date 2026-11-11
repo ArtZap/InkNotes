@@ -340,6 +340,9 @@ class NotebookRepository(filesDir: File) {
             updatedAt = System.currentTimeMillis(),
         ).also(::writeMeta)
 
+    fun setAudioMarks(nb: Notebook, marks: List<AudioMark>): Notebook =
+        nb.copy(audioMarks = marks.filter { it.pageId in nb.pageIds }.takeLast(MAX_MARKS)).also(::writeMeta)
+
     fun deleteRecording(nb: Notebook, rec: Recording): Notebook {
         val updated = nb.copy(recordings = nb.recordings - rec, audioMarks = nb.audioMarks.filter { it.file != rec.file }, updatedAt = System.currentTimeMillis())
         writeMeta(updated)

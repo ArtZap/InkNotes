@@ -187,27 +187,34 @@ fun EditorScreen(
             onInsertStamp = { showStamps = true },
             onClose = onClose,
             menu = {
-                MenuItem("Фон") { showBackground = true }
-                MenuItem("Размер и ориентация страницы…", InkIcons.PageSize) { pageSizeOf = controller.pageIndex }
-                MenuItem("Отступ страницы слева или справа…") { showShift = true }
-                MenuItem("Распознанный текст страницы") { controller.currentPageText { pageText = it } }
+                // Groups, without icons: a few items with icons and most without look untidy.
                 MenuItem("Вставить печатный текст…") { textNew = true }
                 MenuItem(if (controller.insertingSpace) "Вставить место: отменить" else "Вставить место (раздвинуть строки)") { controller.toggleInsertSpace() }
-                if (controller.recordingSince == null) MenuItem("Записать звук") { record() } else MenuItem("Остановить запись") { controller.stopRecording() }
-                MenuItem("Записи звука…") { showRecordings = true }
+                MenuItem("Распознанный текст страницы") { controller.currentPageText { pageText = it } }
+                Divider()
                 MenuItem("Оглавление…") { showToc = true }
                 MenuItem("Слои (сейчас: ${controller.notebook.layerList().getOrNull(controller.notebook.activeLayer)?.name ?: "Основной"})…") { showLayers = true }
                 MenuItem("Повторение: карточки из маркера подсказок") { controller.openCards() }
-                MenuItem("Поделиться файлом тетради", InkIcons.Share) { share() }
-                MenuItem("Сохранить файл тетради…") { saveLauncher.launch("${controller.fileName(controller.notebook.title)}.inknote") }
-                MenuItem("Экспорт в PDF…") { exportLauncher.launch("${controller.fileName(controller.notebook.title)}.pdf") }
+                Divider()
+                if (controller.recordingSince == null) MenuItem("Записать звук") { record() } else MenuItem("Остановить запись") { controller.stopRecording() }
+                MenuItem("Записи звука…") { showRecordings = true }
+                Divider()
+                MenuItem("Фон") { showBackground = true }
+                MenuItem("Размер и ориентация страницы…") { pageSizeOf = controller.pageIndex }
+                MenuItem("Отступ страницы слева или справа…") { showShift = true }
+                Divider()
                 MenuItem(if (controller.fractionAnswers) "Ответы: обыкновенные дроби (1/3)" else "Ответы: десятичные дроби (0,333…)") {
                     controller.toggleFractionAnswers()
                 }
                 MenuItem(if (controller.mathUnits) "Единицы и константы в формулах: вкл." else "Единицы и константы в формулах: выкл.") {
                     controller.toggleMathUnits()
                 }
-                MenuItem("Тема: ${themeMode.title.lowercase()}", themeIcon(themeMode)) {
+                Divider()
+                MenuItem("Поделиться файлом тетради") { share() }
+                MenuItem("Сохранить файл тетради…") { saveLauncher.launch("${controller.fileName(controller.notebook.title)}.inknote") }
+                MenuItem("Экспорт в PDF…") { exportLauncher.launch("${controller.fileName(controller.notebook.title)}.pdf") }
+                Divider()
+                MenuItem("Тема: ${themeMode.title.lowercase()}") {
                     onThemeModeChange(ThemeMode.entries[(themeMode.ordinal + 1) % ThemeMode.entries.size])
                 }
                 MenuItem("Кнопка пера: ${controller.penButtonLabel}") { controller.learningPenButton = true }
@@ -304,6 +311,12 @@ class MenuScope(private val close: () -> Unit) {
             close()
             onClick()
         }
+    }
+
+    /** A line between groups of items. */
+    @Suppress("FunctionName")
+    fun Divider() {
+        if (items.isNotEmpty() && items.last().label.isNotEmpty()) items += Item("", null) {}
     }
 }
 
@@ -414,7 +427,6 @@ private fun TopRow(
                             menuOpen = false
                             action()
                         },
-                        leadingIcon = { InkIcon(icon, contentDescription = null) },
                     )
                     item("Вставить картинку", InkIcons.Picture, enabled = !c.importingImage, action = onInsertImage)
                     item("Вставить таблицу", InkIcons.Table, action = onInsertTable)
@@ -424,11 +436,11 @@ private fun TopRow(
                 }
                 val scope = MenuScope { menuOpen = false }.apply(menu)
                 for (item in scope.items) {
-                    DropdownMenuItem(
-                        text = { Text(item.label) },
-                        onClick = item.action,
-                        leadingIcon = item.icon?.let { icon -> { InkIcon(icon, contentDescription = null) } },
-                    )
+                    if (item.label.isEmpty()) {
+                        HorizontalDivider()
+                        continue
+                    }
+                    DropdownMenuItem(text = { Text(item.label) }, onClick = item.action)
                 }
             }
         }

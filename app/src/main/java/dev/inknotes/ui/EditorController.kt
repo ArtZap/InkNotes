@@ -530,7 +530,8 @@ class EditorController(
     override fun listenAt(page: Int, x: Float, y: Float): Boolean {
         if (!listenByTouch) return false
         val pageId = notebook.pageIds.getOrNull(page) ?: return false
-        val mark = notebook.audioMarks.lastOrNull { it.pageId == pageId && it.contains(x, y, MARK_SLOP) } ?: return false
+        val doc = docs[pageId]
+        val mark = notebook.audioMarks.lastOrNull { it.pageId == pageId && it.contains(x, y, MARK_SLOP) && (doc == null || hasInk(doc, it)) } ?: return false
         val rec = notebook.recordings.firstOrNull { it.file == mark.file } ?: return false
         // A little before the writing began: what was being said then.
         play(rec, (mark.atMs - LISTEN_LEAD_MS).coerceAtLeast(0))
@@ -540,7 +541,10 @@ class EditorController(
     override fun soundMarks(index: Int): List<android.graphics.RectF> {
         if (!listenByTouch) return emptyList()
         val pageId = notebook.pageIds.getOrNull(index) ?: return emptyList()
-        return notebook.audioMarks.filter { it.pageId == pageId }.map { android.graphics.RectF(it.left, it.top, it.right, it.bottom) }
+        val doc = docs[pageId]
+        // Erased writing has no sound any more.
+        return notebook.audioMarks.filter { it.pageId == pageId && (doc == null || hasInk(doc, it)) }
+            .map { android.graphics.RectF(it.left, it.top, it.right, it.bottom) }
     }
 
     // ------------------------------------------------------------------ layers
@@ -1600,7 +1604,28 @@ class EditorController(
             savedRevision[id] = doc.revision
             any = true
         }
-        if (any) notebook = repo.touch(notebook)
+        if (any) notebook = pruneMarks() ?: repo.touch(notebook)
+    }
+
+    /**
+     * Sound marks whose writing is gone (erased, moved away) are dropped: the notebook saved
+     * without them, or null when every mark still has its writing.
+     */
+    private fun pruneMarks(): Notebook? {
+        if (notebook.audioMarks.isEmpty()) return null
+        val kept = notebook.audioMarks.filter { m -> docs[m.pageId]?.let { hasInk(it, m) } ?: true }
+        if (kept.size == notebook.audioMarks.size) return null
+        return repo.setAudioMarks(notebook, kept)
+    }
+
+    /** Some of the writing a mark was made for is still there: a stroke with its middle inside the mark. */
+    private fun hasInk(doc: PageDocument, m: dev.inknotes.data.AudioMark): Boolean {
+        val pad = MARK_SLOP
+        return doc.strokes.any { s ->
+            s.kind.isInk && dev.inknotes.editor.PageCache.strokeBounds(s)?.let { b ->
+                b.centerX() in m.left - pad..m.right + pad && b.centerY() in m.top - pad..m.bottom + pad
+            } == true
+        }
     }
 
     override fun onDocumentChanged() {

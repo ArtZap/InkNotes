@@ -84,4 +84,29 @@ class UnitsTest {
         val e = Parser.parse("2m")
         assertEquals(Expr.Mul(listOf(Expr.Num(2.0), Expr.Sym("m"))), e)
     }
+
+    @Test
+    fun unitsInAFraction() {
+        // 9,8 м/с² written as a fraction after the number.
+        assertEquals("29,4 м/с", eval("9,8\\frac{m}{c^{2}}*3c"))
+        assertEquals("29,4 м/с", eval("9,8\\frac{u}{c^{2}}*3c"))
+    }
+
+    @Test
+    fun kilometresPerHourAsRead() {
+        // 848 км : 3 ч, the reader taking к for K and ч for r.
+        assertEquals("282,667 км/ч", eval("848Km:3r"))
+    }
+
+    @Test
+    fun lettersStayLettersInEquations() {
+        // 3y is three times y even with units on.
+        Parser.units = true
+        try {
+            assertEquals(Expr.Mul(listOf(Expr.Num(3.0), Expr.Sym("y"))), Parser.parse("3y"))
+            assertEquals(Expr.Mul(listOf(Expr.Num(2.0), Expr.Sym("t"))), Parser.parse("2t"))
+        } finally {
+            Parser.units = false
+        }
+    }
 }
