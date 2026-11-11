@@ -94,7 +94,9 @@ class V032Screenshots {
         clickDesc("Окно увеличения")
         shot("14-zoom-closed")
 
-        // Export dialog from the menu.
+        // Export dialog from the menu (two pages, so that a range can be chosen).
+        clickDesc("Добавить страницу")
+        clickDesc("Добавить страницу")
         device.findObject(By.desc("Ещё"))?.click()
         device.wait(Until.hasObject(By.text("Настроить панели…")), 5_000)
         shot("15-menu")
