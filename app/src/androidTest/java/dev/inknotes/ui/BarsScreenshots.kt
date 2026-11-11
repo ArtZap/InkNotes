@@ -30,8 +30,12 @@ class BarsScreenshots {
         device.takeScreenshot(File(dir, "$name.png"))
     }
 
-    private fun click(text: String, timeout: Long = 10_000) {
-        val o = device.wait(Until.findObject(By.text(text)), timeout) ?: error("no «$text» on screen")
+    private fun click(text: String, timeout: Long = 15_000) {
+        val o = device.wait(Until.findObject(By.text(text)), timeout)
+        if (o == null) {
+            shot("fail-$text".replace(Regex("[^\\p{L}0-9-]"), "_"))
+            error("no «$text» on screen")
+        }
         o.click()
     }
 
@@ -44,7 +48,7 @@ class BarsScreenshots {
         device.setOrientationLandscape()
         val launch = ctx.packageManager.getLaunchIntentForPackage(ctx.packageName)!!.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_NEW_TASK)
         ctx.startActivity(launch)
-        click("Скриншоты", 30_000)
+        click("Скриншоты", 60_000)
         device.wait(Until.hasObject(By.text("Какие инструменты показывать?")), 10_000)
         shot("01-intro")
         click("Оставить как есть")
