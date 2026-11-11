@@ -8,3 +8,6 @@ keystore/
 keystore.properties
 release/
 .ruff_cache/
+hang-log.txt
+probe-strokes.json
+probe.txt
