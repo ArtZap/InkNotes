@@ -286,14 +286,14 @@ object Typeset {
 
     /** Ordinary LaTeX for [source] (fractions, roots, matrices, Greek letters, `\cdot`…). */
     fun latex(source: String): String = latex(parse(source)).trim()
-        .replace(Regex(" {2,}"), " ").replace(Regex(" +}"), "}").replace(Regex("\\{ +"), "{").replace(Regex(" +\\]"), "]")
+        .replace(SPACES, " ").replace(SPACE_BEFORE_CLOSE, "}").replace(SPACE_AFTER_OPEN, "{").replace(SPACE_BEFORE_BRACKET, "]")
 
     fun latex(n: Node): String = when (n) {
         is Row -> buildString {
             for (item in n.items) {
                 val t = latex(item)
                 // A command name must not run into the letter after it (\cdot x, not \cdotx).
-                if (isNotEmpty() && last().isLetter() && t.firstOrNull()?.isLetter() == true && Regex("\\\\[a-zA-Z]+$").containsMatchIn(this)) append(' ')
+                if (isNotEmpty() && last().isLetter() && t.firstOrNull()?.isLetter() == true && COMMAND_AT_END.containsMatchIn(this)) append(' ')
                 append(t)
             }
         }
@@ -610,6 +610,13 @@ object Typeset {
             return Laid(width + 0.15f * s, asc, desc, ops)
         }
     }
+
+    // A literal brace is escaped: Android's regular expressions refuse a bare "}".
+    private val SPACES = Regex(" {2,}")
+    private val SPACE_BEFORE_CLOSE = Regex(" +\\}")
+    private val SPACE_AFTER_OPEN = Regex("\\{ +")
+    private val SPACE_BEFORE_BRACKET = Regex(" +\\]")
+    private val COMMAND_AT_END = Regex("\\\\[a-zA-Z]+$")
 
     /** Height of capitals and depth below the baseline, as shares of the letter size. */
     const val ASCENT = 0.75f
