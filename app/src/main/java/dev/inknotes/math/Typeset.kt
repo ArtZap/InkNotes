@@ -591,8 +591,10 @@ object Typeset {
                     width = max(width, w * 0.85f + it.width)
                 }
                 lo?.let {
-                    ops += it.moved(w * 0.45f, foot - it.descent)
-                    width = max(width, w * 0.45f + it.width)
+                    // Clear of the sign's lower hook.
+                    ops += it.moved(w * 0.62f, foot - it.descent + 0.1f * s)
+                    width = max(width, w * 0.62f + it.width)
+                    desc = foot + 0.1f * s
                 }
             } else {
                 val wide = max(w, max(lo?.width ?: 0f, hi?.width ?: 0f))
