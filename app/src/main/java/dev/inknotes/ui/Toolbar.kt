@@ -229,7 +229,6 @@ fun PlaceMenu(expanded: Boolean, id: String, name: String, placing: Placing, onD
         HorizontalDivider()
         DropdownMenuItem(
             text = { Text("Настроить панели…") },
-            leadingIcon = { InkIcon(InkIcons.Tune, contentDescription = null) },
             onClick = {
                 onDismiss()
                 placing.customize()
@@ -331,6 +330,7 @@ fun ToolbarIntroDialog(onPick: (Toolbars.Preset) -> Unit, onCustomize: () -> Uni
     )
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun PresetCard(p: Toolbars.Preset, selected: Boolean = false, onClick: () -> Unit) {
     Surface(
@@ -341,9 +341,9 @@ private fun PresetCard(p: Toolbars.Preset, selected: Boolean = false, onClick: (
     ) {
         Column(Modifier.padding(12.dp)) {
             Text(p.title, fontWeight = FontWeight.SemiBold)
-            Text(p.note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Row(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                for (id in (p.layout.tools + p.layout.top).take(14)) InkIcon(BarCatalog.icon(id), contentDescription = null, Modifier.size(18.dp))
+            Text(p.note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            FlowRow(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(2.dp), maxLines = 1) {
+                for (id in p.layout.tools + p.layout.top) InkIcon(BarCatalog.icon(id), contentDescription = null, Modifier.size(18.dp))
             }
         }
     }
@@ -407,9 +407,9 @@ fun CustomizeBarsDialog(initial: ToolbarLayout, onChange: (ToolbarLayout) -> Uni
                     )
                     Column(Modifier.weight(1f).verticalScroll(rememberScrollState(), enabled = dragging == null).padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Text("Готовые наборы", style = MaterialTheme.typography.titleSmall)
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             for (p in Toolbars.Preset.entries) {
-                                Box(Modifier.widthIn(max = 300.dp)) { PresetCard(p, selected = layout == p.layout, onClick = { set(p.layout) }) }
+                                Box(Modifier.weight(1f)) { PresetCard(p, selected = layout == p.layout, onClick = { set(p.layout) }) }
                             }
                         }
                         BarsPreview(layout, fits, overflow)

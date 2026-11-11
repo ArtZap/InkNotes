@@ -54,13 +54,19 @@ class BarsScreenshots {
         click("Оставить как есть")
         shot("02-editor-full")
         device.findObject(By.desc("Ещё")).click()
+        device.wait(Until.hasObject(By.text("Настроить панели…")), 5_000)
         shot("03-menu")
         click("Настроить панели…")
         shot("04-settings")
-        device.swipe(device.displayWidth / 2, device.displayHeight * 3 / 4, device.displayWidth / 2, device.displayHeight / 4, 30)
-        shot("05-settings-scrolled")
         click("Конспекты")
-        shot("06-settings-notes")
+        shot("05-settings-notes")
+        // Hold "Записать звук", then drag it onto the tool bar section.
+        val from = device.wait(Until.findObject(By.text("Записать звук")), 5_000)!!.visibleCenter
+        val to = device.findObject(By.text("Панель инструментов")).visibleCenter
+        device.swipe(arrayOf(from, from, android.graphics.Point(to.x, to.y + 40)), 120)
+        shot("06-settings-dragged")
+        device.findObject(By.scrollable(true))?.scroll(androidx.test.uiautomator.Direction.DOWN, 1f)
+        shot("06b-settings-scrolled")
         click("Готово")
         shot("07-editor-notes")
         device.wait(Until.findObject(By.desc("Ластик")), 5_000)?.longClick()
