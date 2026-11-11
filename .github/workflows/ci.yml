@@ -73,7 +73,10 @@ jobs:
               im = im.resize((im.width * 6 // 10, im.height * 6 // 10))
               b = io.BytesIO(); im.save(b, 'JPEG', quality=80)
               print('=====SHOT ' + os.path.basename(f)[:-4])
-              print(base64.b64encode(b.getvalue()).decode())
+              data = base64.b64encode(b.getvalue()).decode()
+              # Long lines are dropped from the log: in pieces.
+              for i in range(0, len(data), 8000):
+                  print(data[i:i + 8000])
               print('=====END')
           PY
       - uses: actions/upload-artifact@v4
