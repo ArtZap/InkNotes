@@ -64,12 +64,18 @@ jobs:
         # Artifacts cannot always be downloaded where the work is reviewed: smaller JPEGs, base64.
         if: always()
         run: |
-          for f in $(find shots -name '*.png' | sort); do
-            convert "$f" -resize 60% -quality 80 "${f%.png}.jpg"
-            echo "=====SHOT $(basename "${f%.png}")"
-            base64 -w 0 "${f%.png}.jpg"; echo
-            echo "=====END"
-          done
+          pip install -q pillow
+          python3 - <<'PY'
+          import glob, base64, io, os
+          from PIL import Image
+          for f in sorted(glob.glob('shots/**/*.png', recursive=True)):
+              im = Image.open(f).convert('RGB')
+              im = im.resize((im.width * 6 // 10, im.height * 6 // 10))
+              b = io.BytesIO(); im.save(b, 'JPEG', quality=80)
+              print('=====SHOT ' + os.path.basename(f)[:-4])
+              print(base64.b64encode(b.getvalue()).decode())
+              print('=====END')
+          PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
