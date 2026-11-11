@@ -67,7 +67,9 @@ export ANDROID_HOME=/mnt/addmem/android-sdk JAVA_HOME=/usr/lib/jvm/temurin-21-jd
 
 APK: `app/build/outputs/apk/debug/app-debug.apk`.
 
-Релиз для пользователей: `./gradlew assembleRelease` → `app/build/outputs/apk/release/app-release.apk`, подписан ключом `keystore/inknotes-release.jks` (пароли — в `keystore.properties`; оба файла не терять: без них обновление поверх уже установленного релиза невозможно). Отладочная и релизная сборки подписаны разными ключами — одна поверх другой не ставится. В релизе «Зонд пера» скрыт.
+Релиз одной командой: `tools/release.sh` — проверит SDK, ключ и git, прогонит юнит-тесты, соберёт подписанный APK, проверит подпись и положит его в `release/InkNotes-<версия>.apk` (рядом SHA-256 и лог). Новая версия: `tools/release.sh --version 0.31` (versionCode поднимется сам). Ещё: `--device` — тесты на подключённом планшете, `--install` — поставить релиз на планшет, `--skip-tests`, `--allow-dirty`, `--help`.
+
+Вручную: `./gradlew assembleRelease` → `app/build/outputs/apk/release/app-release.apk`, подписан ключом `keystore/inknotes-release.jks` (пароли — в `keystore.properties`; оба файла не терять: без них обновление поверх уже установленного релиза невозможно). Отладочная и релизная сборки подписаны разными ключами — одна поверх другой не ставится. В релизе «Зонд пера» скрыт.
 
 ## Тесты
 
