@@ -68,7 +68,7 @@ class V032Screenshots {
         val prefs = ctx.getSharedPreferences("app", 0)
         prefs.edit().putBoolean("toolbarIntroShown", true).remove("toolbarLayout").commit()
         val repo = NotebookRepository(ctx.filesDir)
-        if (repo.list().none { it.title == "Скриншоты 0.32" }) repo.create("Скриншоты 0.32", PaperKind.LINES)
+        if (repo.list().none { it.title == "Скриншоты 0.32" }) repo.create("Скриншоты 0.32", PaperKind.LINED)
         device.setOrientationLandscape()
         val launch = ctx.packageManager.getLaunchIntentForPackage(ctx.packageName)!!.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_NEW_TASK)
         ctx.startActivity(launch)
