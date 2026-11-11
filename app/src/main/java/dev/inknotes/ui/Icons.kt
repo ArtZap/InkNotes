@@ -252,6 +252,10 @@ object InkIcons {
     val Scan by lazy { icon("scan", "M4,8V4h4M16,4h4v4M20,16v4h-4M8,20h-4v-4", accent = "M8,8h8v8h-8zM10,11h4M10,13.5h3") }
     val PhotoEdit by lazy { icon("photo-edit", "M7,3v14h14M3,7h14v14", accent = "M10,14l2.5,-3l2,2.5l1.5,-1.5l1,2") }
     val Pressure by lazy { icon("pressure", "M9,3h6l-1,8h-4zM10,11l2,5l2,-5", accent = "M4,20h16") }
+    val Formula by lazy { icon("formula", "M4,6h6M7,6v12", accent = "M13,9l6,0M13,15h6M16,12a1,1 0,1 0,0.01 0") }
+    val Protractor by lazy { icon("protractor", "M3,17a9,9 0,0 1,18 0zM3,17v2h18v-2", accent = "M12,17l5,-6M7,14.5l0.8,0.8M12,10v1M16.2,12.5l-0.8,0.6") }
+    val Compass by lazy { icon("compass", "M12,3v3M12,6l-5,14M12,6l5,14M8.5,15h7", accent = "M12,4.5a1.5,1.5 0,1 0,0.01 0") }
+    val Timer by lazy { icon("timer", "M12,6a7.5,7.5 0,1 0,0.01 0zM10,2.5h4M12,2.5v3.5", accent = "M12,13.5V9.5M12,13.5l3,2") }
     val PageNav by lazy { icon("page-nav", "M9,6L4,12l5,6M15,6l5,6l-5,6") }
     val Add by lazy { icon("add", "M12,5v14M5,12h14") }
     val Minus by lazy { icon("minus", "M5,12h14") }

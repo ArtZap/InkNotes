@@ -477,6 +477,50 @@ object MathPage {
     }
 
     /**
+     * The text of a formula written by hand (a lasso selection), in the parser's LaTeX-like
+     * form: the first reading that parses (each side of an "=" on its own), else the first
+     * one read; null when nothing could be read.
+     */
+    fun formulaSource(strokes: List<Ink>, reader: RunReader): String? {
+        if (strokes.isEmpty()) return null
+        val heights = strokes.filter { !it.isDash }.map { it.height }.sorted()
+        val h = max(heights.getOrNull(heights.size * 3 / 4) ?: strokes.maxOf { it.height }, MIN_H)
+        val eq = findEquals(strokes).firstOrNull()
+        val mids = strokes.filter { it.height in 0.4f * h..1.6f * h }.map { it.cy }
+        val axis = eq?.cy ?: MathLayout.median(mids) ?: Box.of(strokes).cy
+        val pieces = try {
+            MathLayout.formula(strokes, h, axis)
+        } catch (e: MathError) {
+            return reader.read(strokes.sortedBy { it.order }, h).firstOrNull()?.let(MathText::normalize)?.ifEmpty { null }
+        }
+        val holes = pieces.filterIsInstance<Piece.Hole>()
+        if (holes.size > MAX_HOLES) return null
+        val cands = holes.map { hole ->
+            reader.read(hole.strokes, hole.h)
+                .map { if (it.trim() == "=") "=" else MathText.normalize(it) }
+                .filter { it.isNotEmpty() }.take(MAX_CANDIDATES).ifEmpty { listOf("?") }
+        }
+        fun parses(t: String) = t.split('=').all { side -> side.isNotBlank() && runCatching { Parser.parse(side) }.isSuccess }
+        var first: String? = null
+        for (choice in combinations(cands).take(FORMULA_TRIES)) {
+            var k = 0
+            val text = buildString {
+                for (p in pieces) {
+                    when (p) {
+                        is Piece.Text -> append(p.s)
+                        is Piece.Hole -> append(choice[k++])
+                    }
+                }
+            }
+            if (first == null) first = text
+            for (variant in integralVariants(text).flatMap { listOf(it) + bracketFixes(it) }) if (parses(variant)) return variant
+        }
+        return first
+    }
+
+    private const val FORMULA_TRIES = 120
+
+    /**
      * Reads the left side of an "=" to compute. Words before the formula on the same line
      * ("Ответ: 2+3 =") spoil the reading; then the parts left of wide gaps are dropped one by
      * one while that gives a cleaner reading (one that parses, with fewer unknown letters).

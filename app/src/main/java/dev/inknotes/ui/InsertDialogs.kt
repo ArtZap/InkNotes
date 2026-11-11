@@ -78,7 +78,7 @@ fun TableDialog(onDismiss: () -> Unit, onInsert: (rows: Int, cols: Int) -> Unit)
 }
 
 @Composable
-private fun Stepper(label: String, value: Int, range: IntRange, onChange: (Int) -> Unit) {
+internal fun Stepper(label: String, value: Int, range: IntRange, onChange: (Int) -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(label, Modifier.width(110.dp))
         IconAction(InkIcons.Minus, "Меньше", { onChange((value - 1).coerceIn(range)) }, enabled = value > range.first)

@@ -99,10 +99,12 @@ object Toolbars {
         "background", "page-size", "page-shift", "fractions", "units", "share", "save", "pdf", "theme", "pen-button", "scribble", "help",
         // Added in 0.32.
         "zoom-window", "scan", "pdf-share", "print", "pressure",
+        // Added in 0.33.
+        "formula", "protractor", "compass", "timer",
     )
 
     /** Buttons there were when layouts could first be saved (later ones are placed by [FULL] once). */
-    val KNOWN_AT_START: Set<String> = ALL.toSet() - setOf("zoom-window", "scan", "pdf-share", "print", "pressure")
+    val KNOWN_AT_START: Set<String> = ALL.toSet() - setOf("zoom-window", "scan", "pdf-share", "print", "pressure", "formula", "protractor", "compass", "timer")
 
     /** Undo always stays on a bar; the help is never hidden (the menu is enough for it). */
     fun allowed(id: String): Set<Zone> = when (id) {
@@ -115,7 +117,7 @@ object Toolbars {
         tools = listOf("pen", "highlighter", "neon", "eraser", "lasso", "area"),
         top = listOf("spoiler", "laser", "picture", "table", "stamps", "ruler", "zoom-window", "undo", "redo", "pages", "search", "math", "page-nav", "add-page"),
         menu = listOf(
-            "text", "space", "scan", "page-text", "toc", "layers", "cards", "record", "recordings",
+            "text", "space", "scan", "formula", "protractor", "compass", "page-text", "toc", "layers", "cards", "timer", "record", "recordings",
             "background", "page-size", "page-shift", "fractions", "units", "pdf-share", "pdf", "print", "share", "save", "theme", "pen-button", "pressure", "scribble", "help",
         ),
     )
@@ -137,7 +139,7 @@ object Toolbars {
                 tools = listOf("pen", "highlighter", "spoiler", "eraser", "lasso"),
                 top = listOf("picture", "record", "zoom-window", "undo", "redo", "pages", "search", "page-nav", "add-page"),
                 menu = listOf(
-                    "text", "space", "scan", "toc", "cards", "recordings", "page-text", "layers", "table",
+                    "text", "space", "scan", "toc", "cards", "timer", "recordings", "page-text", "layers", "table", "formula",
                     "background", "page-size", "pdf-share", "pdf", "print", "share", "save", "theme", "scribble", "help",
                 ),
             ),
@@ -147,9 +149,9 @@ object Toolbars {
             "Ответы после «=», линейка, штампы, таблицы, единицы измерения",
             ToolbarLayout(
                 tools = listOf("pen", "highlighter", "eraser", "lasso", "area"),
-                top = listOf("math", "ruler", "stamps", "table", "picture", "undo", "redo", "pages", "page-nav", "add-page"),
+                top = listOf("math", "formula", "ruler", "protractor", "compass", "stamps", "table", "picture", "undo", "redo", "pages", "page-nav", "add-page"),
                 menu = listOf(
-                    "units", "fractions", "text", "space", "zoom-window", "scan", "search", "toc", "layers", "spoiler", "cards",
+                    "units", "fractions", "text", "space", "zoom-window", "scan", "search", "toc", "layers", "spoiler", "cards", "timer",
                     "background", "page-size", "page-shift", "pdf-share", "pdf", "print", "share", "save", "theme", "help",
                 ),
             ),
