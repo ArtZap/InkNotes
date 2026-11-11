@@ -126,7 +126,7 @@ class EditorController(
     var toolbar by mutableStateOf(dev.inknotes.data.ToolbarLayout.decode(prefs.toolbarLayout))
         private set
 
-    fun setToolbar(layout: dev.inknotes.data.ToolbarLayout) {
+    fun changeToolbar(layout: dev.inknotes.data.ToolbarLayout) {
         toolbar = layout
         prefs.toolbarLayout = layout.encode()
     }

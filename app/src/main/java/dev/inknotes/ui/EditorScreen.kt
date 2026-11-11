@@ -173,7 +173,7 @@ fun EditorScreen(
 
     val placing = Placing(
         controller.toolbar,
-        place = { id, zone -> controller.setToolbar(controller.toolbar.moved(id, zone)) },
+        place = { id, zone -> controller.changeToolbar(controller.toolbar.moved(id, zone)) },
         customize = { showCustomize = true },
     )
     val actions = barActions(
@@ -257,7 +257,7 @@ fun EditorScreen(
     controller.tappedAnswer?.let { AnswerDialog(controller, it, onDismiss = { controller.tappedAnswer = null }) }
     controller.studyCards?.let { CardsDialog(controller, it, onDismiss = { controller.closeCards() }) }
     if (showToc) TocDialog(controller, onDismiss = { showToc = false })
-    if (showCustomize) CustomizeBarsDialog(controller.toolbar, onChange = controller::setToolbar, onDismiss = { showCustomize = false })
+    if (showCustomize) CustomizeBarsDialog(controller.toolbar, onChange = controller::changeToolbar, onDismiss = { showCustomize = false })
     if (showAllFunctions) {
         AllFunctionsDialog(
             controller.toolbar.hidden.flatMap { id -> if (id == "page-nav") pageNavMenu(controller) else listOfNotNull(actions[id]) },
@@ -268,7 +268,7 @@ fun EditorScreen(
     if (controller.toolbarIntro) {
         ToolbarIntroDialog(
             onPick = {
-                controller.setToolbar(it.layout)
+                controller.changeToolbar(it.layout)
                 controller.closeToolbarIntro()
             },
             onCustomize = {
