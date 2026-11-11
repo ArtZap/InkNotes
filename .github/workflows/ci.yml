@@ -30,7 +30,7 @@ jobs:
 
   screenshots:
     # Pictures of the editor on a tablet emulator, to look at changes of the interface.
-    if: github.event_name == 'workflow_dispatch' || contains(github.ref, 'toolbars')
+    if: github.event_name == 'workflow_dispatch' || contains(github.ref, 'toolbars') || contains(github.ref, 'v0.3')
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -58,7 +58,7 @@ jobs:
           script: |
             adb install -r app/build/outputs/apk/debug/app-debug.apk
             adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
-            adb shell am instrument -w -e class dev.inknotes.ui.BarsScreenshots dev.inknotes.test/androidx.test.runner.AndroidJUnitRunner || true
+            adb shell am instrument -w -e class dev.inknotes.ui.BarsScreenshots,dev.inknotes.ui.V032Screenshots dev.inknotes.test/androidx.test.runner.AndroidJUnitRunner || true
             mkdir -p shots && adb pull /sdcard/Android/data/dev.inknotes/files/shots shots || true
       - name: Screenshots into the log
         # Artifacts cannot always be downloaded where the work is reviewed: smaller JPEGs, base64.

@@ -52,6 +52,7 @@ import dev.inknotes.math.Printer
 import dev.inknotes.search.TextLine
 import java.io.File
 import java.util.concurrent.Executors
+import kotlin.math.max
 import kotlin.math.min
 
 /**
@@ -110,6 +111,31 @@ class EditorController(
         private set
     var spoilerSize by mutableFloatStateOf(prefs.toolSize("spoiler", SPOILER_RANGE.default).coerceIn(SPOILER_RANGE.min, SPOILER_RANGE.max))
         private set
+
+    /** The pen line follows the pressure; off, it is one width all along. */
+    var penPressure by mutableStateOf(prefs.penPressure)
+        private set
+
+    fun togglePenPressure() {
+        penPressure = !penPressure
+        prefs.penPressure = penPressure
+        syncView()
+        showStatus(if (penPressure) "Ручка чувствует нажим" else "Ручка без нажима: линия одной толщины")
+    }
+
+    /** The zoom window is open at the bottom of the page. */
+    var zoomPadOpen by mutableStateOf(false)
+        private set
+
+    fun toggleZoomPad() {
+        val v = view ?: return
+        if (v.zoomPadOpen) v.closeZoomPad() else v.openZoomPad()
+    }
+
+    override fun onZoomPadChanged(open: Boolean) {
+        zoomPadOpen = open
+        if (open && tool != Tool.PEN && tool != Tool.FOUNTAIN && tool != Tool.HIGHLIGHTER && tool != Tool.NEON && tool != Tool.SPOILER) selectTool(Tool.PEN)
+    }
 
     /** A zigzag over writing erases it. */
     var scribbleErase by mutableStateOf(prefs.scribbleErase)
@@ -293,6 +319,7 @@ class EditorController(
         handler.removeCallbacks(mathRunnable)
         view?.listener = null
         view = null
+        zoomPadOpen = false
     }
 
     /** The notebook's tab is closed: nothing of it runs any more. */
@@ -380,18 +407,8 @@ class EditorController(
         repo.importImageAsync(notebook, uri, resolver) { result ->
             importingImage = false
             val (file, pxW, pxH) = result ?: return@importImageAsync showStatus("Не удалось вставить картинку")
-            val v = view ?: return@importImageAsync
-            val page = pageIndex
             // About 40% of the page width, smaller pictures not upscaled past 2× their pixels.
-            var w = min(IMAGE_WIDTH, pxW * 2f)
-            var h = w * pxH / pxW
-            if (h > IMAGE_MAX_HEIGHT) {
-                w *= IMAGE_MAX_HEIGHT / h
-                h = IMAGE_MAX_HEIGHT
-            }
-            val c = v.visibleCenter(page)
-            selectTool(Tool.LASSO)
-            v.insert(page, images = listOf(PageImage(file, c[0] - w / 2, c[1] - h / 2, w, h)))
+            placeNewImage(file, pxW, pxH, pageIndex)
         }
     }
 
@@ -771,21 +788,163 @@ class EditorController(
 
     // ---------------------------------------------------------------- export
 
-    /** Writes the notebook to [uri] (from the system "save as" dialog) on a background thread. */
-    fun exportPdf(uri: Uri, resolver: ContentResolver) {
+    /** What to export: PDF or PNG pictures, and which pages. */
+    enum class ExportFormat(val ext: String, val mime: String) { PDF("pdf", "application/pdf"), PNG("png", "image/png") }
+
+    sealed class ExportPages {
+        data object All : ExportPages()
+        data object Current : ExportPages()
+        data class Range(val from: Int, val to: Int) : ExportPages()
+    }
+
+    /** Page indices of [sel], in order (a range given backwards is turned round). */
+    fun exportIndices(sel: ExportPages): List<Int> {
+        val n = notebook.pageIds.size
+        return when (sel) {
+            ExportPages.All -> (0 until n).toList()
+            ExportPages.Current -> listOf(pageIndex.coerceIn(0, max(0, n - 1)))
+            is ExportPages.Range -> {
+                val a = (min(sel.from, sel.to) - 1).coerceIn(0, max(0, n - 1))
+                val b = (max(sel.from, sel.to) - 1).coerceIn(0, max(0, n - 1))
+                (a..b).toList()
+            }
+        }.filter { it < n }
+    }
+
+    /** File name of an export: the notebook's title, with the page or pages when not all. */
+    fun exportName(pages: List<Int>, format: ExportFormat, page: Int? = null): String {
+        val base = fileName(notebook.title)
+        val all = pages.size == notebook.pageIds.size
+        val part = when {
+            page != null -> " — стр. ${page + 1}"
+            all -> ""
+            pages.size == 1 -> " — стр. ${pages[0] + 1}"
+            else -> " — стр. ${pages.first() + 1}-${pages.last() + 1}"
+        }
+        return "$base$part.${format.ext}"
+    }
+
+    var exportPagesChoice: String
+        get() = prefs.exportPages
+        set(value) {
+            prefs.exportPages = value
+        }
+
+    var exportFormat: ExportFormat
+        get() = if (prefs.exportFormat == "png") ExportFormat.PNG else ExportFormat.PDF
+        set(value) {
+            prefs.exportFormat = value.ext
+        }
+
+    /** Writes [pages] as PDF to [out] or as PNG files (one per page) from [outFor], on a background thread. */
+    private fun runExport(pages: List<Int>, format: ExportFormat, outFor: (page: Int, index: Int) -> java.io.OutputStream?, done: (Boolean) -> Unit) {
         flush()
         val nb = notebook
-        status = "Экспорт PDF…"
+        status = if (format == ExportFormat.PDF) "Экспорт PDF…" else "Экспорт PNG…"
         Thread({
             val result = runCatching {
-                (resolver.openOutputStream(uri) ?: error("cannot open output")).use { out ->
-                    PdfExporter.export(repo, nb, out) { done, total ->
-                        handler.post { status = "Экспорт PDF: $done / $total" }
+                if (format == ExportFormat.PDF) {
+                    (outFor(-1, 0) ?: error("cannot open output")).use { out ->
+                        PdfExporter.export(repo, nb, out, pages) { k, total ->
+                            handler.post { status = "Экспорт PDF: $k / $total" }
+                        }
+                    }
+                } else {
+                    pages.forEachIndexed { k, i ->
+                        (outFor(i, k) ?: error("cannot open output")).use { out -> PdfExporter.writePng(repo, nb, i, out) }
+                        handler.post { status = "Экспорт PNG: ${k + 1} / ${pages.size}" }
                     }
                 }
             }
-            handler.post { showStatus(if (result.isSuccess) "PDF сохранён" else "Не удалось сохранить PDF") }
-        }, "pdf-export").start()
+            handler.post {
+                status = null
+                done(result.isSuccess)
+            }
+        }, "export").start()
+    }
+
+    /** Writes the whole notebook as PDF to [uri] (from the system "save as" dialog). */
+    fun exportPdf(uri: Uri, resolver: ContentResolver) = exportTo(uri, resolver, notebook.pageIds.indices.toList(), ExportFormat.PDF)
+
+    /** [pages] in [format] to [uri] chosen in the system "save as" dialog (PNG: one page). */
+    fun exportTo(uri: Uri, resolver: ContentResolver, pages: List<Int>, format: ExportFormat) {
+        if (pages.isEmpty()) return
+        val only = if (format == ExportFormat.PNG) pages.take(1) else pages
+        runExport(only, format, { _, _ -> resolver.openOutputStream(uri) }) { ok ->
+            showStatus(if (!ok) "Не удалось сохранить" else if (format == ExportFormat.PDF) "PDF сохранён" else "Картинка сохранена")
+        }
+    }
+
+    /** PNG pictures of [pages] into the folder [tree] (picked in the system dialog). */
+    fun exportPngToFolder(tree: Uri, resolver: ContentResolver, pages: List<Int>) {
+        if (pages.isEmpty()) return
+        val dir = android.provider.DocumentsContract.buildDocumentUriUsingTree(tree, android.provider.DocumentsContract.getTreeDocumentId(tree))
+        runExport(pages, ExportFormat.PNG, { page, _ ->
+            val name = exportName(pages, ExportFormat.PNG, page).removeSuffix(".png")
+            android.provider.DocumentsContract.createDocument(resolver, dir, "image/png", name)?.let { resolver.openOutputStream(it) }
+        }) { ok -> showStatus(if (ok) "Сохранено картинок: ${pages.size}" else "Не удалось сохранить картинки") }
+    }
+
+    /** [pages] in [format] as files in the cache, handed to [onReady] as content:// URIs to share. */
+    fun exportForSharing(context: Context, pages: List<Int>, format: ExportFormat, onReady: (List<Uri>) -> Unit) {
+        if (pages.isEmpty()) return
+        val dir = File(context.cacheDir, "shared").apply { mkdirs() }
+        dir.listFiles()?.forEach { it.delete() } // only the latest shared files are kept
+        val files = ArrayList<File>()
+        runExport(pages, format, { page, _ ->
+            val f = File(dir, if (format == ExportFormat.PDF) exportName(pages, format) else exportName(pages, format, page))
+            synchronized(files) { files += f }
+            f.outputStream()
+        }) { ok ->
+            if (ok) onReady(files.map { FileProvider.getUriForFile(context, "${context.packageName}.files", it) })
+            else showStatus("Не удалось подготовить файл")
+        }
+    }
+
+    /** Sends [pages] to the system print dialog (as the PDF the notebook exports to). */
+    fun print(context: Context, pages: List<Int>) {
+        if (pages.isEmpty()) return
+        flush()
+        val pm = context.getSystemService(Context.PRINT_SERVICE) as? android.print.PrintManager ?: return showStatus("Печать недоступна")
+        val nb = notebook
+        val name = exportName(pages, ExportFormat.PDF).removeSuffix(".pdf")
+        val adapter = object : android.print.PrintDocumentAdapter() {
+            override fun onLayout(
+                oldAttributes: android.print.PrintAttributes?,
+                newAttributes: android.print.PrintAttributes,
+                cancellationSignal: android.os.CancellationSignal,
+                callback: LayoutResultCallback,
+                extras: android.os.Bundle?,
+            ) {
+                if (cancellationSignal.isCanceled) return callback.onLayoutCancelled()
+                val info = android.print.PrintDocumentInfo.Builder("$name.pdf")
+                    .setContentType(android.print.PrintDocumentInfo.CONTENT_TYPE_DOCUMENT)
+                    .setPageCount(pages.size)
+                    .build()
+                callback.onLayoutFinished(info, oldAttributes == null)
+            }
+
+            override fun onWrite(
+                ranges: Array<out android.print.PageRange>,
+                destination: android.os.ParcelFileDescriptor,
+                cancellationSignal: android.os.CancellationSignal,
+                callback: WriteResultCallback,
+            ) {
+                Thread({
+                    val result = runCatching {
+                        java.io.FileOutputStream(destination.fileDescriptor).use { out -> PdfExporter.export(repo, nb, out, pages) { _, _ -> } }
+                    }
+                    handler.post {
+                        when {
+                            cancellationSignal.isCanceled -> callback.onWriteCancelled()
+                            result.isSuccess -> callback.onWriteFinished(arrayOf(android.print.PageRange.ALL_PAGES))
+                            else -> callback.onWriteFailed(result.exceptionOrNull()?.message)
+                        }
+                    }
+                }, "print").start()
+            }
+        }
+        pm.print(name, adapter, null)
     }
 
     /** Saves the notebook as an `.inknote` file at [uri] (system "save as" dialog). */
@@ -1670,6 +1829,83 @@ class EditorController(
         selectionLineKinds = if (count > 0) view?.selectedLineKinds().orEmpty() else emptySet()
         selectionLineWidth = if (count > 0) view?.selectionLineWidth() else null
         selectedText = if (count == 1) view?.selectedTextBox()?.text?.text else null
+        selectedPicture = if (count == 1) view?.selectedPicture() else null
+    }
+
+    /** The one selected picture: it can be cropped, straightened… */
+    var selectedPicture by mutableStateOf<PageImage?>(null)
+        private set
+
+    /** A picture open in the photo editor: what to edit, and the picture on the page it replaces (null: a new one). */
+    class PhotoEdit(val bitmap: Bitmap, val target: PageImage?, val page: Int, val mode: PhotoMode)
+
+    var photoEdit by mutableStateOf<PhotoEdit?>(null)
+        private set
+
+    /** Opens the selected picture in the photo editor. */
+    fun editSelectedPicture() {
+        val img = view?.selectedPicture() ?: return
+        val nb = notebook
+        val page = view?.selectionPageIndex ?: pageIndex
+        status = "Открываю картинку…"
+        Thread({
+            val bmp = repo.loadImage(nb, img.file)?.let { it.copy(Bitmap.Config.ARGB_8888, true).also { c -> if (c !== it) it.recycle() } }
+            handler.post {
+                status = null
+                if (bmp == null) showStatus("Не удалось открыть картинку") else photoEdit = PhotoEdit(bmp, img, page, PhotoMode.CROP)
+            }
+        }, "photo-open").start()
+    }
+
+    /** A photo from the camera for the document scanner: straightened first, then put on the page. */
+    fun scanned(uri: Uri, resolver: ContentResolver) {
+        status = "Открываю снимок…"
+        Thread({
+            val bmp = repo.decodePicture(uri, resolver)
+            handler.post {
+                status = null
+                if (bmp == null) showStatus("Снимок не получился") else photoEdit = PhotoEdit(bmp, null, pageIndex, PhotoMode.CORNERS)
+            }
+        }, "scan-open").start()
+    }
+
+    fun cancelPhotoEdit() {
+        photoEdit = null
+    }
+
+    /** The edited picture saved into the notebook: in place of the old one (as wide), or new on the page. */
+    fun finishPhotoEdit(result: Bitmap) {
+        val edit = photoEdit ?: return
+        photoEdit = null
+        val nb = notebook
+        status = "Сохраняю картинку…"
+        repo.saveImageAsync(nb, result) { saved ->
+            status = null
+            val (file, pxW, pxH) = saved ?: return@saveImageAsync showStatus("Не удалось сохранить картинку")
+            val v = view ?: return@saveImageAsync
+            val old = edit.target
+            if (old != null && v.selectedPicture() === old) {
+                val w = old.w
+                val h = w * pxH / pxW
+                val cy = old.y + old.h / 2
+                v.replaceSelection(PageImage(file, old.x, cy - h / 2, w, h, old.rotation, layer = old.layer))
+            } else {
+                placeNewImage(file, pxW, pxH, edit.page)
+            }
+        }
+    }
+
+    private fun placeNewImage(file: String, pxW: Int, pxH: Int, page: Int) {
+        val v = view ?: return
+        var w = min(IMAGE_WIDTH, pxW * 2f)
+        var h = w * pxH / pxW
+        if (h > IMAGE_MAX_HEIGHT) {
+            w *= IMAGE_MAX_HEIGHT / h
+            h = IMAGE_MAX_HEIGHT
+        }
+        val c = v.visibleCenter(page)
+        selectTool(Tool.LASSO)
+        v.insert(page, images = listOf(PageImage(file, c[0] - w / 2, c[1] - h / 2, w, h)))
     }
 
     /** The selected lines drawn as [kind]: neon as an ordinary pen line, a pen line as pencil… */
@@ -1770,6 +2006,7 @@ class EditorController(
         v.spoilerColor = spoilerColor
         v.spoilerSize = spoilerSize
         v.scribbleErase = scribbleErase
+        v.penPressure = penPressure
         v.straightHighlighter = straightHighlighter
         v.eraserRadiusDp = eraserSize
         v.eraserMode = eraserMode
