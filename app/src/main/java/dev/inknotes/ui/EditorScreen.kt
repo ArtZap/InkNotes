@@ -524,16 +524,17 @@ private fun TopRow(
                 IconAction(InkIcons.More, "Ещё", { menuOpen = true })
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                     val close = { menuOpen = false }
+                    // Settings of the bars first: a long menu would hide them at its end.
+                    MenuRow(BarAction("customize", "Настроить панели…", "Какие кнопки где", InkIcons.Tune, placing.customize), null, close)
+                    if (hiddenCount > 0) {
+                        MenuRow(BarAction("all", "Все функции… ($hiddenCount скрыто)", "Скрытые функции", InkIcons.AllFunctions, onAllFunctions), null, close)
+                    }
+                    HorizontalDivider()
                     if (spilled.isNotEmpty()) {
                         MenuRows(spilled, placing, close)
                         HorizontalDivider()
                     }
                     MenuRows(menu.flatMap { if (it.id == "page-nav") pageNavMenu(c) else listOf(it) }, placing, close)
-                    if (menu.isNotEmpty()) HorizontalDivider()
-                    if (hiddenCount > 0) {
-                        MenuRow(BarAction("all", "Все функции… ($hiddenCount скрыто)", "Скрытые функции", InkIcons.AllFunctions, onAllFunctions), null, close)
-                    }
-                    MenuRow(BarAction("customize", "Настроить панели…", "Какие кнопки где", InkIcons.Tune, placing.customize), null, close)
                 }
             }
         }
