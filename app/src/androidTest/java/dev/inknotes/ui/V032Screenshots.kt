@@ -96,8 +96,14 @@ class V032Screenshots {
 
         // Export dialog from the menu.
         device.findObject(By.desc("Ещё"))?.click()
-        device.wait(Until.hasObject(By.text("Экспорт: PDF, PNG…")), 5_000)
+        device.wait(Until.hasObject(By.text("Настроить панели…")), 5_000)
         shot("15-menu")
+        // The menu is long: scroll it down until the item shows.
+        repeat(6) {
+            if (device.hasObject(By.text("Экспорт: PDF, PNG…"))) return@repeat
+            device.findObject(By.scrollable(true))?.scroll(androidx.test.uiautomator.Direction.DOWN, 0.8f)
+        }
+        shot("15b-menu-end")
         click("Экспорт: PDF, PNG…")
         shot("16-export")
         click("Диапазон")
