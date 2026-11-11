@@ -1030,7 +1030,8 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             ruler.protractor = protractor
             val c = floatArrayOf(width / 2f, height / 2f).also(viewToWorld::mapPoints)
             ruler.cx = c[0]
-            ruler.cy = c[1]
+            // The half disc stands on its centre: lower, so all of it is in sight.
+            ruler.cy = c[1] + if (protractor) Ruler.RADIUS * 0.45f else 0f
             ruler.angle = 0f
             ruler.shown = true
         }

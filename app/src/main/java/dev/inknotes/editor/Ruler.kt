@@ -232,7 +232,7 @@ class Ruler {
 
     companion object {
         /** The round edge of the protractor: radius and the strip under the base line. */
-        val RADIUS = 75f / Notebook.MM_PER_UNIT
+        val RADIUS = 55f / Notebook.MM_PER_UNIT
         val BASE = 8f / Notebook.MM_PER_UNIT
 
         /** [edgeNear] for the protractor's round edge. */
