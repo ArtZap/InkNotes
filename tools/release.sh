@@ -77,6 +77,42 @@ STORE=$(sed -n 's/^storeFile=//p' keystore.properties)
 [ -f "$STORE" ] || die "Ключ $STORE из keystore.properties не найден"
 ok "ключ: $STORE"
 
+# ---------- планшет: что на нём стоит (до сборки, чтобы не ждать зря) ----------
+# Отладочная и релизная сборки подписаны разными ключами: одна поверх другой не встаёт,
+# а удаление приложения удаляет тетради. Поэтому сверяем ключ заранее.
+hexsha() { tr -d ': ' | tr 'A-F' 'a-f'; }
+installed_cert() {
+  local path tmp
+  path=$("$ADB" shell pm path dev.inknotes 2>/dev/null | sed -n 's/^package://p' | grep base.apk | tr -d '\r' | head -1)
+  [ -n "$path" ] || return 0
+  tmp=$(mktemp -d)
+  "$ADB" pull "$path" "$tmp/base.apk" >/dev/null 2>&1 \
+    && "$APKSIGNER" verify --print-certs "$tmp/base.apk" 2>/dev/null | sed -n 's/.*certificate SHA-256 digest: //p' | head -1 | hexsha
+  rm -rf "$tmp"
+}
+if [ "$DEVICE" = 1 ] || [ "$INSTALL" = 1 ]; then
+  step "Планшет"
+  [ "$DEVICE" = 1 ] && [ "$INSTALL" = 1 ] && die "--device и --install вместе нельзя: тесты ставят на планшет отладочную сборку, а релиз подписан другим ключом и поверх неё не встанет."
+  [ -x "$ADB" ] || die "Нет adb в $ANDROID_HOME/platform-tools"
+  [ "$("$ADB" devices | awk 'NR>1 && $2=="device"' | wc -l)" -ge 1 ] || die "Планшет не подключён (adb devices пуст)"
+  ON_TABLET=""
+  [ -x "$APKSIGNER" ] && ON_TABLET=$(installed_cert)
+  RELEASE_CERT=$(sed -n 's/^storePassword=//p' keystore.properties | {
+    read -r sp; "$KEYTOOL" -list -v -keystore "$STORE" -alias "$(sed -n 's/^keyAlias=//p' keystore.properties)" -storepass "$sp" 2>/dev/null; } \
+    | sed -n 's/^[[:space:]]*SHA256: //p' | head -1 | hexsha)
+  if [ -z "$ON_TABLET" ]; then
+    ok "InkNotes на планшете нет (или ключ не прочитать) — ставим как есть"
+  elif [ "$ON_TABLET" = "$RELEASE_CERT" ]; then
+    ok "на планшете релизная сборка"
+    [ "$DEVICE" = 1 ] && die "На планшете релиз, а тесты ставят отладочную сборку с другим ключом — не встанет. Запустите без --device (или на другом устройстве)."
+  else
+    ok "на планшете отладочная сборка (там ваши тетради)"
+    [ "$INSTALL" = 1 ] && die "Релиз не встанет поверх отладочной сборки: у них разные ключи. Чтобы перейти на релиз — сначала
+  перенесите тетради (Поделиться → файл), удалите приложение и запустите снова с --install.
+  Для друзей --install не нужен: отправьте им файл из release/."
+  fi
+fi
+
 # ---------- git ----------
 step "Состояние git"
 if git rev-parse --git-dir >/dev/null 2>&1; then
@@ -191,10 +227,9 @@ echo "    SHA-256 $SHA"
 
 if [ "$INSTALL" = 1 ]; then
   step "Установка на планшет"
-  [ -x "$ADB" ] || die "Нет adb в $ANDROID_HOME/platform-tools"
   if ! "$ADB" install -r "$OUT_APK"; then
-    warn "Не встало поверх. Если там отладочная сборка — у неё другой ключ: сначала"
-    warn "перенесите тетради (Поделиться → файл), потом удалите её и поставьте релиз."
+    warn "Не встало поверх. Если там сборка с другим ключом — сначала перенесите"
+    warn "тетради (Поделиться → файл), потом удалите приложение и поставьте релиз."
     exit 1
   fi
   ok "установлено"
