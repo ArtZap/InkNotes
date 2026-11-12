@@ -56,6 +56,9 @@ fun SplitPanes(
 ) {
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val total = constraints.maxWidth.toFloat().coerceAtLeast(1f)
+        // While the line is dragged only a guide moves; the panes change size once, at the end
+        // (a page view resized at every frame redraws its whole ink layer every frame).
+        var dragAt by remember { mutableStateOf<Float?>(null) }
         Row(Modifier.fillMaxSize()) {
             Box(Modifier.weight(share).fillMaxHeight().noticeTouch { onFocus(true) }) { first() }
             // The handle: a thin line with a wider strip to grab.
@@ -64,11 +67,18 @@ fun SplitPanes(
                     .width(12.dp)
                     .fillMaxHeight()
                     .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .pointerInput(total) {
+                    .pointerInput(total, share) {
                         var at = share
-                        detectHorizontalDragGestures { _, dx ->
+                        detectHorizontalDragGestures(
+                            onDragStart = { at = share; dragAt = share },
+                            onDragEnd = {
+                                dragAt = null
+                                onShare(at)
+                            },
+                            onDragCancel = { dragAt = null },
+                        ) { _, dx ->
                             at = (at + dx / total).coerceIn(MIN_SHARE, 1f - MIN_SHARE)
-                            onShare(at)
+                            dragAt = at
                         }
                     },
                 contentAlignment = Alignment.Center,
@@ -76,6 +86,16 @@ fun SplitPanes(
                 Box(Modifier.width(4.dp).heightIn(min = 48.dp).background(MaterialTheme.colorScheme.outline, RoundedCornerShape(2.dp)))
             }
             Box(Modifier.weight(1f - share).fillMaxHeight().noticeTouch { onFocus(false) }) { second() }
+        }
+        dragAt?.let { at ->
+            val x = with(androidx.compose.ui.platform.LocalDensity.current) { (total * at).toDp() }
+            Box(
+                Modifier
+                    .padding(start = x)
+                    .width(4.dp)
+                    .fillMaxHeight()
+                    .background(MaterialTheme.colorScheme.primary),
+            )
         }
     }
 }
