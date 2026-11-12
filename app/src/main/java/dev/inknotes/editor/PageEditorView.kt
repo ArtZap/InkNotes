@@ -1356,6 +1356,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             activePage = pageAt(e.getX(index), e.getY(index))
             return Mode.COMPASS
         }
+        android.util.Log.i("InkPdf", "classify pdfTextOn=$pdfTextOn pen=$pen tool=$toolType")
         if (pdfTextOn && pen && !penButton && !eraserEnd) {
             activePage = pageAt(e.getX(index), e.getY(index))
             if (source?.pdfWords(activePage) != null) return Mode.PDF_TEXT
@@ -2857,6 +2858,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         val words = source?.pdfWords(activePage).orEmpty()
         val p = toPage(activePage, e.getX(index), e.getY(index))
         val at = dev.inknotes.data.PdfWords.wordAt(words, p[0], p[1], PDF_WORD_REACH_DP * density / currentScale())
+        android.util.Log.i("InkPdf", "pick start page $activePage at ${p[0]},${p[1]}: word $at of ${words.size}")
         hideCursor()
         if (at < 0) {
             clearPdfText()
@@ -2879,6 +2881,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
     }
 
     private fun endPdfText() {
+        android.util.Log.i("InkPdf", "pick end $pdfTextPage $pdfTextFrom..$pdfTextTo")
         if (pdfTextPage < 0) listener?.onPdfTextPicked(-1, -1, -1)
         else listener?.onPdfTextPicked(pdfTextPage, minOf(pdfTextFrom, pdfTextTo), maxOf(pdfTextFrom, pdfTextTo))
     }
