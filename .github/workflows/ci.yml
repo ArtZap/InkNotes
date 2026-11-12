@@ -70,6 +70,7 @@ jobs:
           profile: pixel_tablet
           disable-animations: true
           script: |
+            adb shell settings put global hide_error_dialogs 1 || true
             adb install -r app/build/outputs/apk/minified/app-minified.apk
             adb install -r app/build/outputs/apk/androidTest/minified/app-minified-androidTest.apk
             if [ ! -d app/src/androidTest/assets/golden ]; then adb shell am instrument -w -e golden make -e class dev.inknotes.data.GoldenFilesTest#make dev.inknotes.test/androidx.test.runner.AndroidJUnitRunner; mkdir -p golden && adb pull /sdcard/Android/data/dev.inknotes/files/golden golden; for f in golden/golden/*; do echo "=====GOLDEN $(basename $f)"; base64 -w 8000 $f; echo "=====END"; done; fi

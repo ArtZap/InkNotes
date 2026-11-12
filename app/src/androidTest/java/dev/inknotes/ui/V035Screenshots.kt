@@ -84,7 +84,8 @@ class V035Screenshots {
         shell("input stylus swipe ${(w * 0.25).toInt()} ${(h * 0.48).toInt()} ${(w * 0.35).toInt()} ${(h * 0.45).toInt()} 400", 2500)
         shell("input stylus swipe ${(w * 0.45).toInt()} ${(h * 0.6).toInt()} ${(w * 0.6).toInt()} ${(h * 0.62).toInt()} 400", 1500)
         shot("41-recording")
-        menu("Остановить запись")
+        // The recording bar's own button.
+        click("Стоп")
         shot("42-recorded-underlined")
         // A finger tap on the first word plays the recording from then.
         shell("input tap ${(w * 0.3).toInt()} ${(h * 0.46).toInt()}", 1500)
