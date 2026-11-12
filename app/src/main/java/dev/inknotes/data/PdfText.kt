@@ -42,7 +42,10 @@ class PdfText(context: Context) : Closeable {
     /** Words and links of page [index] of [file], on the main thread; null when it can't be read. */
     fun pageAsync(file: File, index: Int, onDone: (Page?) -> Unit) {
         exec.execute {
-            val page = runCatching { Reader.readPage(doc(file), index) }.getOrNull()
+            val page = runCatching { Reader.readPage(doc(file), index) }
+                .onFailure { android.util.Log.w(TAG, "page $index of ${file.name}", it) }
+                .getOrNull()
+            page?.let { p -> android.util.Log.i(TAG, "page $index: ${p.words.size} words, ${p.links.size} links, first ${p.words.firstOrNull()}") }
             main.post { onDone(page) }
         }
     }
@@ -95,7 +98,7 @@ class PdfText(context: Context) : Closeable {
             if (index !in 0 until doc.numberOfPages) return Page(emptyList(), emptyList())
             val page = doc.getPage(index)
             val b = box(page)
-            val words = runCatching { readWords(doc, index, b) }.getOrDefault(emptyList())
+            val words = runCatching { readWords(doc, index, b) }.onFailure { android.util.Log.w(TAG, "words", it) }.getOrDefault(emptyList())
             val links = runCatching { readLinks(doc, page, b) }.getOrDefault(emptyList())
             return Page(PdfWords.numberLines(words), links)
         }
@@ -209,6 +212,7 @@ class PdfText(context: Context) : Closeable {
             PDDocument.load(file).use { doc -> Reader.readOutline(doc) }
         }.getOrDefault(emptyList())
 
+        const val TAG = "InkPdf"
         const val MAX_WORDS = 20_000
         const val MAX_LINKS = 500
         const val MAX_OUTLINE = 1_000
