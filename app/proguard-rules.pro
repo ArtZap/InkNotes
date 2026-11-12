@@ -16,7 +16,14 @@
 
 # ML Kit Digital Ink and androidx.ink ship their own rules; their native code calls back
 # into Java by name, so their classes keep their names.
--keep class com.google.mlkit.vision.digitalink.** { *; }
+# ML Kit finds its parts by name (component registrars listed in the manifest): all kept,
+# or it fails to start ("Unsatisfied dependency for component").
+-keep class com.google.mlkit.** { *; }
+-keep class com.google.firebase.components.** { *; }
+-keep class * implements com.google.firebase.components.ComponentRegistrar { *; }
+-keep class com.google.android.gms.internal.mlkit_** { *; }
+-keep class com.google.android.gms.common.** { *; }
+-keep class com.google.android.gms.tasks.** { *; }
 -keep class androidx.ink.** { *; }
 -keep class androidx.input.motionprediction.** { *; }
 
