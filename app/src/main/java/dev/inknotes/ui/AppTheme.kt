@@ -126,6 +126,11 @@ class AppPrefs(context: Context) {
         get() = prefs.getBoolean("penPressure", true)
         set(value) = prefs.edit().putBoolean("penPressure", value).apply()
 
+    /** PDF pages shown dark (inverted, colours keep their hue). */
+    var pdfDark: Boolean
+        get() = prefs.getBoolean("pdfDark", false)
+        set(value) = prefs.edit().putBoolean("pdfDark", value).apply()
+
     /** Last choices of the export dialog: "pdf"/"png", "all"/"page"/"range". */
     var exportFormat: String
         get() = prefs.getString("exportFormat", "pdf") ?: "pdf"

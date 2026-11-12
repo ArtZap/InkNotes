@@ -2,6 +2,11 @@ package dev.inknotes.ui
 
 import kotlin.math.abs
 import android.content.ContentResolver
+import dev.inknotes.data.PdfGeometry
+import dev.inknotes.data.PdfPageRef
+import dev.inknotes.data.PdfText
+import dev.inknotes.data.PdfWord
+import dev.inknotes.data.PdfWords
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -425,6 +430,7 @@ class EditorController(
         stopPlaying()
         detach()
         pdfPages.close()
+        pdfText?.close()
         thumbExec.shutdown()
         loader.shutdown()
         imageExec.shutdown()
@@ -457,7 +463,8 @@ class EditorController(
         val v = view ?: return null
         if (pdfPending.add(pageId)) {
             val widthPx = (v.resources.displayMetrics.widthPixels * PDF_RENDER_SCALE).toInt().coerceAtMost(MAX_PDF_WIDTH_PX)
-            pdfPages.renderAsync(notebook, ref, widthPx) { bitmap ->
+            pdfTextPage(ref)
+            pdfPages.renderAsync(notebook, ref, widthPx, pdfDark) { bitmap ->
                 pdfPending.remove(pageId)
                 if (bitmap != null && view === v) {
                     pdfBitmaps[pageId] = bitmap
@@ -472,7 +479,8 @@ class EditorController(
         val nb = notebook
         val ref = nb.pdfPages[nb.pageIds[index]] ?: return null
         val pages = pdfPages
-        return PdfRegion { fullWidthPx, left, top, w, h -> pages.renderRegionBlocking(nb, ref, fullWidthPx, left, top, w, h) }
+        val dark = pdfDark
+        return PdfRegion { fullWidthPx, left, top, w, h -> pages.renderRegionBlocking(nb, ref, fullWidthPx, left, top, w, h, dark) }
     }
 
     override fun image(file: String): Bitmap? {
@@ -881,6 +889,277 @@ class EditorController(
             id !in keep && id != selectionPage && savedRevision[id] == doc.revision && !doc.canUndo && !doc.canRedo
         }.keys
         for (id in drop) docs.remove(id)
+    }
+
+    // ------------------------------------------------------------------ PDF
+
+    /** Reads words, links and contents of the notebook's PDFs (made when the editor is first shown). */
+    private var pdfText: PdfText? = null
+    private val pdfTextPages = object : LinkedHashMap<String, PdfText.Page>(64, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, PdfText.Page>?) = size > MAX_PDF_TEXT_PAGES
+    }
+    private val pdfTextPending = HashSet<String>()
+
+    /** Words of each PDF page in its page units, with the layout they were placed for. */
+    private val pdfWordCache = HashMap<String, Pair<PdfPageRef, List<PdfWord>>>()
+
+    /** PDF pages shown dark. */
+    var pdfDark by mutableStateOf(prefs.pdfDark)
+        private set
+
+    fun togglePdfDark() {
+        pdfDark = !pdfDark
+        prefs.pdfDark = pdfDark
+        pdfBitmaps.clear()
+        view?.pdfDark = pdfDark
+        view?.refresh()
+        showStatus(if (pdfDark) "PDF тёмный: светлый текст на тёмном" else "PDF как есть")
+    }
+
+    /** The pen picks words of PDF text instead of writing. */
+    var pdfTextOn by mutableStateOf(false)
+        private set
+
+    fun togglePdfText() {
+        if (!pdfTextOn && notebook.pdfPages.isEmpty()) {
+            showStatus("В тетради нет страниц PDF")
+            return
+        }
+        pdfTextOn = !pdfTextOn
+        if (pdfTextOn && compassOn) toggleCompass()
+        view?.pdfTextOn = pdfTextOn
+        if (pdfTextOn) showStatus("Текст PDF: проведите пером по словам — их можно скопировать или выделить маркером")
+    }
+
+    /** Words of PDF text picked with the pen and what they say. */
+    class PdfPick(val page: Int, val from: Int, val to: Int, val text: String)
+
+    var pdfPick by mutableStateOf<PdfPick?>(null)
+        private set
+
+    override fun onPdfTextPicked(page: Int, from: Int, to: Int) {
+        val words = if (page >= 0) pdfWords(page) else null
+        pdfPick = if (words == null || from < 0) null else PdfPick(page, from, to, PdfWords.text(words, from, to))
+    }
+
+    fun highlightPdfPick() {
+        view?.highlightPdfText()
+        pdfPick = null
+    }
+
+    fun closePdfPick() {
+        view?.clearPdfText()
+        pdfPick = null
+    }
+
+    private fun pdfReader(): PdfText? {
+        pdfText?.let { return it }
+        val ctx = view?.context ?: return null
+        return runCatching { PdfText(ctx) }.getOrNull()?.also { pdfText = it }
+    }
+
+    private fun pdfKey(ref: PdfPageRef) = "${ref.file}#${ref.index}"
+
+    /** Words and links of the PDF page under [ref]; null while they are read (the view is refreshed then). */
+    private fun pdfTextPage(ref: PdfPageRef): PdfText.Page? {
+        val key = pdfKey(ref)
+        pdfTextPages[key]?.let { return it }
+        val reader = pdfReader() ?: return null
+        val file = repo.pdfFile(notebook, ref.file) ?: return null
+        if (pdfTextPending.add(key)) {
+            reader.pageAsync(file, ref.index) { page ->
+                pdfTextPending.remove(key)
+                pdfTextPages[key] = page ?: PdfText.Page(emptyList(), emptyList())
+                view?.refresh()
+            }
+        }
+        return null
+    }
+
+    /** From shares (0…1) of the PDF page as shown to page units. */
+    private fun unitToPage(ref: PdfPageRef) = PdfGeometry.then(PdfGeometry.scale(ref.width, ref.height), ref.pdfToUnits())
+
+    override fun pdfWords(index: Int): List<PdfWord>? {
+        val pageId = notebook.pageIds.getOrNull(index) ?: return null
+        val ref = notebook.pdfPages[pageId] ?: return null
+        pdfWordCache[pageId]?.takeIf { it.first == ref }?.let { return it.second }
+        val page = pdfTextPage(ref) ?: return null
+        val m = unitToPage(ref)
+        val words = page.words.map { it.mapped(m) }
+        pdfWordCache[pageId] = ref to words
+        return words
+    }
+
+    /** A link of the PDF itself at ([x], [y]) of page [pageId]: to another of its pages or to the web. */
+    private fun followPdfLink(pageId: String, x: Float, y: Float): Boolean {
+        val ref = notebook.pdfPages[pageId] ?: return false
+        val page = pdfTextPage(ref) ?: return false
+        if (page.links.isEmpty()) return false
+        val (u, v) = PdfGeometry.map(PdfGeometry.invert(unitToPage(ref)), x, y)
+        val link = page.links.lastOrNull { it.contains(u, v) } ?: return false
+        val url = link.url
+        if (url != null) {
+            val ctx = view?.context ?: return false
+            val ok = runCatching {
+                ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+            }.isSuccess
+            showStatus(if (ok) "Открываю $url" else "Нечем открыть ссылку $url")
+            return true
+        }
+        val target = notebook.pageIds.indexOfFirst { id -> notebook.pdfPages[id]?.let { it.file == ref.file && it.index == link.page } == true }
+        if (target < 0) {
+            showStatus("Страницы ${link.page + 1} этого PDF нет в тетради")
+            return true
+        }
+        val tref = notebook.pdfPages.getValue(notebook.pageIds[target])
+        goToPage(target, PdfGeometry.map(unitToPage(tref), 0f, link.y).second.coerceAtLeast(0f))
+        showStatus("Страница ${target + 1}")
+        return true
+    }
+
+    /** Is the page shown now a PDF page, and are there any in the notebook. */
+    val hasPdf get() = notebook.pdfPages.isNotEmpty()
+
+    fun pdfRef(index: Int = pageIndex): PdfPageRef? = notebook.pageIds.getOrNull(index)?.let { notebook.pdfPages[it] }
+
+    /**
+     * PDF pages laid out anew: turned by [rotateBy] degrees more and/or with [margins] round
+     * them; this page or every PDF page ([all]). What is written moves with the PDF.
+     */
+    fun setPdfLayout(all: Boolean, rotateBy: Int? = null, margins: PdfGeometry.Margins? = null) {
+        val here = notebook.pageIds.getOrNull(pageIndex)
+        val ids = if (all) notebook.pageIds.filter { it in notebook.pdfPages } else listOfNotNull(here?.takeIf { it in notebook.pdfPages })
+        if (ids.isEmpty()) {
+            showStatus("Это не страница PDF")
+            return
+        }
+        flush()
+        view?.clearSelection()
+        closePdfPick()
+        val changed = HashMap<String, PdfPageRef>()
+        val moves = HashMap<String, FloatArray>()
+        for (id in ids) {
+            val old = notebook.pdfPages.getValue(id)
+            val new = old.copy(
+                rotation = rotateBy?.let { PdfGeometry.normalRotation(old.rotation + it) } ?: old.rotation,
+                margins = margins?.sane() ?: old.margins,
+            )
+            if (new == old) continue
+            changed[id] = new
+            moves[id] = PdfGeometry.moveContent(old.width, old.height, old.rotation, old.margins, new.rotation, new.margins, Notebook.PAGE_UNITS)
+        }
+        if (changed.isEmpty()) return
+        val nb = notebook
+        for ((id, m) in moves) {
+            val content = docs[id]?.content() ?: repo.loadPage(nb, id)
+            val moved = movedContent(content, m)
+            repo.savePageAsync(nb, id, moved)
+            handwriting.pageSaved(nb, id, moved)
+            val open = docs.remove(id) != null
+            savedRevision.remove(id)
+            if (open) install(id, moved)
+            pdfBitmaps.remove(id)
+            pdfWordCache.remove(id)
+            thumbnails.remove(id)
+            thumbRevision.remove(id)
+        }
+        // Undo steps of the moved pages would put the writing back where the PDF no longer is.
+        for (history in listOf(undoPages, redoPages)) {
+            val kept = history.map { step -> step.filter { it !in moves } }.filter { it.isNotEmpty() }
+            history.clear()
+            history.addAll(kept)
+        }
+        fun mapY(id: String, y: Float): Float {
+            val m = moves[id] ?: return y
+            return PdfGeometry.map(m, Notebook.PAGE_UNITS / 2, y).second.coerceAtLeast(0f)
+        }
+        val toc = nb.toc.map { if (it.pageId in moves) it.copy(y = mapY(it.pageId, it.y)) else it }
+        val links = nb.links.map { l ->
+            val m = moves[l.pageId]
+            var out = if (m == null) l else {
+                val (x1, y1) = PdfGeometry.map(m, l.left, l.top)
+                val (x2, y2) = PdfGeometry.map(m, l.right, l.bottom)
+                l.copy(left = min(x1, x2), top = min(y1, y2), right = max(x1, x2), bottom = max(y1, y2))
+            }
+            if (l.target in moves) out = out.copy(targetY = mapY(l.target, l.targetY))
+            out
+        }
+        notebook = repo.setPdfPages(nb, changed, toc, links)
+        updateUndo()
+        view?.relayout()
+        goToPage(pageIndex)
+    }
+
+    private fun movedContent(c: dev.inknotes.data.PageContent, m: FloatArray): dev.inknotes.data.PageContent {
+        val t = PageEdits.Transform(
+            android.graphics.Matrix().apply { setValues(PdfGeometry.toMatrixValues(m)) },
+            PdfGeometry.scaleOf(m),
+            PdfGeometry.degreesOf(m),
+        )
+        return dev.inknotes.data.PageContent(
+            c.strokes.map { PageEdits.transform(it, t) },
+            c.fills.map { PageEdits.transform(it, t) },
+            c.images.map { PageEdits.transform(it, t) },
+        )
+    }
+
+    var insertingPdf by mutableStateOf(false)
+        private set
+
+    /** The pages of another PDF put in after the page shown, its contents added to the notebook's. */
+    fun insertPdf(uri: android.net.Uri, resolver: ContentResolver, context: Context) {
+        if (insertingPdf) return
+        insertingPdf = true
+        showStatus("Вставляю страницы PDF…")
+        flush()
+        val id = notebook.id
+        repo.copyPdfAsync(notebook, uri, resolver, outline = { PdfText.outlineOf(context, it) }) { part ->
+            insertingPdf = false
+            if (part == null) {
+                showStatus("Не удалось открыть PDF")
+                return@copyPdfAsync
+            }
+            if (notebook.id != id) return@copyPdfAsync
+            val at = (pageIndex + 1).coerceAtMost(notebook.pageIds.size)
+            notebook = repo.addPdfPages(notebook, at, part)
+            view?.relayout()
+            goToPage(at)
+            showStatus("Вставлено страниц: ${part.refs.size}")
+        }
+    }
+
+    /** The contents of the notebook's PDFs added to its own (entries already there are kept once). */
+    fun readPdfOutline() {
+        val reader = pdfReader() ?: return
+        val files = notebook.pdfPages.values.map { it.file }.distinct()
+        if (files.isEmpty()) {
+            showStatus("В тетради нет страниц PDF")
+            return
+        }
+        var left = files.size
+        val found = ArrayList<dev.inknotes.data.Bookmark>()
+        for (name in files) {
+            val file = repo.pdfFile(notebook, name)
+            if (file == null) {
+                left--
+                continue
+            }
+            reader.outlineAsync(file) { items ->
+                // Pages of this PDF in the notebook, by their page in the PDF (the first if repeated).
+                val byIndex = HashMap<Int, String>()
+                for (pid in notebook.pageIds) notebook.pdfPages[pid]?.takeIf { it.file == name }?.let { byIndex.putIfAbsent(it.index, pid) }
+                val n = (byIndex.keys.maxOrNull() ?: -1) + 1
+                val ids = List(n) { byIndex[it] ?: "" }
+                val refs = List(n) { i -> byIndex[i]?.let(notebook.pdfPages::get) ?: PdfPageRef(name, i, 1f, 1f) }
+                found += repo.bookmarks(items, ids, refs).filter { it.pageId.isNotEmpty() }
+                if (--left == 0) {
+                    val have = notebook.toc.map { it.pageId to it.title.trim() }.toSet()
+                    val add = found.filter { (it.pageId to it.title.trim()) !in have }
+                    if (add.isNotEmpty()) notebook = repo.setToc(notebook, notebook.toc + add)
+                    showStatus(if (found.isEmpty()) "В PDF нет оглавления" else "Оглавление PDF: добавлено ${add.size}")
+                }
+            }
+        }
     }
 
     // ---------------------------------------------------------------- export
@@ -1523,7 +1802,7 @@ class EditorController(
 
     override fun followLink(index: Int, x: Float, y: Float): Boolean {
         val pageId = notebook.pageIds.getOrNull(index) ?: return false
-        val link = notebook.links.lastOrNull { it.pageId == pageId && it.contains(x, y) } ?: return false
+        val link = notebook.links.lastOrNull { it.pageId == pageId && it.contains(x, y) } ?: return followPdfLink(pageId, x, y)
         val target = notebook.pageIds.indexOf(link.target)
         if (target < 0) return false
         goToPage(target, link.targetY)
@@ -2182,6 +2461,8 @@ class EditorController(
         v.scribbleErase = scribbleErase
         v.penPressure = penPressure
         v.compassOn = compassOn
+        v.pdfDark = pdfDark
+        if (v.pdfTextOn != pdfTextOn) v.pdfTextOn = pdfTextOn
         v.straightHighlighter = straightHighlighter
         v.eraserRadiusDp = eraserSize
         v.eraserMode = eraserMode
@@ -2231,6 +2512,7 @@ class EditorController(
 
         /** PDF pages are rendered a bit above screen width so light zoom stays sharp. */
         private const val PDF_RENDER_SCALE = 1.25f
+        private const val MAX_PDF_TEXT_PAGES = 200
         private const val MAX_PDF_WIDTH_PX = 2560
         val PEN_COLORS = listOf(0xFF1A1A1A, 0xFF1E5BD8, 0xFFD32F2F, 0xFF2E7D32).map { it.toInt() }
         val HIGHLIGHTER_COLORS = listOf(0x80FFEB3B, 0x8076FF03, 0x80FF80AB, 0x8040C4FF).map { it.toInt() }

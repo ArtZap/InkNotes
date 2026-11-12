@@ -16,8 +16,8 @@ android {
         applicationId = "dev.inknotes"
         minSdk = 29
         targetSdk = 36
-        versionCode = 12
-        versionName = "0.33"
+        versionCode = 13
+        versionName = "0.34"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -71,6 +71,7 @@ dependencies {
     implementation(libs.ink.storage)
     implementation(libs.input.motionprediction)
     implementation(libs.mlkit.digital.ink)
+    implementation(libs.pdfbox.android)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.test.runner)

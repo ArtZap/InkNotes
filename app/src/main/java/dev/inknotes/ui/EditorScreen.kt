@@ -160,6 +160,10 @@ fun EditorScreen(
     var exportPending by remember { mutableStateOf<List<Int>>(emptyList()) }
     var showExport by remember { mutableStateOf(false) }
     var showTimer by remember { mutableStateOf(false) }
+    var showPdfPage by remember { mutableStateOf(false) }
+    val pdfInsertLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) controller.insertPdf(uri, resolver, context)
+    }
     // Shortcut keys that open something on the screen.
     androidx.compose.runtime.LaunchedEffect(controller.uiRequest) {
         when (controller.uiRequest) {
@@ -250,6 +254,7 @@ fun EditorScreen(
         onPrint = { controller.print(context, controller.exportIndices(EditorController.ExportPages.All)) },
         onScan = scan,
         onTimer = { showTimer = true },
+        onPdfPage = { showPdfPage = true },
         onHelp = { showHelp = true },
     )
     Column(
@@ -271,6 +276,7 @@ fun EditorScreen(
             onTimer = { showTimer = true },
         )
         SoundBar(controller)
+        PdfPickBar(controller)
         ToolRow(
             controller,
             tools = layout.tools.mapNotNull(actions::get),
@@ -340,6 +346,13 @@ fun EditorScreen(
     if (controller.showAddBookmark) AddBookmarkDialog(controller, onDismiss = { controller.showAddBookmark = false })
     if (showHelp) HelpDialog(onDismiss = { showHelp = false })
     if (showTimer) StudyTimerDialog(onDismiss = { showTimer = false })
+    if (showPdfPage) {
+        PdfPageDialog(
+            controller,
+            onInsertPdf = { runCatching { pdfInsertLauncher.launch(arrayOf("application/pdf")) }.onFailure { controller.showStatus("Нет приложения для выбора файла") } },
+            onDismiss = { showPdfPage = false },
+        )
+    }
     controller.formula?.let { f ->
         FormulaDialog(
             initial = f.latex,
@@ -459,6 +472,7 @@ private fun barActions(
     onPrint: () -> Unit,
     onScan: () -> Unit,
     onTimer: () -> Unit,
+    onPdfPage: () -> Unit,
     onHelp: () -> Unit,
 ): Map<String, BarAction> {
     val math = c.math.state
@@ -546,6 +560,9 @@ private fun barActions(
         a("protractor", "Транспортир: углы и дуги", c::toggleProtractor, selected = c.protractorShown),
         a("compass", "Циркуль: окружности и дуги", c::toggleCompass, selected = c.compassOn),
         a("timer", "Таймер учёбы: учёба и перерывы", onTimer, selected = StudyTimer.phase != null, title = "Таймер учёбы…"),
+        a("pdf-text", "Текст PDF: проведите пером по словам — скопировать или выделить маркером", c::togglePdfText, selected = c.pdfTextOn, title = "Текст PDF"),
+        a("pdf-page", "Страница PDF: повернуть, поля для заметок, вставить страницы", onPdfPage, title = "Страница PDF…"),
+        a("pdf-dark", "Тёмный PDF: светлый текст на тёмном", c::togglePdfDark, selected = c.pdfDark),
         a("scan", "Сканировать документ камерой", onScan, title = "Сканировать документ"),
         a(
             "pressure",

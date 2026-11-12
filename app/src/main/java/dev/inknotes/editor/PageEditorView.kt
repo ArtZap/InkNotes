@@ -115,6 +115,9 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         /** The eyedropper was lifted over this colour (opaque); [pickingColor] is off again. */
         fun onColorPicked(color: Int) {}
 
+        /** Words [from]…[to] of the PDF text of page [page] picked (from < 0: the pick is gone). */
+        fun onPdfTextPicked(page: Int, from: Int, to: Int) {}
+
         /** A finger tapped an answer after "=": show how it was found. */
         fun onAnswerTapped(answer: PageAnswer) {}
 
@@ -178,6 +181,9 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
 
         /** Follows the link at ([x], [y]) of page [index]; false when there is none. */
         fun followLink(index: Int, x: Float, y: Float): Boolean = false
+
+        /** Words of the PDF under page [index] (page units), null for other pages or while they are read. */
+        fun pdfWords(index: Int): List<dev.inknotes.data.PdfWord>? = null
     }
 
     var listener: Listener? = null
@@ -203,6 +209,15 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         get() = pageRenderer.photo
         set(value) {
             pageRenderer.photo = value
+            pageLayer.invalidate()
+        }
+
+    /** PDF pages are shown dark (their pictures come dark from the source). */
+    var pdfDark = false
+        set(value) {
+            if (field == value) return
+            field = value
+            pageRenderer.pdfDark = value
             pageLayer.invalidate()
         }
 
@@ -321,7 +336,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
     private val density = resources.displayMetrics.density
     private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop.toFloat()
 
-    private enum class Mode { NONE, DRAW, SNAPPED, ERASE, GESTURE, PATH, MOVE, LASER, RULER, RULER_DRAW, SPACE, COMPASS }
+    private enum class Mode { NONE, DRAW, SNAPPED, ERASE, GESTURE, PATH, MOVE, LASER, RULER, RULER_DRAW, SPACE, COMPASS, PDF_TEXT }
 
     private var mode = Mode.NONE
 
@@ -1195,6 +1210,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                 Mode.RULER -> moveRuler(e)
                 Mode.RULER_DRAW -> forEachSample(e) { x, y, _ -> rulerDrawTo(x, y) }
                 Mode.COMPASS -> forEachSample(e) { x, y, _ -> compassTo(x, y) }
+                Mode.PDF_TEXT -> forEachSample(e) { x, y, _ -> pdfTextTo(x, y) }
                 Mode.SPACE -> {
                     val i = e.findPointerIndex(activePointerId)
                     if (i >= 0) spaceTo(toPage(spacePage, e.getX(i), e.getY(i))[1])
@@ -1221,6 +1237,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                     Mode.RULER -> endRulerMove()
                     Mode.RULER_DRAW -> endRulerDraw()
                     Mode.COMPASS -> endCompass()
+                    Mode.PDF_TEXT -> endPdfText()
                     Mode.SPACE -> endSpace()
                     Mode.NONE, Mode.SNAPPED -> Unit
                 }
@@ -1268,6 +1285,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                         compassSamples.clear()
                         pageLayer.invalidate()
                     }
+                    Mode.PDF_TEXT -> clearPdfText()
                     else -> Unit
                 }
                 mode = Mode.NONE
@@ -1311,6 +1329,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             Mode.RULER -> startRulerMove(e)
             Mode.RULER_DRAW -> startRulerDraw(e, index)
             Mode.COMPASS -> startCompass(e, index)
+            Mode.PDF_TEXT -> startPdfText(e, index)
             Mode.SPACE -> startSpace(e, index)
             Mode.NONE, Mode.SNAPPED -> Unit
         }
@@ -1336,6 +1355,10 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         if (compassOn && pen && !penButton) {
             activePage = pageAt(e.getX(index), e.getY(index))
             return Mode.COMPASS
+        }
+        if (pdfTextOn && pen && !penButton && !eraserEnd) {
+            activePage = pageAt(e.getX(index), e.getY(index))
+            if (source?.pdfWords(activePage) != null) return Mode.PDF_TEXT
         }
         if (insertingSpace && (pen || toolType == MotionEvent.TOOL_TYPE_FINGER)) {
             activePage = pageAt(e.getX(index), e.getY(index))
@@ -1678,12 +1701,21 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             xs[i] = p.x
             ys[i] = p.y
         }
+        // Over PDF text: along the line of words the pass goes over.
+        src.pdfWords(page)?.let { words -> dev.inknotes.data.PdfWords.snapPass(words, xs, ys) }?.let { b ->
+            val path = listOf(ShapeRecognizer.P(b[0], b[1]), ShapeRecognizer.P(b[2], b[1]))
+            val thickness = if (kind == InkKind.SPOILER) b[3] * SPOILER_COVER else b[3]
+            return Stroke(InkBrushes.create(kind, color, thickness), shapeInputs(path, 0.5f))
+        }
         val identity = Matrix()
         val band = HighlightAligner.align(xs, ys, size) { canvas, strip ->
             pageRenderer.pageHeight = heights.getOrElse(page) { PAGE_H }
             pageRenderer.pageWidth = widths.getOrElse(page) { PAGE_W }
             pageRenderer.pdf = src.pdfBitmap(page)
+            // Dark letters are looked for: a PDF shown dark has light ones.
+            pageRenderer.pdfDark = false
             pageRenderer.drawBackdrop(canvas)
+            pageRenderer.pdfDark = pdfDark
             for (img in doc.images) pageRenderer.drawImage(canvas, img, src.image(img.file))
             // Ink of any colour counts as dark letters.
             canvas.saveLayer(null, inkMaskPaint)
@@ -2805,6 +2837,79 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         }
     }
 
+    // --- PDF text
+
+    /** The pen picks words of a PDF page's text, from where it lands to where it is lifted. */
+    var pdfTextOn = false
+        set(value) {
+            field = value
+            if (!value) clearPdfText()
+        }
+
+    /** Page and words (indices into its [PageSource.pdfWords]) picked; -1 when none. */
+    var pdfTextPage = -1
+        private set
+    private var pdfTextFrom = -1
+    private var pdfTextTo = -1
+
+    private fun startPdfText(e: MotionEvent, index: Int) {
+        activePointerId = e.getPointerId(index)
+        val words = source?.pdfWords(activePage).orEmpty()
+        val p = toPage(activePage, e.getX(index), e.getY(index))
+        val at = dev.inknotes.data.PdfWords.wordAt(words, p[0], p[1], PDF_WORD_REACH_DP * density / currentScale())
+        hideCursor()
+        if (at < 0) {
+            clearPdfText()
+            return
+        }
+        pdfTextPage = activePage
+        pdfTextFrom = at
+        pdfTextTo = at
+        pageLayer.invalidate()
+    }
+
+    private fun pdfTextTo(x: Float, y: Float) {
+        if (pdfTextPage != activePage || pdfTextFrom < 0) return
+        val words = source?.pdfWords(activePage) ?: return
+        val at = dev.inknotes.data.PdfWords.wordAt(words, x, y, Float.MAX_VALUE)
+        if (at >= 0 && at != pdfTextTo) {
+            pdfTextTo = at
+            pageLayer.invalidate()
+        }
+    }
+
+    private fun endPdfText() {
+        if (pdfTextPage < 0) listener?.onPdfTextPicked(-1, -1, -1)
+        else listener?.onPdfTextPicked(pdfTextPage, minOf(pdfTextFrom, pdfTextTo), maxOf(pdfTextFrom, pdfTextTo))
+    }
+
+    fun clearPdfText() {
+        val had = pdfTextPage >= 0
+        pdfTextPage = -1
+        pdfTextFrom = -1
+        pdfTextTo = -1
+        pageLayer.invalidate()
+        if (had) listener?.onPdfTextPicked(-1, -1, -1)
+    }
+
+    /** The picked words marked with the highlighter: one level band a line. */
+    fun highlightPdfText() {
+        val page = pdfTextPage
+        val words = source?.pdfWords(page) ?: return
+        val doc = doc(page) ?: return
+        val color = highlighterColor
+        val added = dev.inknotes.data.PdfWords.boxes(words, pdfTextFrom, pdfTextTo).map { b ->
+            val h = (b[3] - b[1]) * 1.15f
+            val cy = (b[1] + b[3]) / 2
+            val path = listOf(ShapeRecognizer.P(b[0], cy), ShapeRecognizer.P(b[2], cy))
+            PageStroke(InkKind.HIGHLIGHTER, Stroke(InkBrushes.create(InkKind.HIGHLIGHTER, color, h), shapeInputs(path, 0.5f)))
+        }
+        clearPdfText()
+        if (added.isEmpty()) return
+        doc.edit(strokes = doc.strokes + added)
+        changed()
+    }
+
     // --- eyedropper
 
     private fun pick(e: MotionEvent): Boolean {
@@ -3296,7 +3401,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                 }
                 val hidden = hiddenOf(doc)
                 val out: Set<Any> = if (hidden.isEmpty()) sel else Collections.newSetFromMap<Any>(IdentityHashMap()).apply { addAll(sel); addAll(hidden) }
-                val look = PageCache.Look(widths[i], heights[i], pageRenderer.paper, pageRenderer.dark, pageRenderer.photo, pdf, doc.images.map { src.image(it.file) })
+                val look = PageCache.Look(widths[i], heights[i], pageRenderer.paper, pageRenderer.dark, pageRenderer.photo, pdf, doc.images.map { src.image(it.file) }, pdfDark && pdf != null)
                 // The cached picture holds the paper too: the background is drawn only without it.
                 when (cache.draw(canvas, doc, look, scale, out, visibleRect(i), if (pdf != null) src.pdfRegion(i) else null) { src.image(it) }) {
                     PageCache.Result.DRAWN -> {
@@ -3330,6 +3435,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             drawDragged(canvas, src)
             drawRuler(canvas, scale)
             drawCompass(canvas, scale)
+            drawPdfText(canvas)
             // The pointer's trail fades on its own: frames keep coming while it is lit.
             if (laser.active && laser.draw(canvas, worldToView)) postInvalidateOnAnimation()
 
@@ -3686,6 +3792,18 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         }
 
         private val compassText = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF2979FF.toInt() }
+        private val pdfPickPaint = Paint().apply { color = 0x552979FF }
+
+        /** Words of a PDF picked with the pen: a blue band over each line. */
+        fun drawPdfText(canvas: Canvas) {
+            val page = pdfTextPage
+            if (page !in tops.indices) return
+            val words = source?.pdfWords(page) ?: return
+            canvas.save()
+            canvas.concat(pageMatrix(page))
+            for (b in dev.inknotes.data.PdfWords.boxes(words, pdfTextFrom, pdfTextTo)) canvas.drawRect(b[0], b[1], b[2], b[3], pdfPickPaint)
+            canvas.restore()
+        }
 
         /** The circle being drawn with the compass, its centre and radius in millimetres. */
         private fun drawCompass(canvas: Canvas, scale: Float) {
@@ -3921,6 +4039,9 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         /** Lines that can be turned into one another ([restyleSelection]); markers cannot. */
         /** The compass draws nothing smaller; an arc shorter than this is taken for a whole circle. */
         const val MIN_COMPASS_RADIUS = 4f
+
+        /** How far from a word the pen may land to start picking PDF text. */
+        const val PDF_WORD_REACH_DP = 24f
         const val MIN_ARC_DEGREES = 25f
 
         val LINE_KINDS = setOf(InkKind.PEN, InkKind.LINE, InkKind.PENCIL, InkKind.DASHED, InkKind.FOUNTAIN, InkKind.NEON)

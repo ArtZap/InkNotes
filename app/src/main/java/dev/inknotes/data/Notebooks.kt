@@ -67,8 +67,25 @@ data class PageSize(val format: PaperFormat = PaperFormat.A4, val landscape: Boo
     }
 }
 
-/** A notebook page backed by page [index] of the copied PDF [file]; size in PDF points. */
-data class PdfPageRef(val file: String, val index: Int, val width: Float, val height: Float)
+/**
+ * A notebook page backed by page [index] of the copied PDF [file]; size in PDF points. The PDF
+ * page can be turned by [rotation] degrees clockwise and have [margins] round it for notes.
+ */
+data class PdfPageRef(
+    val file: String,
+    val index: Int,
+    val width: Float,
+    val height: Float,
+    val rotation: Int = 0,
+    val margins: PdfGeometry.Margins = PdfGeometry.Margins.NONE,
+) {
+    /** The whole notebook page in points: the PDF page as turned and its margins. */
+    val outerWidth get() = PdfGeometry.outer(width, height, rotation, margins).first
+    val outerHeight get() = PdfGeometry.outer(width, height, rotation, margins).second
+
+    /** From the PDF page's points (top left origin) to page units of the notebook page. */
+    fun pdfToUnits() = PdfGeometry.pdfToUnits(width, height, rotation, margins, Notebook.PAGE_UNITS)
+}
 
 /**
  * Each notebook keeps its own background for the light and for the dark theme.
@@ -158,7 +175,7 @@ data class Notebook(
 
     /** Page width on paper. */
     fun pageWidthMm(pageId: String): Float =
-        pdfPages[pageId]?.let { it.width * MM_PER_POINT } ?: pageSize(pageId).widthMm
+        pdfPages[pageId]?.let { it.outerWidth * MM_PER_POINT } ?: pageSize(pageId).widthMm
 
     /**
      * Page width in page units. On paper pages a unit is always [MM_PER_UNIT] mm, so writing
@@ -169,7 +186,7 @@ data class Notebook(
         if (pageId in pdfPages) PAGE_UNITS else pageSize(pageId).widthMm / MM_PER_UNIT
 
     fun pageHeightUnits(pageId: String): Float {
-        pdfPages[pageId]?.let { return PAGE_UNITS * it.height / it.width }
+        pdfPages[pageId]?.let { return PAGE_UNITS * it.outerHeight / it.outerWidth }
         return pageSize(pageId).heightMm / MM_PER_UNIT
     }
 
@@ -597,38 +614,104 @@ class NotebookRepository(filesDir: File) {
      * Creates a notebook with one page per page of the picked PDF (the file is copied in)
      * and calls [onDone] on the main thread; null if the PDF can't be read (e.g. encrypted).
      */
-    fun importPdfAsync(title: String, uri: Uri, resolver: ContentResolver, onDone: (Notebook?) -> Unit) {
+    fun importPdfAsync(
+        title: String,
+        uri: Uri,
+        resolver: ContentResolver,
+        outline: (File) -> List<PdfOutlineItem> = { emptyList() },
+        onDone: (Notebook?) -> Unit,
+    ) {
         transferring {
             val id = newId()
             val notebook = runCatching {
-                val fileName = "doc-${newId()}.pdf"
-                val file = File(dir(id).apply { mkdirs() }, fileName)
-                atomicWrite(file) { out ->
-                    (resolver.openInputStream(uri) ?: throw IOException("cannot open $uri")).use { it.copyTo(out) }
-                }
-                val refs = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY).use { fd ->
-                    PdfRenderer(fd).use { pdf ->
-                        List(pdf.pageCount) { i ->
-                            pdf.openPage(i).use { page ->
-                                val w = page.width.toFloat()
-                                val h = page.height.toFloat()
-                                if (!validPdfPageSize(w, h)) throw IOException("unsupported page size ${w}x$h")
-                                PdfPageRef(fileName, i, w, h)
-                            }
-                        }
-                    }
-                }
-                if (refs.isEmpty()) throw IOException("empty PDF")
+                val (file, refs) = copyPdf(id, uri, resolver)
                 val now = System.currentTimeMillis()
                 val pageIds = refs.map { newId() }
                 val bg = PageBackground(PaperKind.BLANK)
-                Notebook(id, title, bg, bg, now, now, pageIds, pageIds.zip(refs).toMap())
+                val toc = runCatching { bookmarks(outline(file), pageIds, refs) }.getOrDefault(emptyList())
+                Notebook(id, title, bg, bg, now, now, pageIds, pageIds.zip(refs).toMap(), toc = toc.take(MAX_TOC))
                     .also { writeMetaNow(it) }
             }.getOrElse {
                 deleteQuietly(dir(id))
                 null
             }
             main.post { onDone(notebook) }
+        }
+    }
+
+    /** A PDF copied into the notebook, its pages and contents, ready for [addPdfPages]. */
+    class PdfPart(val refs: List<PdfPageRef>, val outline: List<PdfOutlineItem>)
+
+    /**
+     * Copies a picked PDF into notebook [nb] and reads its pages; [onDone] on the main thread
+     * (null if it can't be read). The pages go in with [addPdfPages], on the main thread.
+     */
+    fun copyPdfAsync(nb: Notebook, uri: Uri, resolver: ContentResolver, outline: (File) -> List<PdfOutlineItem>, onDone: (PdfPart?) -> Unit) {
+        transferring {
+            var copied: File? = null
+            val part = runCatching {
+                val (file, refs) = copyPdf(nb.id, uri, resolver)
+                copied = file
+                PdfPart(refs, runCatching { outline(file) }.getOrDefault(emptyList()))
+            }.getOrElse {
+                copied?.delete()
+                null
+            }
+            main.post { onDone(part) }
+        }
+    }
+
+    /** The pages of [part] put in at [at], its contents added to the notebook's. */
+    fun addPdfPages(nb: Notebook, at: Int, part: PdfPart): Notebook {
+        val ids = part.refs.map { newId() }
+        val pages = nb.pageIds.toMutableList().apply { addAll(at.coerceIn(0, size), ids) }
+        val updated = nb.copy(pageIds = pages, pdfPages = nb.pdfPages + ids.zip(part.refs), updatedAt = System.currentTimeMillis())
+        val toc = runCatching { bookmarks(part.outline, ids, part.refs) }.getOrDefault(emptyList())
+        return setToc(updated, nb.toc + toc)
+    }
+
+    /** The PDF's own contents as entries of the notebook's, [pageIds] being its pages in order. */
+    fun bookmarks(items: List<PdfOutlineItem>, pageIds: List<String>, refs: List<PdfPageRef>): List<Bookmark> =
+        items.mapNotNull { item ->
+            val pageId = pageIds.getOrNull(item.page) ?: return@mapNotNull null
+            val ref = refs[item.page]
+            val y = PdfGeometry.map(ref.pdfToUnits(), 0f, item.y * ref.height).second.coerceAtLeast(0f)
+            Bookmark(pageId, y, "\u2003".repeat(item.depth) + item.title)
+        }
+
+    /** PDF pages laid out anew ([refs]), with the contents and links moved along. */
+    fun setPdfPages(nb: Notebook, refs: Map<String, PdfPageRef>, toc: List<Bookmark>, links: List<PageLink>): Notebook =
+        nb.copy(
+            pdfPages = nb.pdfPages + refs.filterKeys { it in nb.pageIds },
+            toc = toc,
+            links = links,
+            updatedAt = System.currentTimeMillis(),
+        ).also(::writeMeta)
+
+    private fun copyPdf(notebookId: String, uri: Uri, resolver: ContentResolver): Pair<File, List<PdfPageRef>> {
+        val fileName = "doc-${newId()}.pdf"
+        val file = File(dir(notebookId).apply { mkdirs() }, fileName)
+        try {
+            atomicWrite(file) { out ->
+                (resolver.openInputStream(uri) ?: throw IOException("cannot open $uri")).use { it.copyTo(out) }
+            }
+            val refs = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY).use { fd ->
+                PdfRenderer(fd).use { pdf ->
+                    List(pdf.pageCount) { i ->
+                        pdf.openPage(i).use { page ->
+                            val w = page.width.toFloat()
+                            val h = page.height.toFloat()
+                            if (!validPdfPageSize(w, h)) throw IOException("unsupported page size ${w}x$h")
+                            PdfPageRef(fileName, i, w, h)
+                        }
+                    }
+                }
+            }
+            if (refs.isEmpty()) throw IOException("empty PDF")
+            return file to refs
+        } catch (t: Throwable) {
+            file.delete()
+            throw t
         }
     }
 
@@ -1414,7 +1497,10 @@ class NotebookRepository(filesDir: File) {
             val w = o.getDouble("w").toFloat()
             val h = o.getDouble("h").toFloat()
             if (!validPdfPageSize(w, h) || o.getInt("index") < 0) return@mapNotNull null
-            pageId to PdfPageRef(file, o.getInt("index"), w, h)
+            val m = o.optJSONArray("m")?.takeIf { it.length() == 4 }?.let {
+                PdfGeometry.Margins(it.getDouble(0).toFloat(), it.getDouble(1).toFloat(), it.getDouble(2).toFloat(), it.getDouble(3).toFloat()).sane()
+            } ?: PdfGeometry.Margins.NONE
+            pageId to PdfPageRef(file, o.getInt("index"), w, h, PdfGeometry.normalRotation(o.optInt("rot")), m)
         }.toMap()
 
     private fun readBackground(json: JSONObject): PageBackground {
@@ -1498,7 +1584,11 @@ class NotebookRepository(filesDir: File) {
         if (nb.pdfPages.isNotEmpty()) {
             val pdf = JSONObject()
             for ((pageId, ref) in nb.pdfPages) {
-                pdf.put(pageId, JSONObject().put("file", ref.file).put("index", ref.index).put("w", ref.width.toDouble()).put("h", ref.height.toDouble()))
+                val o = JSONObject().put("file", ref.file).put("index", ref.index).put("w", ref.width.toDouble()).put("h", ref.height.toDouble())
+                if (ref.rotation != 0) o.put("rot", ref.rotation)
+                val m = ref.margins
+                if (!m.isNone) o.put("m", org.json.JSONArray().put(m.left.toDouble()).put(m.top.toDouble()).put(m.right.toDouble()).put(m.bottom.toDouble()))
+                pdf.put(pageId, o)
             }
             json.put("pdf", pdf)
         }

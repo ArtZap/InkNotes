@@ -22,6 +22,7 @@ import dev.inknotes.data.Notebook
 import dev.inknotes.data.NotebookRepository
 import dev.inknotes.data.PaperKind
 import dev.inknotes.data.PdfPageRef
+import dev.inknotes.data.PdfPages
 import dev.inknotes.editor.PageRenderer
 import java.util.concurrent.Executors
 import kotlin.math.min
@@ -116,14 +117,7 @@ class CoverPreviews(private val repo: NotebookRepository) {
         ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY).use { fd ->
             PdfRenderer(fd).use { pdf ->
                 if (ref.index !in 0 until pdf.pageCount) return null
-                pdf.openPage(ref.index).use { page ->
-                    val h = (WIDTH * page.height.toFloat() / page.width).toInt().coerceIn(1, WIDTH * 4)
-                    val bitmap = Bitmap.createBitmap(WIDTH, h, Bitmap.Config.ARGB_8888)
-                    bitmap.eraseColor(Color.WHITE)
-                    val k = WIDTH.toFloat() / page.width
-                    page.render(bitmap, null, Matrix().apply { setScale(k, k) }, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-                    return bitmap
-                }
+                pdf.openPage(ref.index).use { page -> return PdfPages.renderPage(page, ref, WIDTH) }
             }
         }
     }

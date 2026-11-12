@@ -161,7 +161,7 @@ fun LibraryScreen(
         if (uri == null) return@rememberLauncherForActivityResult
         importStatus = "Импортирую PDF…"
         val into = folderId
-        repo.importPdfAsync(displayName(context, uri), uri, context.contentResolver) { nb ->
+        repo.importPdfAsync(displayName(context, uri), uri, context.contentResolver, outline = { dev.inknotes.data.PdfText.outlineOf(context, it) }) { nb ->
             if (nb == null) {
                 importStatus = "Не удалось открыть PDF"
             } else {
