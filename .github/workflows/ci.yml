@@ -78,6 +78,7 @@ jobs:
             adb shell am instrument -w -e package dev.inknotes.data dev.inknotes.test/androidx.test.runner.AndroidJUnitRunner > data-tests.txt 2>&1 || true
             cat data-tests.txt
             adb logcat -d -b crash | tail -120 || true
+            adb logcat -d -b main -t 3000 | grep -iE "inknotes|hwui|OpenGLRenderer|EGL|RenderThread" | tail -60 || true
             mkdir -p shots && adb pull /sdcard/Android/data/dev.inknotes/files/shots shots || true
             grep -q "^OK (" data-tests.txt
       - name: Screenshots into the log

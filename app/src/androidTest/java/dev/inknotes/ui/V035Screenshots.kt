@@ -46,9 +46,11 @@ class V035Screenshots {
     private fun menu(title: String) {
         device.findObject(By.desc("Ещё"))?.click()
         device.wait(Until.hasObject(By.text("Настроить панели…")), 5_000)
-        repeat(8) {
+        // From the top, in small steps: a big one can pass the item.
+        device.findObject(By.scrollable(true))?.let { list -> repeat(4) { list.scroll(Direction.UP, 1f) } }
+        repeat(16) {
             if (device.hasObject(By.text(title))) return@repeat
-            device.findObject(By.scrollable(true))?.scroll(Direction.DOWN, 0.8f)
+            device.findObject(By.scrollable(true))?.scroll(Direction.DOWN, 0.4f)
         }
         click(title)
         device.wait(Until.gone(By.text("Настроить панели…")), 5_000)
