@@ -169,6 +169,16 @@ class AppPrefs(context: Context) {
         get() = prefs.getString(BACKUP_FOLDER, null)
         set(value) = prefs.edit().putString(BACKUP_FOLDER, value).apply()
 
+    /** The quick notes notebook (lock screen, tile, widget). */
+    var quickNoteId: String?
+        get() = prefs.getString("quickNoteId", null)
+        set(value) = prefs.edit().putString("quickNoteId", value).apply()
+
+    /** When a quick note was last written: the app re-reads that notebook if it has it open. */
+    var quickNoteUsedAt: Long
+        get() = prefs.getLong("quickNoteUsedAt", 0L)
+        set(value) = prefs.edit().putLong("quickNoteUsedAt", value).apply()
+
     /** Tabs open at the last stop (see TabsMemory). */
     var openTabs: String?
         get() = prefs.getString("openTabs", null)

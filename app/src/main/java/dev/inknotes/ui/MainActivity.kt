@@ -43,6 +43,15 @@ class MainActivity : ComponentActivity() {
     private var uiStyle by mutableStateOf(UiStyle.CLASSIC)
     private var darkNow = false
 
+    /**
+     * A second notebook beside the one shown (PDF on one side, notes on the other); it is not
+     * among the tabs while it is there. [focused] gets the keyboard and the pen button.
+     */
+    private var side by mutableStateOf<EditorController?>(null)
+    private var focused: EditorController? = null
+    private var sideShare by mutableStateOf(0.5f)
+    private var pickingSide by mutableStateOf(false)
+
     /** Imported notebooks some of which already exist here: waiting for "replace or copy". */
     private var pendingImport by mutableStateOf<Pair<NotebookRepository.ImportSet, String?>?>(null)
 
@@ -63,6 +72,7 @@ class MainActivity : ComponentActivity() {
         // The tabs open when the app was last stopped (or closed by the system) come back.
         // Not when a shared file is being opened: an import closes the tabs anyway.
         if (tabs.isEmpty() && pendingTabs == null && (intent?.action == Intent.ACTION_MAIN || intent?.action == null)) restoreTabs()
+        quickNoteSeen = prefs.quickNoteUsedAt
         // The name of the app greets a fresh start only (not a rotation or a theme change).
         var splash by mutableStateOf(savedInstanceState == null)
 
@@ -81,6 +91,7 @@ class MainActivity : ComponentActivity() {
                 }
                 enableEdgeToEdge(statusBarStyle = bars, navigationBarStyle = bars)
                 editor?.setDarkTheme(dark)
+                side?.setDarkTheme(dark)
             }
             val changeTheme = { mode: ThemeMode ->
                 themeMode = mode
@@ -113,19 +124,57 @@ class MainActivity : ComponentActivity() {
                         version = libraryVersion,
                     ) }
                 } else {
-                    // A fresh editor for each notebook: nothing of the last one carries over.
-                    androidx.compose.runtime.key(current) { EditorScreen(
-                        controller = current,
-                        themeMode = themeMode,
-                        onThemeModeChange = changeTheme,
-                        onClose = {
-                            current.flush()
-                            editor = null
-                        },
-                        tabs = tabs,
-                        onTab = ::switchTo,
-                        onCloseTab = ::closeTab,
-                    ) }
+                    val main = @androidx.compose.runtime.Composable {
+                        // A fresh editor for each notebook: nothing of the last one carries over.
+                        androidx.compose.runtime.key(current) { EditorScreen(
+                            controller = current,
+                            themeMode = themeMode,
+                            onThemeModeChange = changeTheme,
+                            onClose = {
+                                current.flush()
+                                editor = null
+                            },
+                            tabs = tabs,
+                            onTab = ::switchTo,
+                            onCloseTab = ::closeTab,
+                            onSide = { if (side == null) pickingSide = true else closeSide() },
+                            sideOpen = side != null,
+                        ) }
+                    }
+                    val other = side
+                    if (other == null) {
+                        focused = current
+                        main()
+                    } else {
+                        SplitPanes(
+                            share = sideShare,
+                            onShare = { sideShare = it },
+                            onFocus = { left -> focused = if (left) current else other },
+                            first = main,
+                            second = {
+                                androidx.compose.runtime.key(other) { EditorScreen(
+                                    controller = other,
+                                    themeMode = themeMode,
+                                    onThemeModeChange = changeTheme,
+                                    onClose = ::closeSide,
+                                    onSide = ::closeSide,
+                                    sideOpen = true,
+                                    onSwap = ::swapSides,
+                                ) }
+                            },
+                        )
+                    }
+                    if (pickingSide) {
+                        SidePickerDialog(
+                            repo = repo,
+                            except = current.notebook.id,
+                            onPick = { nb ->
+                                pickingSide = false
+                                openSide(nb)
+                            },
+                            onDismiss = { pickingSide = false },
+                        )
+                    }
                 }
                 pendingImport?.let { (set, into) -> ImportConflictDialog(set, into) }
                 if (splash) Splash(onDone = { splash = false })
@@ -140,6 +189,12 @@ class MainActivity : ComponentActivity() {
 
     /** "Open with" (VIEW) and "Share" (SEND, SEND_MULTIPLE) of notebook files from another app. */
     private fun handleIntent(intent: Intent?) {
+        // A notebook asked for from the home screen widget.
+        if (intent?.action == QuickWidget.ACTION_OPEN) {
+            val id = intent.getStringExtra(QuickNotes.EXTRA_NOTEBOOK) ?: return
+            lifecycleScope.launch { repo.io { list() }.firstOrNull { it.id == id }?.let { openNotebook(it) } }
+            return
+        }
         val uris = when (intent?.action) {
             Intent.ACTION_VIEW -> listOfNotNull(intent.data)
             Intent.ACTION_SEND -> listOfNotNull(IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java))
@@ -162,6 +217,14 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun showNotebook(nb: dev.inknotes.data.Notebook, hit: SearchHit? = null) {
+        // Shown beside: it becomes the main one (one notebook is never open twice).
+        side?.takeIf { it.notebook.id == nb.id }?.let { s ->
+            side = null
+            s.pendingHit = hit
+            tabs = tabs + s
+            editor = s
+            return
+        }
         tabs.firstOrNull { it.notebook.id == nb.id }?.let { open ->
             open.pendingHit = hit
             editor = open
@@ -181,6 +244,39 @@ class MainActivity : ComponentActivity() {
             dropStaleTabs()
             if (c in tabs) editor = c
         }
+    }
+
+    /** [nb] beside the notebook shown; taken out of the tabs if it is one. */
+    private fun openSide(nb: dev.inknotes.data.Notebook) {
+        val main = editor ?: return
+        if (nb.id == main.notebook.id) return
+        side?.let { closeSide() }
+        val tab = tabs.firstOrNull { it.notebook.id == nb.id }
+        if (tab != null) {
+            tab.flush()
+            tabs = tabs - tab
+        }
+        side = tab ?: EditorController(repo, nb, penButton, prefs, darkNow, handwriting, AppServices.get(this).math)
+    }
+
+    private fun closeSide() {
+        val s = side ?: return
+        s.flush()
+        side = null
+        focused = editor
+        s.close()
+    }
+
+    /** The two notebooks change places. */
+    private fun swapSides() {
+        val s = side ?: return
+        val m = editor ?: return
+        m.flush()
+        s.flush()
+        tabs = tabs.map { if (it === m) s else it }
+        editor = s
+        side = m
+        focused = s
     }
 
     /** Closes a tab; the next one (or the library) is shown if it was the current one. */
@@ -292,18 +388,39 @@ class MainActivity : ComponentActivity() {
             if (tabs.isNotEmpty()) return@launch
             tabs = plan.ids.mapNotNull(all::get).map { nb -> EditorController(repo, nb, penButton, prefs, darkNow, handwriting, AppServices.get(this@MainActivity).math) }
             editor = tabs.firstOrNull { it.notebook.id == plan.active }
+            // The notebook that was beside it, if it still exists.
+            plan.side?.let(all::get)?.takeIf { editor != null && it.id != editor?.notebook?.id }?.let(::openSide)
         }
     }
 
     /** What is open now, kept for the next start. */
     private fun rememberTabs() {
         if (pendingTabs != null) return
-        prefs.openTabs = TabsMemory.encode(tabs.map { it.notebook.id }, editor?.notebook?.id)
+        prefs.openTabs = TabsMemory.encode(tabs.map { it.notebook.id }, editor?.notebook?.id, side?.notebook?.id)
+    }
+
+    /** When a quick note was last written, as this activity knows it. */
+    private var quickNoteSeen = 0L
+
+    override fun onResume() {
+        super.onResume()
+        // A quick note was written meanwhile (over the lock screen, from the tile): an open tab
+        // of that notebook has the old pages and is closed, so it can't write over the note.
+        val at = prefs.quickNoteUsedAt
+        if (at > quickNoteSeen) {
+            quickNoteSeen = at
+            val id = prefs.quickNoteId
+            (tabs + listOfNotNull(side)).filter { it.notebook.id == id }.forEach { t ->
+                if (t === side) closeSide() else closeTab(t)
+            }
+        }
     }
 
     override fun onPause() {
         rememberTabs()
         for (t in tabs) t.flush()
+        side?.flush()
+        QuickWidget.update(this)
         super.onPause()
     }
 
@@ -316,7 +433,7 @@ class MainActivity : ComponentActivity() {
     // Pen buttons on some tablets (Huawei M-Pencil) arrive as key events. Keyboard shortcuts
     // come after the screen: a text field being typed in keeps its letters.
     override fun dispatchKeyEvent(event: KeyEvent): Boolean =
-        editor?.handleKey(event) == true || super.dispatchKeyEvent(event) || editor?.handleShortcut(event) == true
+        (focused ?: editor)?.handleKey(event) == true || super.dispatchKeyEvent(event) || (focused ?: editor)?.handleShortcut(event) == true
 
     private companion object {
         const val MAX_TABS = 5

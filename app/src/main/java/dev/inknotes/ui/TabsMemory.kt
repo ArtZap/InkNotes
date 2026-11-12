@@ -5,14 +5,20 @@ package dev.inknotes.ui
  * (or none: the library). Plain JVM.
  */
 object TabsMemory {
-    class Saved(val ids: List<String>, val active: String?)
+    /** [side]: the notebook shown beside the active one (0.36), not among [ids]. */
+    class Saved(val ids: List<String>, val active: String?, val side: String? = null)
 
-    fun encode(ids: List<String>, active: String?): String = ids.joinToString(",") + ";" + (active ?: "")
+    fun encode(ids: List<String>, active: String?, side: String? = null): String =
+        ids.joinToString(",") + ";" + (active ?: "") + ";" + (side ?: "")
 
     fun decode(text: String?): Saved {
         if (text.isNullOrBlank()) return Saved(emptyList(), null)
-        val (list, active) = text.split(";", limit = 2).let { it[0] to it.getOrElse(1) { "" } }
-        return Saved(list.split(",").filter { it.isNotBlank() }, active.ifBlank { null })
+        val parts = text.split(";")
+        return Saved(
+            parts[0].split(",").filter { it.isNotBlank() },
+            parts.getOrElse(1) { "" }.ifBlank { null },
+            parts.getOrElse(2) { "" }.ifBlank { null },
+        )
     }
 
     /**
@@ -21,6 +27,6 @@ object TabsMemory {
      */
     fun restore(saved: Saved, existing: Set<String>, max: Int): Saved {
         val ids = saved.ids.distinct().filter { it in existing }.takeLast(max)
-        return Saved(ids, saved.active?.takeIf { it in ids })
+        return Saved(ids, saved.active?.takeIf { it in ids }, saved.side?.takeIf { it in existing && it !in ids })
     }
 }

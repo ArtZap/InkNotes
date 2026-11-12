@@ -27,4 +27,13 @@ class TabsMemoryTest {
         assertNull(r.active)
         assertEquals(0, TabsMemory.decode(null).ids.size)
     }
+
+    @Test
+    fun theNotebookBesideComesBackToo() {
+        val r = TabsMemory.restore(TabsMemory.decode(TabsMemory.encode(listOf("a"), "a", "pdf")), setOf("a", "pdf"), 5)
+        assertEquals("pdf", r.side)
+        // Saved by 0.35 (no third part): nothing beside.
+        assertNull(TabsMemory.decode("a,b;a").side)
+        assertNull(TabsMemory.restore(TabsMemory.decode("a;a;gone"), setOf("a"), 5).side)
+    }
 }

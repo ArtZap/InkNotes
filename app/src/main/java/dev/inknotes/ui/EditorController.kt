@@ -393,6 +393,9 @@ class EditorController(
     /** Search hit to show once the view is attached (notebook opened from library search). */
     var pendingHit: SearchHit? = null
 
+    /** Page to show when the editor first appears (a quick note: the empty page at the end). */
+    var openAtPage: Int? = null
+
     fun attach(v: PageEditorView) {
         view = v
         toolbar = dev.inknotes.data.ToolbarLayout.decode(prefs.toolbarLayout)
@@ -406,8 +409,11 @@ class EditorController(
         v.source = this
         updateUndo()
         pendingHit?.let(::showHit)
-        if (pendingHit == null) returnPlace?.let { (page, place) -> handler.post { view?.restorePagePlace(page, place) } }
+        val start = openAtPage
+        if (start != null) handler.post { view?.scrollToPage(start, 0f) }
+        else if (pendingHit == null) returnPlace?.let { (page, place) -> handler.post { view?.restorePagePlace(page, place) } }
         pendingHit = null
+        openAtPage = null
         math.onReady = { requestMath() }
         handler.post(mathRunnable)
     }
