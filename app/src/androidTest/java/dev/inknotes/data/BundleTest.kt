@@ -153,7 +153,8 @@ class BundleTest {
         val bundle = File(base, "hostile.inknotes")
         ZipOutputStream(bundle.outputStream()).use { z ->
             z.putNextEntry(ZipEntry("bundle.json")); z.write(manifest.toString().toByteArray()); z.closeEntry()
-            z.putNextEntry(ZipEntry("../../evil")); z.write(ByteArray(1000)); z.closeEntry()
+            // Android 14+ refuses such a name in ZipInputStream itself (the whole file fails).
+            if (android.os.Build.VERSION.SDK_INT < 34) { z.putNextEntry(ZipEntry("../../evil")); z.write(ByteArray(1000)); z.closeEntry() }
             z.putNextEntry(ZipEntry("notebooks/0.inknote")); z.write(inner.readBytes()); z.closeEntry()
         }
         val set = await<NotebookRepository.ImportSet> { friend.readImportsAsync(listOf({ bundle.inputStream() }), it) }

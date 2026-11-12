@@ -29,9 +29,6 @@ jobs:
           fi
       - name: Compile, unit tests, compile device tests, lint, shrunk release
         run: ./gradlew --no-daemon --stacktrace :app:testDebugUnitTest :app:compileDebugAndroidTestKotlin :app:lintDebug :app:assembleRelease
-      - name: Coroutines version in use
-        if: always()
-        run: ./gradlew --no-daemon -q :app:dependencyInsight --dependency kotlinx-coroutines-core --configuration releaseRuntimeClasspath | head -20 || true
       - name: Release APK size
         if: always()
         run: ls -la app/build/outputs/apk/release/ app/build/outputs/mapping/release/ 2>/dev/null || true

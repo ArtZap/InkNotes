@@ -169,10 +169,11 @@ class ArchiveTest {
             "pages/$pageId.ink" to emptyPage(),
         )
         val result = read(mine, file)
-        assertTrue(result is ArchiveImport.Ready)
+        // Android 14+ refuses such entries in ZipInputStream itself: the file is not opened.
+        if (android.os.Build.VERSION.SDK_INT < 34) assertTrue(result is ArchiveImport.Ready)
         val all = base.walkTopDown().map { it.name }.toList()
         assertFalse(all.any { it.startsWith("escaped") || it == "abs.txt" })
-        mine.discardImport(result as ArchiveImport.Ready)
+        (result as? ArchiveImport.Ready)?.let(mine::discardImport)
     }
 
     @Test

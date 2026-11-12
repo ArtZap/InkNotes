@@ -76,7 +76,7 @@ class V034Screenshots {
     @Test
     fun pdfTextPagesDark() {
         val prefs = ctx.getSharedPreferences("app", 0)
-        prefs.edit().putBoolean("toolbarIntroShown", true).remove("toolbarLayout").putBoolean("pdfDark", false).commit()
+        prefs.edit().putBoolean("toolbarIntroShown", true).remove("openTabs").remove("toolbarLayout").putBoolean("pdfDark", false).commit()
         val repo = NotebookRepository(ctx.filesDir)
         if (repo.list().none { it.title == "Скриншоты 0.34" }) {
             val pdf = samplePdf()

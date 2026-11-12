@@ -68,7 +68,7 @@ class V033Screenshots {
     @Test
     fun geometryTimerFormulas() {
         ctx.getSharedPreferences("app", 0).edit()
-            .putBoolean("toolbarIntroShown", true)
+            .putBoolean("toolbarIntroShown", true).remove("openTabs")
             .putString("toolbarLayout", Toolbars.Preset.MATH.layout.encode())
             .commit()
         val repo = NotebookRepository(ctx.filesDir)
