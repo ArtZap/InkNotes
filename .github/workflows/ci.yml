@@ -21,8 +21,25 @@ jobs:
           distribution: temurin
           java-version: 21
       - uses: gradle/actions/setup-gradle@v4
-      - name: Compile, unit tests, compile device tests
-        run: ./gradlew --no-daemon --stacktrace :app:testDebugUnitTest :app:compileDebugAndroidTestKotlin
+      - name: Lint baseline (first run only)
+        run: |
+          if [ ! -f app/lint-baseline.xml ]; then
+            ./gradlew --no-daemon :app:updateLintBaseline || true
+            echo "=====LINT BASELINE"; base64 -w 8000 app/lint-baseline.xml || true; echo "=====END"
+          fi
+      - name: Compile, unit tests, compile device tests, lint, shrunk release
+        run: ./gradlew --no-daemon --stacktrace :app:testDebugUnitTest :app:compileDebugAndroidTestKotlin :app:lintDebug :app:assembleRelease
+      - name: Coroutines version in use
+        if: always()
+        run: ./gradlew --no-daemon -q :app:dependencyInsight --dependency kotlinx-coroutines-core --configuration releaseRuntimeClasspath | head -20 || true
+      - name: Release APK size
+        if: always()
+        run: ls -la app/build/outputs/apk/release/ app/build/outputs/mapping/release/ 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lint-report
+          path: app/build/reports/lint-results-debug.*
       - name: Test report
         if: failure()
         run: |
@@ -45,8 +62,8 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Build
-        run: ./gradlew --no-daemon :app:assembleDebug :app:assembleDebugAndroidTest
+      - name: Build (shrunk by R8, as release is)
+        run: ./gradlew --no-daemon -PtestMinified :app:assembleMinified :app:assembleMinifiedAndroidTest
       - name: Screenshots on an emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -56,11 +73,15 @@ jobs:
           profile: pixel_tablet
           disable-animations: true
           script: |
-            adb install -r app/build/outputs/apk/debug/app-debug.apk
-            adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+            adb install -r app/build/outputs/apk/minified/app-minified.apk
+            adb install -r app/build/outputs/apk/androidTest/minified/app-minified-androidTest.apk
+            if [ ! -d app/src/androidTest/assets/golden ]; then adb shell am instrument -w -e golden make -e class dev.inknotes.data.GoldenFilesTest#make dev.inknotes.test/androidx.test.runner.AndroidJUnitRunner; mkdir -p golden && adb pull /sdcard/Android/data/dev.inknotes/files/golden golden; for f in golden/golden/*; do echo "=====GOLDEN $(basename $f)"; base64 -w 8000 $f; echo "=====END"; done; fi
             adb shell am instrument -w -e shots 1 -e class dev.inknotes.ui.V032Screenshots,dev.inknotes.ui.V033Screenshots,dev.inknotes.ui.V034Screenshots dev.inknotes.test/androidx.test.runner.AndroidJUnitRunner || true
+            adb shell am instrument -w -e package dev.inknotes.data dev.inknotes.test/androidx.test.runner.AndroidJUnitRunner > data-tests.txt 2>&1 || true
+            cat data-tests.txt
             adb logcat -d -b crash | tail -120 || true
             mkdir -p shots && adb pull /sdcard/Android/data/dev.inknotes/files/shots shots || true
+            grep -q "^OK (" data-tests.txt
       - name: Screenshots into the log
         # Artifacts cannot always be downloaded where the work is reviewed: smaller JPEGs, base64.
         if: always()

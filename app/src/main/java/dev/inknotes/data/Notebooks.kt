@@ -19,6 +19,7 @@ import java.io.InputStream
 import java.io.OutputStream
 import java.util.UUID
 import java.util.concurrent.Executors
+import kotlinx.coroutines.asCoroutineDispatcher
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
@@ -262,7 +263,10 @@ object FolderTree {
  */
 class NotebookRepository(filesDir: File) {
     private val root = File(filesDir, "notebooks").apply { mkdirs() }
-    private val io = Executors.newSingleThreadExecutor { r -> Thread(r, "notebook-io") }
+    @Volatile
+    private var ioThread: Thread? = null
+    private val io = Executors.newSingleThreadExecutor { r -> Thread(r, "notebook-io").also { ioThread = it } }
+    private val ioDispatcher = io.asCoroutineDispatcher()
     private val main = Handler(Looper.getMainLooper())
     private val backups = Executors.newSingleThreadExecutor { r -> Thread(r, "notebook-backup").apply { priority = Thread.MIN_PRIORITY } }
 
@@ -284,6 +288,11 @@ class NotebookRepository(filesDir: File) {
             root.listFiles().orEmpty()
                 .filter { it.name.startsWith(".import-") || it.name.startsWith(".export-") }
                 .forEach { deleteQuietly(it) }
+        }
+        // A notebook being replaced when the app was stopped goes back (or its old copy goes).
+        background {
+            SafeFiles.recoverAside(root)
+            runCatching { sweepOrphans() }.onFailure { Log.w(TAG, "orphan sweep failed", it) }
         }
     }
 
@@ -375,17 +384,31 @@ class NotebookRepository(filesDir: File) {
 
     // ---------------------------------------------------------------- folders
 
-    fun folders(): List<Folder> = onIo { readFolders() }
+    fun folders(): List<Folder> = onIo { readFoldersOrNull().orEmpty() }
+
+    /** The folder list, or null when it can't be read now (then nothing may be written over it). */
+    private fun readFoldersOrNull(): List<Folder>? = runCatching { readFolders() }.getOrElse {
+        foldersProblem = "Не удалось прочитать список папок; изменения папок не сохранены. Попробуйте ещё раз."
+        null
+    }
 
     fun createFolder(name: String, parent: String? = null): Folder = onIo {
-        val folders = readFolders()
+        val folders = readFoldersOrNull() ?: return@onIo Folder(newId(), name.take(MAX_TITLE), null)
         val p = parent?.takeIf { id -> folders.any { it.id == id } }
         Folder(newId(), name.take(MAX_TITLE), p).also { writeFolders(folders + it) }
     }
 
+    /** Adds [folder] made elsewhere (its id new); its parent must exist, else it goes to the top. */
+    fun addFolder(folder: Folder) = onIo {
+        val folders = readFoldersOrNull() ?: return@onIo
+        if (!UUID_RE.matches(folder.id) || folders.any { it.id == folder.id }) return@onIo
+        val p = folder.parent?.takeIf { id -> folders.any { it.id == id } }
+        writeFolders(folders + folder.copy(name = folder.name.take(MAX_TITLE), parent = p))
+    }
+
     /** Moves [folder] under [parent] (null = top level); refused if that would make a loop. */
     fun moveFolder(folder: Folder, parent: String?): Boolean = onIo {
-        val folders = readFolders()
+        val folders = readFoldersOrNull() ?: return@onIo false
         if (parent != null && (parent in FolderTree.subtree(folders, folder.id) || folders.none { it.id == parent })) {
             return@onIo false
         }
@@ -398,7 +421,7 @@ class NotebookRepository(filesDir: File) {
      * would end up inside itself stays where it is. Returns notebooks and folders moved.
      */
     fun moveAll(notebooks: List<Notebook>, folderIds: Set<String>, into: String?): Pair<List<Notebook>, Int> = onIo {
-        val folders = readFolders()
+        val folders = readFoldersOrNull() ?: return@onIo emptyList<Notebook>() to 0
         val target = into?.takeIf { id -> folders.any { it.id == id } }
         val movable = folderIds.filter { id -> target == null || target !in FolderTree.subtree(folders, id) }.toSet()
         val moved = folders.filter { it.id in movable && it.parent != target }
@@ -407,12 +430,13 @@ class NotebookRepository(filesDir: File) {
     }
 
     fun renameFolder(folder: Folder, name: String) = onIo {
-        writeFolders(readFolders().map { if (it.id == folder.id) it.copy(name = name.take(MAX_TITLE)) else it })
+        val folders = readFoldersOrNull() ?: return@onIo
+        writeFolders(folders.map { if (it.id == folder.id) it.copy(name = name.take(MAX_TITLE)) else it })
     }
 
     /** Removes the folder; its notebooks and subfolders move up to the folder's parent. */
     fun deleteFolder(folder: Folder) = onIo {
-        val folders = readFolders()
+        val folders = readFoldersOrNull() ?: return@onIo
         val parent = folders.find { it.id == folder.id }?.parent
         writeFolders(folders.filter { it.id != folder.id }.map { if (it.parent == folder.id) it.copy(parent = parent) else it })
         for (dir in root.listFiles().orEmpty()) {
@@ -422,14 +446,34 @@ class NotebookRepository(filesDir: File) {
         }
     }
 
+    /**
+     * Set when the folder list could not be read: the damaged file was put aside (nothing is
+     * written over it) and the library says so once.
+     */
+    @Volatile
+    var foldersProblem: String? = null
+
     private fun readFolders(): List<Folder> {
+        val file = File(root, FOLDERS)
+        if (!file.exists()) return emptyList()
         val raw = runCatching {
-            val arr = JSONArray(File(root, FOLDERS).readText())
+            val arr = JSONArray(file.readText())
             List(arr.length()) { i ->
                 val o = arr.getJSONObject(i)
                 Folder(o.getString("id"), o.getString("name").take(MAX_TITLE), o.optString("parent").takeIf(UUID_RE::matches))
             }.filter { UUID_RE.matches(it.id) }.distinctBy { it.id }
-        }.getOrDefault(emptyList())
+        }.getOrElse { e ->
+            if (e is IOException || e is OutOfMemoryError) {
+                // Could not be read just now: the file stays, and nothing may be written over it.
+                throw IOException("folder list unreadable", e)
+            }
+            // Damaged: kept aside under its own name, so the next write cannot destroy it.
+            val aside = File(root, "$FOLDERS.broken-${System.currentTimeMillis()}")
+            if (!file.renameTo(aside)) throw IOException("folder list damaged and can't be moved aside", e)
+            Log.w(TAG, "folder list damaged, kept as ${aside.name}", e)
+            foldersProblem = "Список папок повреждён: тетради показаны без папок. Старый список сохранён в файле ${aside.name}."
+            emptyList()
+        }
         // A missing parent or a loop (from a damaged file) puts the folder at the top level.
         val ids = raw.map { it.id }.toSet()
         return raw.map { f ->
@@ -441,7 +485,7 @@ class NotebookRepository(filesDir: File) {
 
     private fun writeFolders(folders: List<Folder>) {
         val arr = JSONArray(folders.map { f -> JSONObject().put("id", f.id).put("name", f.name).apply { f.parent?.let { put("parent", it) } } })
-        atomicWrite(File(root, FOLDERS)) { it.write(arr.toString(2).toByteArray()) }
+        atomicWrite(File(root, FOLDERS)) { it.write(arr.toString().toByteArray()) }
     }
 
     // ------------------------------------------------------------------ trash
@@ -484,7 +528,7 @@ class NotebookRepository(filesDir: File) {
         if (to.exists() || !from.renameTo(to)) return@onIo null
         File(to, DELETED_AT).delete()
         val meta = runCatching { readMeta(to) }.getOrNull() ?: return@onIo null
-        val folders = readFolders()
+        val folders = readFoldersOrNull() ?: return@onIo meta
         if (meta.folder != null && folders.none { it.id == meta.folder }) meta.copy(folder = null).also(::writeMetaNow) else meta
     }
 
@@ -567,8 +611,18 @@ class NotebookRepository(filesDir: File) {
         return nb.copy(pageIds = pages, updatedAt = System.currentTimeMillis()).also(::writeMeta)
     }
 
-    fun touch(nb: Notebook): Notebook =
-        nb.copy(updatedAt = System.currentTimeMillis()).also(::writeMeta)
+    /**
+     * The notebook changed (a page was saved): only its time, in a file of a few bytes, so
+     * that writing does not rewrite the whole notebook.json (hundreds of KB for a big PDF).
+     */
+    fun touch(nb: Notebook): Notebook {
+        val now = nb.copy(updatedAt = System.currentTimeMillis())
+        val file = File(dir(nb.id), TOUCHED)
+        background { if (file.parentFile?.isDirectory == true) runCatching { file.writeText(now.updatedAt.toString()) } }
+        return now
+    }
+
+    private fun readTouched(dir: File): Long = runCatching { File(dir, TOUCHED).takeIf { it.isFile && it.length() < 32 }?.readText()?.trim()?.toLong() }.getOrNull() ?: 0L
 
     /** Replaces one theme's background and deletes a photo that is no longer used. */
     fun setBackground(nb: Notebook, darkTheme: Boolean, bg: PageBackground): Notebook {
@@ -876,11 +930,39 @@ class NotebookRepository(filesDir: File) {
         put(ARCHIVE_MANIFEST, JSONObject().put("format", ARCHIVE_FORMAT).put("version", ARCHIVE_VERSION).toString().toByteArray())
         put(META, encodeMeta(nb.copy(folder = null, favorite = false)).second)
         for (pageId in nb.pageIds) putFile("pages/$pageId.ink", File(dir, "pages/$pageId.ink"))
-        val pictures = dir.list().orEmpty().filter { PageImage.NAME.matches(it) }
+        // Only pictures some page still uses: those of deleted pages stay out of the file.
+        val pictures = usedPictures(nb, dir)
         val extras = listOfNotNull(nb.light.photo, nb.dark.photo) + nb.pdfPages.values.map { it.file } + pictures + nb.recordings.map { it.file }
         for (name in extras.distinct()) putFile(name, File(dir, name))
         zip.finish()
         zip.flush()
+    }
+
+    /** Pictures in [dir] that a page of [nb] uses. */
+    private fun usedPictures(nb: Notebook, dir: File): Set<String> {
+        val all = dir.list().orEmpty().filter { PageImage.NAME.matches(it) }.toSet()
+        val pages = nb.pageIds.asSequence().map { File(dir, "pages/$it.ink") }.filter { it.isFile }.map { it.readBytes() }
+        return Orphans.referenced(all, pages)
+    }
+
+    /**
+     * Pictures and PDFs no page uses any more (left by deleted pages) are removed from disk.
+     * Run at start, before any notebook is open (no undo can bring a page back then), and
+     * only for files older than a day.
+     */
+    private fun sweepOrphans() {
+        val old = System.currentTimeMillis() - 24L * 3600 * 1000
+        for (dir in root.listFiles().orEmpty()) {
+            if (dir.name.startsWith(".") || !dir.isDirectory) continue
+            val nb = runCatching { readMeta(dir) }.getOrNull() ?: continue
+            val used = runCatching { usedPictures(nb, dir) }.getOrNull() ?: continue
+            val pdfs = nb.pdfPages.values.map { it.file }.toSet()
+            for (f in dir.listFiles().orEmpty()) {
+                if (f.lastModified() > old) continue
+                val orphan = (PageImage.NAME.matches(f.name) && f.name !in used) || (PDF_NAME.matches(f.name) && f.name !in pdfs && f.name != nb.light.photo && f.name != nb.dark.photo)
+                if (orphan) f.delete()
+            }
+        }
     }
 
     // ------------------------------------------------------- .inknotes (several)
@@ -1031,15 +1113,14 @@ class NotebookRepository(filesDir: File) {
             val taken = HashSet<String>()
             for (item in set.items) {
                 val ready = item.ready
-                val folder = item.folder?.let(created::get) ?: into
+                val chosen = into
+                val folder = SafeFiles.importFolder(item.folder?.let(created::get), chosen, ready.existing?.folder)
                 // The same notebook twice in one import: the second one is a copy.
                 val again = !taken.add(ready.notebook.id)
                 val nb = runCatching {
                     if (!again && (replace || ready.existing == null)) {
-                        val dest = dir(ready.notebook.id)
-                        deleteQuietly(dest)
-                        if (!ready.staging.renameTo(dest)) throw IOException("rename failed")
-                        ready.notebook.copy(folder = if (ready.existing != null && item.folder == null) ready.existing.folder else folder).also { writeMetaNow(it) }
+                        SafeFiles.replaceDir(ready.staging, dir(ready.notebook.id))
+                        ready.notebook.copy(folder = folder).also { writeMetaNow(it) }
                     } else {
                         val copy = ready.notebook.copy(id = newId(), title = "${ready.notebook.title} (копия)".take(MAX_TITLE), folder = folder)
                         if (!ready.staging.renameTo(dir(copy.id))) throw IOException("rename failed")
@@ -1211,20 +1292,19 @@ class NotebookRepository(filesDir: File) {
     }
 
     /** Moves a staged import into the library, replacing the local copy or as a new notebook. */
-    fun commitImportAsync(ready: ArchiveImport.Ready, replace: Boolean, onDone: (Notebook?) -> Unit) {
+    fun commitImportAsync(ready: ArchiveImport.Ready, replace: Boolean, into: String? = null, onDone: (Notebook?) -> Unit) {
         background {
+            // The same rule as for several files: a chosen folder, else where it already is.
+            val folder = SafeFiles.importFolder(null, into?.takeIf { id -> readFoldersOrNull().orEmpty().any { it.id == id } }, ready.existing?.folder)
             val nb = runCatching {
                 if (replace || ready.existing == null) {
-                    val target = dir(ready.notebook.id)
-                    deleteQuietly(target)
-                    if (!ready.staging.renameTo(target)) throw IOException("rename failed")
-                    // Folders are local: a replaced notebook stays where it was.
-                    ready.notebook.copy(folder = ready.existing?.folder).also { writeMetaNow(it) }
+                    SafeFiles.replaceDir(ready.staging, dir(ready.notebook.id))
+                    ready.notebook.copy(folder = folder).also { writeMetaNow(it) }
                 } else {
                     val copy = ready.notebook.copy(
                         id = newId(),
                         title = "${ready.notebook.title} (копия)".take(MAX_TITLE),
-                        folder = ready.existing.folder,
+                        folder = folder,
                     )
                     if (!ready.staging.renameTo(dir(copy.id))) throw IOException("rename failed")
                     writeMetaNow(copy)
@@ -1308,33 +1388,56 @@ class NotebookRepository(filesDir: File) {
         val file = pageFile(nb.id, pageId)
         return onIo {
             if (!file.exists()) return@onIo PageContent.EMPTY
+            var reading = true
             try {
-                PageCodec.read(file).also { unreadable -= file.path }
-            } catch (e: NewerFormatException) {
-                // Fine, just not for this version: keep it as it is (see savePageAsync).
-                unreadable += file.path
-                PageContent.EMPTY
-            } catch (e: Exception) {
-                // Damaged: keep the file aside instead of overwriting it with an empty page.
-                file.renameTo(File(file.parentFile, "${file.name}.broken-${System.currentTimeMillis()}"))
-                PageContent.EMPTY
+                val bytes = file.readBytes()
+                reading = false
+                PageCodec.decode(bytes).also { unreadable -= file.path }
             } catch (t: Throwable) {
-                // Out of memory and the like: the file is probably fine.
                 Log.e(TAG, "page $pageId not loaded", t)
-                unreadable += file.path
+                when (PageCopies.failure(t, reading)) {
+                    // Not a page: set aside, so the empty page that replaces it destroys nothing.
+                    PageCopies.Failure.DAMAGED -> file.renameTo(File(file.parentFile, "${file.name}.broken-${System.currentTimeMillis()}"))
+                    // Storage or memory trouble, or a newer app's page: the file is probably fine.
+                    // It stays as it is and nothing is written over it (see savePageAsync).
+                    PageCopies.Failure.LOCKED -> unreadable += file.path
+                }
                 PageContent.EMPTY
             }
         }
     }
 
+    /** Size and time of a page's file: changes whenever the page is saved ("-" when there is none). */
+    fun pageStamp(nb: Notebook, pageId: String): String =
+        pageFile(nb.id, pageId).let { if (it.isFile) "${it.length()}:${it.lastModified()}" else "-" }
+
+    /** Page [pageId] could not be read and is shown empty: it must not be changed or saved. */
+    fun isLocked(nb: Notebook, pageId: String) = pageFile(nb.id, pageId).path in unreadable
+
     /** [content] must be immutable: it is encoded on the IO thread. */
     fun savePageAsync(nb: Notebook, pageId: String, content: PageContent) {
         val file = pageFile(nb.id, pageId)
         background {
-            // A page shown empty because it could not be read is set aside before it is replaced.
-            if (unreadable.remove(file.path) && file.exists()) file.renameTo(File(file.parentFile, "${file.name}.kept-${System.currentTimeMillis()}"))
+            // A page shown empty because it could not be read is never written over.
+            if (file.path in unreadable && file.exists()) {
+                Log.w(TAG, "page $pageId is locked, not saved")
+                return@background
+            }
+            unreadable -= file.path
             atomicWrite(file) { out -> PageCodec.write(out, content) }
+            pruneCopies(file)
         }
+    }
+
+    /**
+     * Copies of a damaged page kept beside it: once the page is saved anew and reads back,
+     * only the newest [PageCopies.KEEP] stay. Until then all stay: one may be all there is.
+     */
+    private fun pruneCopies(file: File) {
+        val names = file.parentFile?.list().orEmpty().filter { PageCopies.pageOf(it) == file.name }
+        if (names.size <= PageCopies.KEEP) return
+        val ok = runCatching { PageCodec.read(file) }.isSuccess
+        for (n in PageCopies.toDelete(names, file.name, ok)) File(file.parentFile, n).delete()
     }
 
     // ------------------------------------------------- flash cards
@@ -1402,7 +1505,25 @@ class NotebookRepository(filesDir: File) {
 
     private fun deleteQuietly(file: File): Boolean = runCatching { file.deleteRecursively() }.getOrDefault(false)
 
-    private fun <T> onIo(block: () -> T): T = io.submit<T>(block).get()
+    /** On the IO thread, waited for; run in place when already there (no deadlock). */
+    private fun <T> onIo(block: () -> T): T = if (Thread.currentThread() === ioThread) block() else io.submit<T>(block).get()
+
+    /**
+     * Work of the repository off the main thread: on the IO thread itself, as a coroutine
+     * (calls in [block] that would wait for it run in place).
+     */
+    suspend fun <T> io(block: NotebookRepository.() -> T): T = kotlinx.coroutines.withContext(ioDispatcher) { block() }
+
+    /** The library as last read: null until read once. */
+    class Library(val notebooks: List<Notebook>, val folders: List<Folder>)
+
+    private val libraryState = kotlinx.coroutines.flow.MutableStateFlow<Library?>(null)
+    val library: kotlinx.coroutines.flow.StateFlow<Library?> = libraryState
+
+    /** Reads the library anew, off the main thread; [library] gets it. */
+    suspend fun refreshLibrary() {
+        libraryState.value = io { Library(list(), folders()) }
+    }
 
     private fun dir(id: String) = File(root, id)
 
@@ -1429,7 +1550,8 @@ class NotebookRepository(filesDir: File) {
             light = json.optJSONObject("light")?.let(::readBackground) ?: legacy ?: PageBackground(PaperKind.BLANK),
             dark = json.optJSONObject("dark")?.let(::readBackground) ?: legacy ?: PageBackground(PaperKind.BLANK),
             createdAt = json.getLong("createdAt"),
-            updatedAt = json.getLong("updatedAt"),
+            // Writing only bumps a small file of its own (see touch); the newer time counts.
+            updatedAt = maxOf(json.getLong("updatedAt"), readTouched(dir)),
             pageIds = pageIds,
             pdfPages = json.optJSONObject("pdf")?.let(::readPdfPages).orEmpty().filterKeys { it in pageIds },
             cover = (json.opt("cover") as? Number)?.let { it.toLong().toInt() or 0xFF000000.toInt() },
@@ -1593,7 +1715,7 @@ class NotebookRepository(filesDir: File) {
             json.put("pdf", pdf)
         }
         val file = File(dir(nb.id).apply { mkdirs() }, META)
-        return file to json.toString(2).toByteArray()
+        return file to json.toString().toByteArray()
     }
 
     private fun atomicWrite(target: File, body: (FileOutputStream) -> Unit) {
@@ -1610,6 +1732,7 @@ class NotebookRepository(filesDir: File) {
         const val TRASH_DAYS = 30
         const val TAG = "NotebookRepository"
         const val META = "notebook.json"
+        private const val TOUCHED = "touched"
         const val FOLDERS = ".folders.json"
         const val TRASH = ".trash"
         const val DELETED_AT = "deleted-at"
@@ -1636,8 +1759,8 @@ class NotebookRepository(filesDir: File) {
         const val ARCHIVE_MANIFEST = "inknote.json"
         const val ARCHIVE_FORMAT = "inknotes-notebook"
         const val ARCHIVE_VERSION = 1
-        const val BUNDLE_MANIFEST = "bundle.json"
-        const val BUNDLE_FORMAT = "inknotes-bundle"
+        const val BUNDLE_MANIFEST = BackupFiles.MANIFEST
+        const val BUNDLE_FORMAT = BackupFiles.FORMAT
         const val BUNDLE_VERSION = 1
         val BUNDLE_ENTRY = Regex("notebooks/[0-9]{1,5}\\.inknote")
         const val MAX_BUNDLE_NOTEBOOKS = 1000

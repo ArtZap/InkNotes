@@ -71,7 +71,8 @@ class HandwritingIndex(private val repo: NotebookRepository, private val enabled
     private var recognizer: DigitalInkRecognizer? = null
     private val cache = HashMap<String, MutableMap<String, PageText>>()
 
-    private class PageText(val signature: String, val lines: List<TextLine>)
+    /** [stamp]: size and time of the page file the text was read from (null: from memory). */
+    private class PageText(val signature: String, val lines: List<TextLine>, val stamp: String? = null)
 
     init {
         if (enabledPref()) enable()
@@ -141,11 +142,20 @@ class HandwritingIndex(private val repo: NotebookRepository, private val enabled
         if (state != State.Ready) return
         submit {
             val notebooks = repo.list()
-            val todo = notebooks.flatMap { nb -> nb.pageIds.map { nb to it } }
-            main.post { pendingPages = todo.size }
-            for ((nb, pageId) in todo) {
-                indexPage(nb.id, pageId, repo.loadPage(nb, pageId))
-                main.post { pendingPages = (pendingPages - 1).coerceAtLeast(0) }
+            // A page whose file is as it was when its text was read is not opened at all.
+            val todo = notebooks.associateWith { nb ->
+                val text = load(nb.id)
+                nb.pageIds.map { it to repo.pageStamp(nb, it) }.filter { (id, stamp) -> text[id]?.stamp != stamp }
+            }.filterValues { it.isNotEmpty() }
+            main.post { pendingPages = todo.values.sumOf { it.size } }
+            for ((nb, pages) in todo) {
+                var changed = false
+                for ((pageId, stamp) in pages) {
+                    changed = indexPage(nb.id, pageId, repo.loadPage(nb, pageId), stamp, save = false) || changed
+                    main.post { pendingPages = (pendingPages - 1).coerceAtLeast(0) }
+                }
+                // Each notebook's text is written once, not once a page.
+                if (changed) save(nb.id, load(nb.id))
             }
             for (nb in notebooks) prune(nb)
             main.post { pendingPages = 0 }
@@ -186,15 +196,24 @@ class HandwritingIndex(private val repo: NotebookRepository, private val enabled
         runCatching { exec.execute { runCatching(block) } }
     }
 
-    private fun indexPage(nbId: String, pageId: String, content: PageContent) {
+    /** Returns whether the notebook's text changed (and was saved, if [save]). */
+    private fun indexPage(nbId: String, pageId: String, content: PageContent, stamp: String? = null, save: Boolean = true): Boolean {
         val pen = content.strokes.filter { it.kind.isInk }
         val signature = signature(pen)
         val text = load(nbId)
-        if (text[pageId]?.signature == signature) return
-        val lines = recognize(pen) ?: return
-        text[pageId] = PageText(signature, lines)
-        save(nbId, text)
+        val old = text[pageId]
+        if (old?.signature == signature) {
+            // Same writing: only the file's stamp is new (kept so the page is not opened again).
+            if (stamp == null || old.stamp == stamp) return false
+            text[pageId] = PageText(signature, old.lines, stamp)
+            if (save) save(nbId, text)
+            return true
+        }
+        val lines = recognize(pen) ?: return false
+        text[pageId] = PageText(signature, lines, stamp)
+        if (save) save(nbId, text)
         main.post { version++ }
+        return true
     }
 
     /** Drops text of pages that no longer exist. */
@@ -270,7 +289,7 @@ class HandwritingIndex(private val repo: NotebookRepository, private val enabled
             pages.keys().asSequence().associateWithTo(HashMap()) { pageId ->
                 val p = pages.getJSONObject(pageId)
                 val lines = p.getJSONArray("lines")
-                PageText(p.getString("sig"), List(lines.length()) { i ->
+                PageText(p.getString("sig"), lines = List(lines.length()) { i ->
                     val l = lines.getJSONObject(i)
                     val b = l.getJSONArray("b")
                     val alts = l.optJSONArray("a") ?: JSONArray()
@@ -279,7 +298,7 @@ class HandwritingIndex(private val repo: NotebookRepository, private val enabled
                         List(alts.length()) { alts.getString(it) },
                         RectF(b.getDouble(0).toFloat(), b.getDouble(1).toFloat(), b.getDouble(2).toFloat(), b.getDouble(3).toFloat()),
                     )
-                })
+                }, stamp = p.optString("f").ifEmpty { null })
             }
         }.getOrDefault(HashMap())
     }
@@ -296,7 +315,7 @@ class HandwritingIndex(private val repo: NotebookRepository, private val enabled
                         .put("b", JSONArray(listOf(l.box.left, l.box.top, l.box.right, l.box.bottom).map { it.toDouble() })),
                 )
             }
-            pages.put(pageId, JSONObject().put("sig", page.signature).put("lines", lines))
+            pages.put(pageId, JSONObject().put("sig", page.signature).put("lines", lines).apply { page.stamp?.let { put("f", it) } })
         }
         repo.saveTextIndexAsync(nbId, pages.toString())
     }

@@ -22,13 +22,14 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- Shared .inknote files: messengers usually send them as octet-stream. -->
+            <!-- Shared .inknote files: messengers usually send them as octet-stream with no name
+                 to go by, so that type stays (a file that is not a notebook gets "this is not an
+                 InkNotes file"); plain zip archives are not offered to InkNotes any more. -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:scheme="content" />
                 <data android:mimeType="application/octet-stream" />
-                <data android:mimeType="application/zip" />
                 <data android:mimeType="application/x-inknote" />
             </intent-filter>
             <intent-filter>
@@ -36,7 +37,6 @@
                 <action android:name="android.intent.action.SEND_MULTIPLE" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="application/octet-stream" />
-                <data android:mimeType="application/zip" />
                 <data android:mimeType="application/x-inknote" />
             </intent-filter>
         </activity>
@@ -49,12 +49,6 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
-        <activity
-            android:name=".probe.ProbeActivity"
-            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode|density|fontScale|locale|layoutDirection"
-            android:exported="false"
-            android:windowSoftInputMode="stateAlwaysHidden">
-        </activity>
     </application>
 
 </manifest>

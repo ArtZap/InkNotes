@@ -289,7 +289,7 @@ class ArchiveTest {
     }
 
     private fun commit(repo: NotebookRepository, ready: ArchiveImport.Ready, replace: Boolean): Notebook? = await { done ->
-        repo.commitImportAsync(ready, replace, done)
+        repo.commitImportAsync(ready, replace, onDone = done)
     }
 
     private fun <T> await(seconds: Long = 20, start: ((T) -> Unit) -> Unit): T {

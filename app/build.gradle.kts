@@ -16,9 +16,28 @@ android {
         applicationId = "dev.inknotes"
         minSdk = 29
         targetSdk = 36
-        versionCode = 13
-        versionName = "0.34"
+        versionCode = 14
+        versionName = "0.35"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    // Device tests against the shrunk app when asked (CI); the debug app otherwise.
+    testBuildType = if (project.hasProperty("testMinified")) "minified" else "debug"
+
+    lint {
+        // Known findings are in the baseline; anything new fails the build.
+        baseline = file("lint-baseline.xml")
+        abortOnError = true
+        checkReleaseBuilds = false
+        // New text goes to strings.xml (old text is in the baseline).
+        error += "HardcodedText"
+    }
+
+    packaging {
+        resources {
+            // Kotlin coroutines' debugger hook: nothing for an app on a phone.
+            excludes += "DebugProbesKt.bin"
+        }
     }
 
     signingConfigs {
@@ -34,8 +53,20 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // R8: unused code of the libraries out, the rest shortened; mapping.txt is kept
+            // (tools/release.sh copies it next to the APK) to read crash traces.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             if (releaseKey != null) signingConfig = signingConfigs.getByName("release")
+        }
+        // The debug app shrunk as release is: the device tests run against it in CI
+        // (-PtestMinified), so that R8 can't break what they check.
+        create("minified") {
+            initWith(getByName("debug"))
+            isMinifyEnabled = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro", "proguard-test.pro")
+            matchingFallbacks += listOf("debug")
         }
         // Optimised like release but signed with the debug key: installs over the debug app
         // (keeping its notebooks) to measure speed as users get it.
@@ -73,7 +104,11 @@ dependencies {
     implementation(libs.mlkit.digital.ink)
     implementation(libs.pdfbox.android)
 
+    implementation(libs.kotlinx.coroutines.android)
+
     testImplementation(libs.junit)
+    // Android's org.json is only a stub in unit tests: the real one.
+    testImplementation(libs.json)
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.test.uiautomator)

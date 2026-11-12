@@ -11,3 +11,8 @@ release/
 hang-log.txt
 probe-strokes.json
 probe.txt
+
+# Not for the repository: an empty hang file, promo videos and tools (scrcpy, adb), caches.
+hang.txt
+promo/
+__pycache__/

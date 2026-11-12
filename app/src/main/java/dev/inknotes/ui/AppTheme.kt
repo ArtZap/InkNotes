@@ -169,6 +169,16 @@ class AppPrefs(context: Context) {
         get() = prefs.getString(BACKUP_FOLDER, null)
         set(value) = prefs.edit().putString(BACKUP_FOLDER, value).apply()
 
+    /** Tabs open at the last stop (see TabsMemory). */
+    var openTabs: String?
+        get() = prefs.getString("openTabs", null)
+        set(value) = prefs.edit().putString("openTabs", value).apply()
+
+    /** Names of automatic copies in the folder that were read back whole after writing. */
+    var backupWhole: Set<String>
+        get() = prefs.getStringSet("backupWhole", null)?.toSet() ?: emptySet()
+        set(value) = prefs.edit().putStringSet("backupWhole", value.toSet()).apply()
+
     /** When the last automatic backup was written (0 = never). */
     var lastBackupAt: Long
         get() = prefs.getLong(BACKUP_AT, 0L)

@@ -100,10 +100,7 @@ class PdfPages(private val repo: NotebookRepository) : Closeable {
             // The page's own shape, whatever a (possibly shared) notebook.json says, and never
             // more pixels than a big screen page: huge drawings would not fit in memory.
             val r = live(page, ref)
-            val aspect = r.outerHeight / r.outerWidth
-            var w = widthPx.coerceAtLeast(1)
-            if (w.toLong() * (w * aspect).toLong() > MAX_PIXELS) w = sqrt(MAX_PIXELS / aspect.toDouble()).toInt().coerceAtLeast(1)
-            val heightPx = (w * aspect).toInt().coerceIn(1, MAX_SIDE)
+            val (w, heightPx) = PdfGeometry.fitPixels(widthPx, r.outerHeight / r.outerWidth, MAX_PIXELS.toLong(), MAX_SIDE)
             return draw(page, ref, w, heightPx, w.toFloat(), 0f, 0f, dark)
         }
 

@@ -210,6 +210,12 @@ fi
 step "Результат"
 OUT_APK="release/InkNotes-$VERSION_NAME.apk"
 cp "$APK" "$OUT_APK"
+# R8 shortens names: the map turns a crash trace from this APK back into readable code.
+MAPPING=app/build/outputs/mapping/release/mapping.txt
+if [ -f "$MAPPING" ]; then
+  cp "$MAPPING" "release/InkNotes-$VERSION_NAME-mapping.txt"
+  ok "карта имён для разбора падений: release/InkNotes-$VERSION_NAME-mapping.txt"
+fi
 SHA=$(sha256sum "$OUT_APK" | awk '{print $1}')
 SIZE=$(du -h "$OUT_APK" | awk '{print $1}')
 cat > "release/InkNotes-$VERSION_NAME.txt" <<EOF

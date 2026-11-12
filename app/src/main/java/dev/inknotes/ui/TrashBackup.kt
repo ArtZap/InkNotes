@@ -16,6 +16,8 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -27,22 +29,27 @@ import androidx.compose.ui.unit.dp
 import dev.inknotes.data.Backup
 import dev.inknotes.data.Notebook
 import dev.inknotes.data.NotebookRepository
-import java.text.SimpleDateFormat
+import java.text.DateFormat
 import java.util.Date
-import java.util.Locale
+import kotlinx.coroutines.launch
 
 /** Deleted notebooks: restore one, delete one for good, or empty the trash. */
 @Composable
 fun TrashDialog(repo: NotebookRepository, onRestored: (Notebook) -> Unit, onDismiss: () -> Unit) {
-    var items by remember { mutableStateOf(repo.trash()) }
+    // Read off the main thread: null while it is read.
+    var loaded by remember { mutableStateOf<List<NotebookRepository.Trashed>?>(null) }
+    val items = loaded.orEmpty()
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(Unit) { loaded = repo.io { trash() } }
     var confirmEmpty by remember { mutableStateOf(false) }
-    val date = remember { SimpleDateFormat("d MMM, HH:mm", Locale.forLanguageTag("ru")) }
+    val date = remember { DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT) }
     val dayMs = 24L * 3600 * 1000
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (confirmEmpty) "Очистить корзину?" else "Корзина") },
         text = {
             when {
+                loaded == null -> Text("Открываю корзину…")
                 confirmEmpty -> Text("Тетради в корзине (${items.size}) будут удалены без возможности восстановления.")
                 items.isEmpty() -> Text("Корзина пуста. Удалённые тетради хранятся здесь ${repo.trashDays} дней.")
                 else -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -63,12 +70,14 @@ fun TrashDialog(repo: NotebookRepository, onRestored: (Notebook) -> Unit, onDism
                                     )
                                 }
                                 TextButton(onClick = {
-                                    repo.restore(t.notebook)?.let(onRestored)
-                                    items = repo.trash()
+                                    scope.launch {
+                                        repo.io { restore(t.notebook) }?.let(onRestored)
+                                        loaded = repo.io { trash() }
+                                    }
                                 }) { Text("Восстановить") }
                                 TextButton(onClick = {
                                     repo.purge(t.notebook)
-                                    items = items - t
+                                    loaded = items - t
                                 }) { Text("Удалить", color = MaterialTheme.colorScheme.error) }
                             }
                         }
@@ -80,7 +89,7 @@ fun TrashDialog(repo: NotebookRepository, onRestored: (Notebook) -> Unit, onDism
             if (confirmEmpty) {
                 Button(onClick = {
                     repo.emptyTrash()
-                    items = emptyList()
+                    loaded = emptyList()
                     confirmEmpty = false
                 }) { Text("Очистить") }
             } else {
@@ -104,7 +113,7 @@ fun BackupDialog(backup: Backup, prefs: AppPrefs, onDismiss: () -> Unit) {
     var on by remember { mutableStateOf(backup.folder != null) }
     var status by remember { mutableStateOf<String?>(null) }
     var last by remember { mutableStateOf(prefs.lastBackupAt) }
-    val date = remember { SimpleDateFormat("d MMM yyyy, HH:mm", Locale.forLanguageTag("ru")) }
+    val date = remember { DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT) }
     val report = { r: Backup.Result ->
         status = when (r) {
             Backup.Result.Done -> "Копия сохранена"
@@ -118,7 +127,8 @@ fun BackupDialog(backup: Backup, prefs: AppPrefs, onDismiss: () -> Unit) {
         if (tree == null) return@rememberLauncherForActivityResult
         status = "Сохраняю копию…"
         backup.setFolder(tree, report)
-        on = true
+        // On only if the folder was really taken (a failure has already said why).
+        on = backup.folder != null
         folderName = backup.folderName()
     }
     AlertDialog(

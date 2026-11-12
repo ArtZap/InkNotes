@@ -107,6 +107,20 @@ object PdfGeometry {
     /** Degrees clockwise [m] turns by. */
     fun degreesOf(m: FloatArray): Float = Math.toDegrees(kotlin.math.atan2(m[1].toDouble(), m[0].toDouble())).toFloat()
 
+    /**
+     * Pixels to draw a page [aspect] (height / width) times as tall as wide: [widthPx] wide if
+     * it fits, else smaller with the same shape, so that neither side passes [maxSide] and the
+     * area stays within [maxPixels]. Very tall pages are narrowed, never cut.
+     */
+    fun fitPixels(widthPx: Int, aspect: Float, maxPixels: Long, maxSide: Int): Pair<Int, Int> {
+        val a = if (aspect.isFinite() && aspect > 0f) aspect.toDouble() else 1.0
+        var w = widthPx.coerceAtLeast(1).toDouble()
+        w = minOf(w, maxSide.toDouble(), maxSide / a, kotlin.math.sqrt(maxPixels / a))
+        val wi = w.toInt().coerceAtLeast(1)
+        val hi = (wi * a).toInt().coerceIn(1, maxSide)
+        return wi to hi
+    }
+
     /** As Android's Matrix.setValues takes it (3×3, row by row). */
     fun toMatrixValues(m: FloatArray) = floatArrayOf(m[0], m[2], m[4], m[1], m[3], m[5], 0f, 0f, 1f)
 }

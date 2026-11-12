@@ -541,9 +541,12 @@ object PageCodec {
 
     private fun anyLayer(c: PageContent) = c.strokes.any { it.layer != 0 } || c.fills.any { it.layer != 0 } || c.images.any { it.layer != 0 }
 
-    fun read(file: File): PageContent =
-        DataInputStream(BufferedInputStream(file.inputStream())).use { data ->
-            if (data.readInt() != MAGIC) throw IOException("not a page file: $file")
+    fun read(file: File): PageContent = decode(file.readBytes())
+
+    /** A page from its file's bytes; any error here means the bytes are not a page. */
+    fun decode(bytes: ByteArray): PageContent =
+        DataInputStream(java.io.ByteArrayInputStream(bytes)).use { data ->
+            if (data.readInt() != MAGIC) throw IOException("not a page file")
             val version = data.readInt()
             if (version > VERSION) throw NewerFormatException("page format v$version is newer than supported v$VERSION")
             // What the whole page may hold, however it is split up: every cut is a path operation on each redraw.

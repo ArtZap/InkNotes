@@ -29,9 +29,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
-import java.text.SimpleDateFormat
 import java.util.Date
-import java.util.Locale
 
 fun clock(ms: Long): String {
     val s = (ms / 1000).coerceAtLeast(0)
@@ -82,7 +80,7 @@ fun SoundBar(c: EditorController) {
 /** The notebook's recordings: play, delete; listening by touching the writing. */
 @Composable
 fun RecordingsDialog(c: EditorController, onRecord: () -> Unit, onDismiss: () -> Unit) {
-    val dates = remember { SimpleDateFormat("d MMM, HH:mm", Locale.forLanguageTag("ru")) }
+    val dates = remember { java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Записи звука") },

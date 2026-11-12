@@ -54,6 +54,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -82,9 +84,8 @@ import androidx.compose.ui.graphics.luminance
 import dev.inknotes.search.HandwritingIndex
 import dev.inknotes.search.SearchHit
 import kotlinx.coroutines.delay
-import java.text.SimpleDateFormat
+import kotlinx.coroutines.launch
 import java.util.Date
-import java.util.Locale
 
 @Composable
 fun LibraryScreen(
@@ -102,14 +103,28 @@ fun LibraryScreen(
     onProbe: () -> Unit,
     version: Int = 0,
 ) {
-    var notebooks by remember { mutableStateOf(repo.list()) }
-    var folders by remember { mutableStateOf(repo.folders()) }
-    val reload = {
-        notebooks = repo.list()
-        folders = repo.folders()
+    // The library is read off the main thread: a big one would freeze the screen.
+    val library by repo.library.collectAsState()
+    var notebooks by remember { mutableStateOf(library?.notebooks.orEmpty()) }
+    var folders by remember { mutableStateOf(library?.folders.orEmpty()) }
+    LaunchedEffect(library) {
+        library?.let {
+            notebooks = it.notebooks
+            folders = it.folders
+        }
     }
-    // Notebooks were added from files: show them.
-    LaunchedEffect(version) { if (version > 0) reload() }
+    val scope = rememberCoroutineScope()
+    val reload: () -> Unit = { scope.launch { repo.refreshLibrary() } }
+    /** Repository work off the main thread, then the library read anew. */
+    fun change(block: NotebookRepository.() -> Unit) {
+        scope.launch {
+            repo.io(block)
+            repo.refreshLibrary()
+        }
+    }
+    // On first show, and when notebooks were added from files.
+    LaunchedEffect(version) { repo.refreshLibrary() }
+
     // Kept while a notebook is open (see MainActivity), so closing it comes back here.
     var folderId by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<String?>(null) }
     val folder = folders.find { it.id == folderId }
@@ -120,6 +135,13 @@ fun LibraryScreen(
     var query by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("") }
     var hits by remember { mutableStateOf<List<SearchHit>>(emptyList()) }
     var importStatus by remember { mutableStateOf<String?>(null) }
+    // A damaged folder list was set aside: say so once.
+    LaunchedEffect(library) {
+        repo.foldersProblem?.let {
+            importStatus = it
+            repo.foldersProblem = null
+        }
+    }
     var settings by remember { mutableStateOf(false) }
     var trashOpen by remember { mutableStateOf(false) }
     var helpOpen by remember { mutableStateOf(false) }
@@ -144,7 +166,7 @@ fun LibraryScreen(
         exporting = null
         if (uri == null || what == null) return@rememberLauncherForActivityResult
         importStatus = "Сохраняю тетради…"
-        repo.exportBundleAsync(what.first, what.second, { context.contentResolver.openOutputStream(uri) }) { ok ->
+        repo.exportBundleAsync(what.first, what.second, { context.contentResolver.openOutputStream(uri, "wt") }) { ok ->
             importStatus = if (ok) "Сохранено тетрадей: ${what.first.size}" + (if (what.second.isNotEmpty()) ", папок: ${what.second.size}" else "") else "Не удалось сохранить файл"
         }
     }
@@ -170,7 +192,8 @@ fun LibraryScreen(
             }
         }
     }
-    val dateFormat = remember { SimpleDateFormat("d MMM yyyy, HH:mm", Locale.forLanguageTag("ru")) }
+    // Dates as the device's language writes them.
+    val dateFormat = remember { java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT) }
     // Some systems (Huawei) put the first text field in focus on start: the screen takes the
     // focus itself, so the keyboard comes only when the search field is tapped.
     val screenFocus = remember { FocusRequester() }
@@ -363,7 +386,12 @@ fun LibraryScreen(
                 ),
             )
         val subfolders = folders.filter { it.parent == folderId }.sortedBy { it.name.lowercase() }
-        if (shown.isEmpty() && subfolders.isEmpty()) {
+        if (library == null) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                androidx.compose.material3.CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                Text("Загружаю тетради…", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        } else if (shown.isEmpty() && subfolders.isEmpty()) {
             Text(
                 if (folderId != null) "В этой папке пока нет тетрадей." else "Пока нет ни одной тетради.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -415,9 +443,9 @@ fun LibraryScreen(
             confirm = "Создать",
             onDismiss = { creatingFolder = false },
             onConfirm = { name ->
-                repo.createFolder(name, folderId)
+                val parent = folderId
+                change { createFolder(name, parent) }
                 creatingFolder = false
-                reload()
             },
         )
     }
@@ -456,17 +484,25 @@ fun LibraryScreen(
             current = folderId,
             exclude = selFolders.flatMap { FolderTree.subtree(folders, it) }.toSet(),
             count = selNotebooks.size + selFolders.size,
-            onCreateFolder = { name, parent -> repo.createFolder(name, parent).also { folders = repo.folders() }.id },
+            onCreateFolder = { name, parent ->
+                // Shown at once; written off the main thread.
+                val f = Folder(java.util.UUID.randomUUID().toString(), name, parent)
+                folders = folders + f
+                change { addFolder(f) }
+                f.id
+            },
             onDismiss = { moving = false },
             onMove = { into ->
-                val (moved, movedFolders) = repo.moveAll(notebooks.filter { it.id in selNotebooks }, selFolders, into)
-                val byId = moved.associateBy { it.id }
-                notebooks = notebooks.map { byId[it.id] ?: it }
+                val chosen = notebooks.filter { it.id in selNotebooks }
+                val chosenFolders = selFolders
                 moving = false
                 selecting = false
                 val where = folders.find { it.id == into }?.name?.let { "в «$it»" } ?: "на верхний уровень"
-                importStatus = "Перемещено $where: тетрадей ${moved.size}" + (if (movedFolders > 0) ", папок $movedFolders" else "")
-                reload()
+                scope.launch {
+                    val (moved, movedFolders) = repo.io { moveAll(chosen, chosenFolders, into) }
+                    importStatus = "Перемещено $where: тетрадей ${moved.size}" + (if (movedFolders > 0) ", папок $movedFolders" else "")
+                    repo.refreshLibrary()
+                }
             },
         )
     }
@@ -476,15 +512,15 @@ fun LibraryScreen(
             folders = folders,
             onDismiss = { editingFolder = null },
             onSave = { name, parent ->
-                if (name != f.name) repo.renameFolder(f, name)
-                if (parent != f.parent) repo.moveFolder(f, parent)
+                change {
+                    if (name != f.name) renameFolder(f, name)
+                    if (parent != f.parent) moveFolder(f, parent)
+                }
                 editingFolder = null
-                reload()
             },
             onDelete = {
-                repo.deleteFolder(f)
+                change { deleteFolder(f) }
                 editingFolder = null
-                reload()
             },
             onExport = {
                 editingFolder = null
