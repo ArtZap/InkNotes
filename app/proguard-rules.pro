@@ -27,6 +27,15 @@
 -keep class androidx.ink.** { *; }
 -keep class androidx.input.motionprediction.** { *; }
 
+# Started by name from the manifest or by reflection (WorkManager comes with ML Kit; its
+# Room database is made by name): kept with their constructors.
+-keep class androidx.work.** { *; }
+-keep class androidx.room.** { *; }
+-keep class * extends androidx.room.RoomDatabase { *; }
+-keep class androidx.startup.** { *; }
+-keep class * implements androidx.startup.Initializer { *; }
+-keep class * extends android.content.ContentProvider { <init>(); }
+
 # Line numbers in crash traces (with mapping.txt).
 -keepattributes SourceFile,LineNumberTable
 -renamesourcefileattribute SourceFile
