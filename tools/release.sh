@@ -51,6 +51,15 @@ KEYTOOL="${JAVA_HOME:+$JAVA_HOME/bin/}keytool"
 ADB="$ANDROID_HOME/platform-tools/adb"
 BUILD_TOOLS=$(ls -d "$ANDROID_HOME"/build-tools/*/ 2>/dev/null | sort -V | tail -1)
 APKSIGNER="${BUILD_TOOLS}apksigner"
+# Временные файлы — в папке проекта, а не в /tmp: на ноутбуке /tmp маленький, и сборка
+# (Gradle, компилятор Kotlin) падала с «No space left on device».
+TMP_DIR="$PWD/.tmp"
+rm -rf "$TMP_DIR" && mkdir -p "$TMP_DIR" || die "Не создать $TMP_DIR"
+export TMPDIR="$TMP_DIR"
+export JAVA_TOOL_OPTIONS="-Djava.io.tmpdir=$TMP_DIR${JAVA_TOOL_OPTIONS:+ $JAVA_TOOL_OPTIONS}"
+FREE_MB=$(df -Pm . | awk 'NR==2{print $4}')
+[ "${FREE_MB:-0}" -ge 2048 ] || die "Мало места на диске с проектом: ${FREE_MB} МБ свободно, нужно хотя бы 2 ГБ.
+  Освободить: ./gradlew clean, удалить старые release/build-*.log, кэш $GRADLE_USER_HOME/caches."
 echo "SDK:  $ANDROID_HOME"
 echo "Java: $("$JAVA" -version 2>&1 | head -1)"
 ok "окружение в порядке"
@@ -85,10 +94,14 @@ installed_cert() {
   local path tmp
   path=$("$ADB" shell pm path dev.inknotes 2>/dev/null | sed -n 's/^package://p' | grep base.apk | tr -d '\r' | head -1)
   [ -n "$path" ] || return 0
-  tmp=$(mktemp -d)
-  "$ADB" pull "$path" "$tmp/base.apk" >/dev/null 2>&1 \
-    && "$APKSIGNER" verify --print-certs "$tmp/base.apk" 2>/dev/null | sed -n 's/.*certificate SHA-256 digest: //p' | head -1 | hexsha
+  tmp=$(mktemp -d) || die "Не создать временную папку (нет места?)"
+  local cert
+  cert=$("$ADB" pull "$path" "$tmp/base.apk" >/dev/null 2>&1 \
+    && "$APKSIGNER" verify --print-certs "$tmp/base.apk" 2>/dev/null | sed -n 's/.*certificate SHA-256 digest: //p' | head -1 | hexsha)
   rm -rf "$tmp"
+  # Приложение есть, а ключ не прочитать: «ставим как есть» тут опасно — лучше остановиться.
+  [ -n "$cert" ] || die "InkNotes на планшете есть, но не удалось прочитать его ключ (adb pull или apksigner). Проверьте место на диске и запустите снова."
+  echo "$cert"
 }
 if [ "$DEVICE" = 1 ] || [ "$INSTALL" = 1 ]; then
   step "Планшет"
@@ -96,12 +109,12 @@ if [ "$DEVICE" = 1 ] || [ "$INSTALL" = 1 ]; then
   [ -x "$ADB" ] || die "Нет adb в $ANDROID_HOME/platform-tools"
   [ "$("$ADB" devices | awk 'NR>1 && $2=="device"' | wc -l)" -ge 1 ] || die "Планшет не подключён (adb devices пуст)"
   ON_TABLET=""
-  [ -x "$APKSIGNER" ] && ON_TABLET=$(installed_cert)
+  if [ -x "$APKSIGNER" ]; then ON_TABLET=$(installed_cert) || exit 1; fi
   RELEASE_CERT=$(sed -n 's/^storePassword=//p' keystore.properties | {
     read -r sp; "$KEYTOOL" -list -v -keystore "$STORE" -alias "$(sed -n 's/^keyAlias=//p' keystore.properties)" -storepass "$sp" 2>/dev/null; } \
     | sed -n 's/^[[:space:]]*SHA256: //p' | head -1 | hexsha)
   if [ -z "$ON_TABLET" ]; then
-    ok "InkNotes на планшете нет (или ключ не прочитать) — ставим как есть"
+    ok "InkNotes на планшете нет — ставим как есть"
   elif [ "$ON_TABLET" = "$RELEASE_CERT" ]; then
     ok "на планшете релизная сборка"
     [ "$DEVICE" = 1 ] && die "На планшете релиз, а тесты ставят отладочную сборку с другим ключом — не встанет. Запустите без --device (или на другом устройстве)."
