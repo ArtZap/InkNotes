@@ -1162,6 +1162,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                 return true
             }
         }
+        if (e.actionMasked == MotionEvent.ACTION_DOWN) android.util.Log.i("InkPdf", "down tool=${e.getToolType(0)}")
         if (pickingColor && mode == Mode.NONE) return pick(e)
         val index = e.actionIndex
         when (e.actionMasked) {

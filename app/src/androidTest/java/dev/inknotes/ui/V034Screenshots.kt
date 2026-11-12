@@ -60,6 +60,9 @@ class V034Screenshots {
             device.findObject(By.scrollable(true))?.scroll(Direction.DOWN, 0.8f)
         }
         click(title)
+        // Until the menu is gone, a touch only closes it.
+        device.wait(Until.gone(By.text("Настроить панели…")), 5_000)
+        Thread.sleep(1000)
     }
 
     private fun stylus(x1: Int, y1: Int, x2: Int, y2: Int, ms: Int = 400) {
