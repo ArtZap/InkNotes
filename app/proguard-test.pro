@@ -9,3 +9,8 @@
 -keep class org.junit.** { *; }
 -dontwarn org.junit.**
 -dontwarn androidx.test.**
+-keep class androidx.tracing.** { *; }
+-keep class androidx.test.** { *; }
+-keep class androidx.concurrent.** { *; }
+-keep class com.google.common.util.concurrent.** { *; }
+-keep class androidx.tracing.Trace { *; }
