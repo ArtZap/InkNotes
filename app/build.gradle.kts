@@ -58,6 +58,9 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            // Phones and tablets only: the x86 libraries (emulators, a few Chromebooks) would
+            // add about 16 MB of native code nobody here uses.
+            ndk { abiFilters += setOf("arm64-v8a", "armeabi-v7a") }
             if (releaseKey != null) signingConfig = signingConfigs.getByName("release")
         }
         // The debug app shrunk as release is: the device tests run against it in CI
@@ -66,6 +69,7 @@ android {
             initWith(getByName("debug"))
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro", "proguard-test.pro")
+            testProguardFiles("proguard-androidtest.pro")
             matchingFallbacks += listOf("debug")
         }
         // Optimised like release but signed with the debug key: installs over the debug app
