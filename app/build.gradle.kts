@@ -31,6 +31,9 @@ android {
         checkReleaseBuilds = false
         // New text goes to strings.xml (old text is in the baseline).
         error += "HardcodedText"
+        // Every finding in the CI log, not only the first.
+        textReport = true
+        textOutput = file("stdout")
     }
 
     packaging {
