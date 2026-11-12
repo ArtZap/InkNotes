@@ -124,6 +124,14 @@ class PdfPages(private val repo: NotebookRepository) : Closeable {
             val box = RectF(0f, 0f, r.width, r.height).also(m::mapRect)
             Canvas(bitmap).drawRect(box, Paint().apply { color = Color.WHITE })
             page.render(bitmap, null, m, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+            // With margins: a thin edge shows where the PDF ends and the room for notes begins.
+            if (!r.margins.isNone) {
+                Canvas(bitmap).drawRect(box, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    style = Paint.Style.STROKE
+                    color = 0x40000000
+                    strokeWidth = (fullWidthPx / 600f).coerceAtLeast(1f)
+                })
+            }
             if (!dark) return bitmap
             val out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
             Canvas(out).drawBitmap(bitmap, 0f, 0f, darkPaint)

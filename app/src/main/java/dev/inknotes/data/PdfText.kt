@@ -45,7 +45,6 @@ class PdfText(context: Context) : Closeable {
             val page = runCatching { Reader.readPage(doc(file), index) }
                 .onFailure { android.util.Log.w(TAG, "page $index of ${file.name}", it) }
                 .getOrNull()
-            page?.let { p -> android.util.Log.i(TAG, "page $index: ${p.words.size} words, ${p.links.size} links, first ${p.words.firstOrNull()}") }
             main.post { onDone(page) }
         }
     }
