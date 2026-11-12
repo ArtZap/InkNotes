@@ -67,6 +67,8 @@ android {
         // (-PtestMinified), so that R8 can't break what they check.
         create("minified") {
             initWith(getByName("debug"))
+            // Not debuggable: else R8 leaves out its optimisations and the test is not of release.
+            isDebuggable = false
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro", "proguard-test.pro")
             testProguardFiles("proguard-androidtest.pro")

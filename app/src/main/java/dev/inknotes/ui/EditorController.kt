@@ -534,8 +534,12 @@ class EditorController(
         private set
     private var player: android.media.MediaPlayer? = null
 
-    /** A finger tap on writing made during a recording plays it from that moment. */
-    var listenByTouch by mutableStateOf(false)
+    /**
+     * A finger tap on writing made during a recording plays it from that moment; such places
+     * are underlined. On by itself in a notebook that has them (it was hidden behind a switch
+     * before 0.35, so recordings looked as if nothing could be heard from them).
+     */
+    var listenByTouch by mutableStateOf(notebook.audioMarks.isNotEmpty())
         private set
 
     fun toggleListenByTouch() {
@@ -586,9 +590,15 @@ class EditorController(
             return
         }
         val rec = dev.inknotes.data.Recording(file.name, since, System.currentTimeMillis() - since)
-        notebook = repo.addRecording(notebook, rec, pendingMarks.toList())
+        val marks = pendingMarks.toList()
+        notebook = repo.addRecording(notebook, rec, marks)
         pendingMarks.clear()
-        showStatus("Запись сохранена: касание написанного во время неё включает звук")
+        if (marks.isNotEmpty()) {
+            listenByTouch = true
+            showStatus("Запись сохранена. Написанное во время неё подчёркнуто оранжевым — коснитесь пальцем, и включится звук")
+        } else {
+            showStatus("Запись сохранена. Во время неё ничего не написано — слушайте её в «Записи звука…»")
+        }
         view?.refresh()
     }
 
