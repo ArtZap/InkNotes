@@ -41,6 +41,8 @@ class V034Screenshots {
     }
 
     private fun click(text: String, timeout: Long = 15_000) {
+        // The emulator's launcher sometimes stops answering: its dialog covers the screen.
+        device.findObject(By.text("Wait"))?.click()
         val o = device.wait(Until.findObject(By.text(text)), timeout)
         if (o == null) {
             shot("fail-$text".replace(Regex("[^\\p{L}0-9-]"), "_"))
