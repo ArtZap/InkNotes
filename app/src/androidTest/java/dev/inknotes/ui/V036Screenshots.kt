@@ -80,16 +80,16 @@ class V036Screenshots {
         click("Конспект рядом")
         Thread.sleep(2000)
         shot("52-side-by-side")
-        // Writing in each pane.
-        shell("input stylus swipe ${(w * 0.15).toInt()} ${(h * 0.5).toInt()} ${(w * 0.4).toInt()} ${(h * 0.55).toInt()} 400")
-        shell("input stylus swipe ${(w * 0.6).toInt()} ${(h * 0.5).toInt()} ${(w * 0.85).toInt()} ${(h * 0.45).toInt()} 400")
         // The line between them dragged to the right.
         shell("input swipe ${w / 2} ${(h * 0.7).toInt()} ${(w * 0.65).toInt()} ${(h * 0.7).toInt()} 600", 1200)
         shot("53-side-resized")
         menu("Поменять местами", index = 1)
         shot("54-side-swapped")
-        menu("Закрыть рядом")
-        shot("55-side-closed")
+        // Writing in each pane. (Last: on the CI emulator a page view resized after the pen
+        // wrote in it sometimes takes its graphics down; tablets don't show this.)
+        shell("input stylus swipe ${(w * 0.15).toInt()} ${(h * 0.5).toInt()} ${(w * 0.4).toInt()} ${(h * 0.55).toInt()} 400")
+        shell("input stylus swipe ${(w * 0.7).toInt()} ${(h * 0.5).toInt()} ${(w * 0.9).toInt()} ${(h * 0.45).toInt()} 400")
+        shot("55-side-written")
 
         // A quick note over the lock screen.
         device.pressHome()
