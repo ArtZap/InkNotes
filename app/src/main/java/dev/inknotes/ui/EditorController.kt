@@ -418,9 +418,14 @@ class EditorController(
         handler.post(mathRunnable)
     }
 
-    /** The editor screen went away (another tab, or the library): the notebook stays open. */
-    fun detach() {
+    /**
+     * The editor screen went away (another tab, or the library): the notebook stays open.
+     * [from]: the view that screen showed. A newer view may already be attached (two panes
+     * changing places make the new view before the old one is gone): then it is left alone.
+     */
+    fun detach(from: PageEditorView? = null) {
         flush()
+        if (from != null && view !== from) return
         // Where it was, to come back to in this tab.
         view?.let { v -> returnPlace = pageIndex to (v.pagePlace(pageIndex) ?: 0f) }
         math.onReady = null

@@ -124,8 +124,10 @@ fun EditorScreen(
     onSwap: (() -> Unit)? = null,
 ) {
     BackHandler(onBack = onClose)
+    // The view this screen made: only it is let go of when the screen goes.
+    val shownView = remember { arrayOfNulls<PageEditorView>(1) }
     DisposableEffect(controller) {
-        onDispose { controller.detach() }
+        onDispose { controller.detach(shownView[0]) }
     }
     var showBackground by remember { mutableStateOf(false) }
     var showPicker by remember { mutableStateOf(false) }
@@ -307,7 +309,7 @@ fun EditorScreen(
                 }
             }
             AndroidView(
-                factory = { ctx -> PageEditorView(ctx).also(controller::attach) },
+                factory = { ctx -> PageEditorView(ctx).also { shownView[0] = it; controller.attach(it) } },
                 // Its own layer: a redrawn page (every frame of a scroll) then re-records only
                 // the canvas, not the toolbars and panels around it.
                 modifier = Modifier.weight(1f).fillMaxHeight().graphicsLayer(),
