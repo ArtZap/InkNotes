@@ -87,8 +87,16 @@ class V036Screenshots {
         shot("54-side-swapped")
         // Writing in each pane. (Last: on the CI emulator a page view resized after the pen
         // wrote in it sometimes takes its graphics down; tablets don't show this.)
-        shell("input stylus swipe ${(w * 0.15).toInt()} ${(h * 0.5).toInt()} ${(w * 0.4).toInt()} ${(h * 0.55).toInt()} 400")
-        shell("input stylus swipe ${(w * 0.7).toInt()} ${(h * 0.5).toInt()} ${(w * 0.9).toInt()} ${(h * 0.45).toInt()} 400")
+        android.util.Log.i("InkTest", "left 1")
+        shell("input stylus swipe ${(w * 0.15).toInt()} ${(h * 0.5).toInt()} ${(w * 0.4).toInt()} ${(h * 0.55).toInt()} 400", 1500)
+        android.util.Log.i("InkTest", "left 2")
+        shell("input stylus swipe ${(w * 0.15).toInt()} ${(h * 0.6).toInt()} ${(w * 0.4).toInt()} ${(h * 0.6).toInt()} 400", 1500)
+        shot("55a-left-written")
+        android.util.Log.i("InkTest", "right 1")
+        shell("input stylus swipe ${(w * 0.7).toInt()} ${(h * 0.5).toInt()} ${(w * 0.9).toInt()} ${(h * 0.45).toInt()} 400", 1500)
+        android.util.Log.i("InkTest", "right 2")
+        shell("input stylus swipe ${(w * 0.7).toInt()} ${(h * 0.6).toInt()} ${(w * 0.9).toInt()} ${(h * 0.6).toInt()} 400", 1500)
+        android.util.Log.i("InkTest", "written")
         shot("55-side-written")
 
         // A quick note over the lock screen.
