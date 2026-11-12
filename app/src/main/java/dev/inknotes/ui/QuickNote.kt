@@ -99,6 +99,8 @@ class QuickNoteActivity : ComponentActivity() {
         super.onDestroy()
     }
 
+    // As in MainActivity: lint takes ComponentActivity's override for a restricted one.
+    @android.annotation.SuppressLint("RestrictedApi")
     override fun dispatchKeyEvent(event: KeyEvent): Boolean =
         controller?.handleKey(event) == true || super.dispatchKeyEvent(event) || controller?.handleShortcut(event) == true
 }
