@@ -1343,15 +1343,31 @@ private fun ArrowRow(content: @Composable () -> Unit) {
                             if (forward) listOf(bg.copy(alpha = 0f), bg, bg) else listOf(bg, bg, bg.copy(alpha = 0f)),
                         ),
                     )
-                    .clickable { scope.launch { scroll.animateScrollBy((if (forward) 1 else -1) * width * 0.7f) } }
+                    .clickable {
+                        // An unhurried glide that eases in and out, to the next part of the line.
+                        scope.launch {
+                            scroll.animateScrollBy(
+                                (if (forward) 1 else -1) * width * 0.7f,
+                                androidx.compose.animation.core.tween(ARROW_SCROLL_MS, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+                            )
+                        }
+                    }
                     .semantics { contentDescription = if (forward) "Дальше по панели" else "Назад по панели" },
                 contentAlignment = if (forward) Alignment.CenterEnd else Alignment.CenterStart,
             ) { InkIcon(if (forward) InkIcons.Next else InkIcons.Previous, contentDescription = null, modifier = Modifier.size(20.dp)) }
         }
-        if (scroll.canScrollBackward) arrow(forward = false, Alignment.CenterStart)
-        if (scroll.canScrollForward) arrow(forward = true, Alignment.CenterEnd)
+        // The arrows fade in and out as the line reaches its ends, instead of popping.
+        AnimatedVisibility(scroll.canScrollBackward, Modifier.align(Alignment.CenterStart), enter = fadeIn(tween(ARROW_FADE_MS)), exit = fadeOut(tween(ARROW_FADE_MS))) {
+            Box { arrow(forward = false, Alignment.CenterStart) }
+        }
+        AnimatedVisibility(scroll.canScrollForward, Modifier.align(Alignment.CenterEnd), enter = fadeIn(tween(ARROW_FADE_MS)), exit = fadeOut(tween(ARROW_FADE_MS))) {
+            Box { arrow(forward = true, Alignment.CenterEnd) }
+        }
     }
 }
+
+private const val ARROW_SCROLL_MS = 450
+private const val ARROW_FADE_MS = 180
 
 /** Height of a tab: a thin strip, the page keeps the room. */
 private val TAB_HEIGHT = 28.dp
