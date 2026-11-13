@@ -334,7 +334,7 @@ class NotebookRepository(filesDir: File) {
         listIn(root.listFiles() ?: throw IOException("library folder unreadable"))
     }
 
-    private fun listIn(dirs: Array<File>): List<Notebook> {
+    private fun listIn(dirs: Array<out File>): List<Notebook> {
         val missing = HashSet<String>()
         return dirs.asList()
             .filter { !it.name.startsWith(".") } // skip import staging folders
