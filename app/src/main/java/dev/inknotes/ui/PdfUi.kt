@@ -1,0 +1,147 @@
+package dev.inknotes.ui
+
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import dev.inknotes.data.PdfGeometry.Margins
+
+/** Room for notes round a PDF page, as offered. */
+enum class PdfMargins(val title: String, val margins: Margins) {
+    NONE("Без полей", Margins.NONE),
+    RIGHT("Справа", Margins(right = 0.6f)),
+    BOTTOM("Снизу", Margins(bottom = 0.7f)),
+    AROUND("Вокруг", Margins(0.15f, 0.15f, 0.15f, 0.15f)),
+    WIDE("Справа и снизу", Margins(right = 0.5f, bottom = 0.5f));
+
+    companion object {
+        fun of(m: Margins) = entries.firstOrNull { it.margins == m }
+    }
+}
+
+/**
+ * The PDF page shown: turned, room for notes round it, dark; other PDF's pages put in after
+ * it; the PDF's own contents added to the notebook's.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun PdfPageDialog(c: EditorController, onInsertPdf: () -> Unit, onDismiss: () -> Unit) {
+    var all by remember { mutableStateOf(false) }
+    val ref = c.pdfRef()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(InkIcons.PdfPage, null) },
+        title = { Text("Страница PDF") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (ref == null) {
+                    Text(
+                        if (c.hasPdf) "Эта страница — не из PDF. Повернуть и добавить поля можно у страниц PDF." else "В тетради нет страниц PDF. Их можно вставить из файла.",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Ко всем страницам PDF", Modifier.weight(1f))
+                        Switch(checked = all, onCheckedChange = { all = it })
+                    }
+                    Text("Повернуть", fontWeight = FontWeight.Medium)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = { c.setPdfLayout(all, rotateBy = -90) }) { Text("↺ 90°") }
+                        OutlinedButton(onClick = { c.setPdfLayout(all, rotateBy = 90) }) { Text("↻ 90°") }
+                        OutlinedButton(onClick = { c.setPdfLayout(all, rotateBy = 180) }) { Text("180°") }
+                    }
+                    Text("Поля для заметок", fontWeight = FontWeight.Medium)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        val now = PdfMargins.of(ref.margins)
+                        for (m in PdfMargins.entries) {
+                            FilterChip(selected = now == m, onClick = { c.setPdfLayout(all, margins = m.margins) }, label = { Text(m.title) })
+                        }
+                    }
+                    Text(
+                        "Написанное на странице поворачивается и сдвигается вместе с PDF. Поля видны и в экспорте.",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                HorizontalDivider()
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Тёмный PDF")
+                        Text("Светлый текст на тёмном, цвета сохраняются", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Switch(checked = c.pdfDark, onCheckedChange = { c.togglePdfDark() })
+                }
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(enabled = !c.insertingPdf, onClick = onInsertPdf) { Text("Вставить страницы из PDF…") }
+                    if (c.hasPdf) OutlinedButton(onClick = { c.readPdfOutline() }) { Text("Оглавление из PDF") }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Готово") } },
+    )
+}
+
+/** Words of a PDF picked with the pen: what they say, copy them or mark them with the highlighter. */
+@Composable
+fun PdfPickBar(c: EditorController) {
+    val pick = c.pdfPick ?: return
+    val context = LocalContext.current
+    Row(
+        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.secondaryContainer).padding(horizontal = 16.dp, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Icon(InkIcons.PdfText, null, tint = MaterialTheme.colorScheme.onSecondaryContainer)
+        Text(
+            "«" + pick.text.replace('\n', ' ') + "»",
+            color = MaterialTheme.colorScheme.onSecondaryContainer,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        Button(onClick = {
+            copyText(context, pick.text)
+            c.showStatus("Текст скопирован")
+            c.closePdfPick()
+        }) { Text("Копировать") }
+        OutlinedButton(onClick = c::highlightPdfPick) { Text("Маркером") }
+        TextButton(onClick = c::closePdfPick) { Text("✕") }
+    }
+}
+
+private fun copyText(context: Context, text: String) {
+    val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    cm.setPrimaryClip(ClipData.newPlainText("Текст PDF", text))
+}

@@ -40,8 +40,11 @@ class PageRenderer {
     var paper = PageBackground(PaperKind.BLANK)
     var photo: Bitmap? = null
 
-    /** Rendered PDF page; when set it replaces the paper and the page is always light. */
+    /** Rendered PDF page; when set it replaces the paper and the page is light (dark with [pdfDark]). */
     var pdf: Bitmap? = null
+
+    /** The PDF page is drawn dark ([pdf] is already turned dark): ink and margins are as on dark paper. */
+    var pdfDark = false
 
     /** Part of the PDF page rendered sharp for the zoom shown, drawn over [pdf] at [pdfDetailRect]. */
     var pdfDetail: Bitmap? = null
@@ -53,8 +56,8 @@ class PageRenderer {
     var softGlow = true
 
     /** Ink is recoloured for dark paper only; a PDF page is white in both themes. */
-    private val inkOnDark get() = (paper.color?.let(PaperStyle::isDark) ?: dark) && pdf == null
-    private val style get() = PaperStyle.of(dark && pdf == null, if (pdf == null) paper.color else null)
+    private val inkOnDark get() = if (pdf != null) pdfDark else paper.color?.let(PaperStyle::isDark) ?: dark
+    private val style get() = if (pdf != null) PaperStyle.of(pdfDark) else PaperStyle.of(dark, paper.color)
 
     private val pagePaint = Paint()
     private val bitmapPaint = Paint(Paint.FILTER_BITMAP_FLAG)

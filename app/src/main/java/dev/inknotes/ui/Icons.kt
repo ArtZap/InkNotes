@@ -256,6 +256,9 @@ object InkIcons {
     val Protractor by lazy { icon("protractor", "M3,17a9,9 0,0 1,18 0zM3,17v2h18v-2", accent = "M12,17l5,-6M7,14.5l0.8,0.8M12,10v1M16.2,12.5l-0.8,0.6") }
     val Compass by lazy { icon("compass", "M12,3v3M12,6l-5,14M12,6l5,14M8.5,15h7", accent = "M12,4.5a1.5,1.5 0,1 0,0.01 0") }
     val Timer by lazy { icon("timer", "M12,6a7.5,7.5 0,1 0,0.01 0zM10,2.5h4M12,2.5v3.5", accent = "M12,13.5V9.5M12,13.5l3,2") }
+    val PdfText by lazy { icon("pdf-text", "M6,3h8l4,4v14H6zM14,3v4h4", accent = "M8.5,11h7M8.5,14h7M8.5,17h4") }
+    val PdfPage by lazy { icon("pdf-page", "M7,6h8l3,3v12H7zM15,6v3h3", accent = "M3,10a6,6 0,0 1,6 -7M9,3l-1.5,-0.5M9,3l-0.6,1.4") }
+    val PdfDark by lazy { icon("pdf-dark", "M6,3h8l4,4v14H6zM14,3v4h4", fill = "M12.5,10.5a3.5,3.5 0,1 0,3 5.2a2.8,2.8 0,0 1,-3 -5.2z") }
     val PageNav by lazy { icon("page-nav", "M9,6L4,12l5,6M15,6l5,6l-5,6") }
     val Add by lazy { icon("add", "M12,5v14M5,12h14") }
     val Minus by lazy { icon("minus", "M5,12h14") }

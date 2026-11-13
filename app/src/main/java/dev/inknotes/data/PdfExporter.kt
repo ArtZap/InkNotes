@@ -48,7 +48,7 @@ object PdfExporter {
         val pageId = nb.pageIds[index]
         val ref = nb.pdfPages[pageId]
         val size = nb.pageSize(pageId)
-        return (ref?.width ?: (size.widthMm / Notebook.MM_PER_POINT)) to (ref?.height ?: (size.heightMm / Notebook.MM_PER_POINT))
+        return (ref?.outerWidth ?: (size.widthMm / Notebook.MM_PER_POINT)) to (ref?.outerHeight ?: (size.heightMm / Notebook.MM_PER_POINT))
     }
 
     private fun renderer(repo: NotebookRepository, nb: Notebook) = PageRenderer().apply {

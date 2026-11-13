@@ -56,6 +56,7 @@ internal class PageCache(private val invalidate: () -> Unit) {
         val photo: Bitmap?,
         val pdf: Bitmap?,
         val pictures: List<Bitmap?>,
+        val pdfDark: Boolean = false,
     )
 
     /**
@@ -168,6 +169,7 @@ internal class PageCache(private val invalidate: () -> Unit) {
         r.dark = look.dark
         r.photo = look.photo
         r.pdf = look.pdf
+        r.pdfDark = look.pdfDark
         r.pdfDetail = null
         val toScreen = Matrix().apply { setScale(viewScale, viewScale) }
         for (img in images) r.drawImage(canvas, img, picture(img.file))
@@ -488,6 +490,7 @@ internal class PageCache(private val invalidate: () -> Unit) {
         r.dark = look.dark
         r.photo = look.photo
         r.pdf = look.pdf
+        r.pdfDark = look.pdfDark
         r.pdfDetail = pdfDetail
         pdfDetailRect?.let(r.pdfDetailRect::set)
         r.drawBackground(canvas, edgeWidth = 0f)
