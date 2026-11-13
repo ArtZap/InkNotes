@@ -134,13 +134,14 @@ class DriveClient(private val token: () -> String, private val refresh: () -> St
         file(JSONObject(put.answer()))
     }
 
-    override fun download(fileId: String, to: File) = authorized { t ->
+    override fun download(fileId: String, to: File): Unit = authorized { t ->
         val conn = open("$API/files/$fileId?alt=media", "GET", t)
         if (conn.responseCode !in 200..299) conn.answer()
         conn.inputStream.use { input -> to.outputStream().use { input.copyTo(it) } }
+        Unit
     }
 
-    override fun trash(fileId: String) = authorized { t ->
+    override fun trash(fileId: String): Unit = authorized { t ->
         val conn = open("$API/files/$fileId?fields=id", "PATCH", t)
         json(conn, JSONObject().put("trashed", true))
         conn.answer()

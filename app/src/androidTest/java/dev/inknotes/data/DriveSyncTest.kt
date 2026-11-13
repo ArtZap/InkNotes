@@ -42,7 +42,7 @@ class DriveSyncTest {
             return DriveFile(id, f.name, f.version, f.props)
         }
 
-        override fun download(fileId: String, to: File) = to.writeBytes(files.getValue(fileId).bytes)
+        override fun download(fileId: String, to: File): Unit = to.writeBytes(files.getValue(fileId).bytes)
 
         override fun trash(fileId: String) {
             files.getValue(fileId).trashed = true
