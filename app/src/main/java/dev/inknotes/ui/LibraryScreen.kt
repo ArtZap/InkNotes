@@ -146,6 +146,7 @@ fun LibraryScreen(
     var trashOpen by remember { mutableStateOf(false) }
     var helpOpen by remember { mutableStateOf(false) }
     var backupOpen by remember { mutableStateOf(false) }
+    var syncOpen by remember { mutableStateOf(false) }
     val premium = uiStyle == UiStyle.PREMIUM
     val context = LocalContext.current
     val prefs = remember { AppServices.get(context).prefs }
@@ -261,6 +262,10 @@ fun LibraryScreen(
                         DropdownMenuItem(text = { Text("Экспорт всех тетрадей…") }, onClick = {
                             moreMenu = false
                             export(folders.filter { it.parent == null }.map { it.id }.toSet(), notebooks.map { it.id }.toSet(), "Все тетради")
+                        })
+                        DropdownMenuItem(text = { Text("Google Диск…") }, onClick = {
+                            moreMenu = false
+                            syncOpen = true
                         })
                         DropdownMenuItem(text = { Text("Корзина…") }, onClick = {
                             moreMenu = false
@@ -474,6 +479,10 @@ fun LibraryScreen(
             },
             onDismiss = { trashOpen = false },
         )
+    }
+    if (syncOpen) {
+        val services = AppServices.get(context)
+        SyncDialog(services.cloud, services.prefs, busy = { services.cloud.openNow() }, onDismiss = { syncOpen = false })
     }
     if (backupOpen && backup != null) {
         BackupDialog(backup, AppServices.get(context).prefs, onDismiss = { backupOpen = false })

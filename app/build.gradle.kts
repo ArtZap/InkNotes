@@ -5,6 +5,13 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+// Google sign-in for Drive sync: google.clientId / google.clientSecret in local.properties
+// (a "Desktop app" OAuth client of your Google Cloud project; see README). Without them the
+// app builds as before and Drive sync says how to set it up.
+val localProps = rootProject.file("local.properties").takeIf { it.exists() }?.let { f -> Properties().apply { f.inputStream().use(::load) } }
+fun googleProp(name: String) = (localProps?.getProperty("google.$name") ?: System.getenv("INKNOTES_GOOGLE_" + name.uppercase()) ?: "")
+    .replace("\\", "\\\\").replace("\"", "\\\"")
+
 // Release key: keystore.properties next to settings.gradle (kept out of version control).
 val releaseKey = rootProject.file("keystore.properties").takeIf { it.exists() }?.let { f -> Properties().apply { f.inputStream().use(::load) } }
 
@@ -16,10 +23,13 @@ android {
         applicationId = "dev.inknotes"
         minSdk = 29
         targetSdk = 36
-        versionCode = 15
-        versionName = "0.36"
+        versionCode = 16
+        versionName = "0.37"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField("String", "GOOGLE_CLIENT_ID", "\"${googleProp("clientId")}\"")
+        buildConfigField("String", "GOOGLE_CLIENT_SECRET", "\"${googleProp("clientSecret")}\"")
     }
+
 
     // Device tests against the shrunk app when asked (CI); the debug app otherwise.
     testBuildType = if (project.hasProperty("testMinified")) "minified" else "debug"
@@ -90,6 +100,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 

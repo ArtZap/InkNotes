@@ -61,6 +61,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        AppServices.get(this).cloud.openNow = ::openIds
         val services = AppServices.get(this)
         repo = services.repo
         handwriting = services.handwriting
@@ -189,6 +190,8 @@ class MainActivity : ComponentActivity() {
 
     /** "Open with" (VIEW) and "Share" (SEND, SEND_MULTIPLE) of notebook files from another app. */
     private fun handleIntent(intent: Intent?) {
+        // Back from Google's sign-in page in the browser: the app only comes to the front.
+        if (intent?.data?.scheme == "inknotes") return
         // A notebook asked for from the home screen widget.
         if (intent?.action == QuickWidget.ACTION_OPEN) {
             val id = intent.getStringExtra(QuickNotes.EXTRA_NOTEBOOK) ?: return
@@ -402,8 +405,12 @@ class MainActivity : ComponentActivity() {
     /** When a quick note was last written, as this activity knows it. */
     private var quickNoteSeen = 0L
 
+    /** Notebooks open here: the sync does not replace them under the editor. */
+    private fun openIds() = (tabs + listOfNotNull(side)).map { it.notebook.id }.toSet()
+
     override fun onResume() {
         super.onResume()
+        AppServices.get(this).cloud.autoSync(openIds())
         // A quick note was written meanwhile (over the lock screen, from the tile): an open tab
         // of that notebook has the old pages and is closed, so it can't write over the note.
         val at = prefs.quickNoteUsedAt
@@ -421,6 +428,8 @@ class MainActivity : ComponentActivity() {
         for (t in tabs) t.flush()
         side?.flush()
         QuickWidget.update(this)
+        // What was written goes to the Drive (open notebooks are saved just above).
+        AppServices.get(this).cloud.autoSync(openIds())
         super.onPause()
     }
 
