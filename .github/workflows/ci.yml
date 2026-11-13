@@ -77,7 +77,7 @@ jobs:
             adb install -r app/build/outputs/apk/minified/app-minified.apk
             adb install -r app/build/outputs/apk/androidTest/minified/app-minified-androidTest.apk
             if [ ! -d app/src/androidTest/assets/golden ]; then adb shell am instrument -w -e golden make -e class dev.inknotes.data.GoldenFilesTest#make dev.inknotes.test/androidx.test.runner.AndroidJUnitRunner; mkdir -p golden && adb pull /sdcard/Android/data/dev.inknotes/files/golden golden; for f in golden/golden/*; do echo "=====GOLDEN $(basename $f)"; base64 -w 8000 $f; echo "=====END"; done; fi
-            adb shell am instrument -w -e shots 1 -e class dev.inknotes.ui.V032Screenshots,dev.inknotes.ui.V033Screenshots,dev.inknotes.ui.V034Screenshots,dev.inknotes.ui.V035Screenshots,dev.inknotes.ui.V036Screenshots dev.inknotes.test/androidx.test.runner.AndroidJUnitRunner || true
+            adb shell am instrument -w -e shots 1 -e class dev.inknotes.ui.V032Screenshots,dev.inknotes.ui.V033Screenshots,dev.inknotes.ui.V034Screenshots,dev.inknotes.ui.V035Screenshots,dev.inknotes.ui.V036Screenshots,dev.inknotes.ui.V037Screenshots dev.inknotes.test/androidx.test.runner.AndroidJUnitRunner || true
             adb shell am instrument -w -e package dev.inknotes.data dev.inknotes.test/androidx.test.runner.AndroidJUnitRunner > data-tests.txt 2>&1 || true
             cat data-tests.txt
             adb logcat -d -b crash | tail -120 || true

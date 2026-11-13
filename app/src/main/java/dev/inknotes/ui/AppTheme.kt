@@ -169,6 +169,29 @@ class AppPrefs(context: Context) {
         get() = prefs.getString(BACKUP_FOLDER, null)
         set(value) = prefs.edit().putString(BACKUP_FOLDER, value).apply()
 
+    // ---- Google Drive (0.37)
+    /** The lasting key of the Drive sign-in (only in the app's private storage). */
+    var driveRefreshToken: String?
+        get() = prefs.getString("driveRefresh", null)
+        set(value) = prefs.edit().putString("driveRefresh", value).apply()
+    var driveEmail: String?
+        get() = prefs.getString("driveEmail", null)
+        set(value) = prefs.edit().putString("driveEmail", value).apply()
+    /** Sync by itself when the app is opened and left. */
+    var driveAuto: Boolean
+        get() = prefs.getBoolean("driveAuto", true)
+        set(value) = prefs.edit().putBoolean("driveAuto", value).apply()
+    /** By itself only on Wi-Fi (PDF notebooks can be big). */
+    var driveWifiOnly: Boolean
+        get() = prefs.getBoolean("driveWifiOnly", true)
+        set(value) = prefs.edit().putBoolean("driveWifiOnly", value).apply()
+    var driveLastSync: Long
+        get() = prefs.getLong("driveLastSync", 0L)
+        set(value) = prefs.edit().putLong("driveLastSync", value).apply()
+    var driveLastResult: String?
+        get() = prefs.getString("driveLastResult", null)
+        set(value) = prefs.edit().putString("driveLastResult", value).apply()
+
     /** The quick notes notebook (lock screen, tile, widget). */
     var quickNoteId: String?
         get() = prefs.getString("quickNoteId", null)

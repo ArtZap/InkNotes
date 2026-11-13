@@ -14,7 +14,7 @@ import dev.inknotes.search.HandwritingIndex
 object AppServices {
     private var instance: Services? = null
 
-    class Services(val repo: NotebookRepository, val prefs: AppPrefs, val handwriting: HandwritingIndex, val math: MathNotes, val backup: Backup, val previews: CoverPreviews)
+    class Services(val repo: NotebookRepository, val prefs: AppPrefs, val handwriting: HandwritingIndex, val math: MathNotes, val backup: Backup, val previews: CoverPreviews, val cloud: CloudSync)
 
     fun get(context: Context): Services = instance ?: run {
         val app = context.applicationContext
@@ -28,6 +28,7 @@ object AppServices {
             MathNotes({ prefs.mathEnabled }, { prefs.mathEnabled = it }),
             Backup(app, repo, prefs),
             CoverPreviews(repo),
+            CloudSync(app, repo, prefs),
         )
             .also {
                 instance = it
