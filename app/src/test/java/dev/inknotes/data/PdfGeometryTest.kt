@@ -68,4 +68,18 @@ class PdfGeometryTest {
             near(x / w, u); near(y / h, v)
         }
     }
+
+    @Test
+    fun veryTallPagesAreNarrowedNotCut() {
+        // A strip 20 times as tall as wide: the height would pass the side limit at full width.
+        val (w, h) = PdfGeometry.fitPixels(2000, 20f, 16_000_000L, 8192)
+        assertEquals(20f, h.toFloat() / w, 0.05f)
+        assert(h <= 8192 && w.toLong() * h <= 16_000_000L)
+        // An ordinary page keeps its width.
+        assertEquals(1000 to 1414, PdfGeometry.fitPixels(1000, 1.4142f, 16_000_000L, 8192))
+        // A huge page keeps its shape within the area.
+        val (w2, h2) = PdfGeometry.fitPixels(10_000, 1.5f, 4_000_000L, 8192)
+        assert(w2.toLong() * h2 <= 4_000_000L)
+        assertEquals(1.5f, h2.toFloat() / w2, 0.01f)
+    }
 }

@@ -1,0 +1,1495 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<issues format="6" by="lint 9.4.1" type="baseline" client="gradle" dependencies="false" name="AGP (9.4.1)" variant="all" version="9.4.1">
+
+    <issue
+        id="OldTargetApi"
+        message="Not targeting the latest versions of Android; compatibility modes apply. Consider testing and updating this version. Consult the `android.os.Build.VERSION_CODES` javadoc for details."
+        errorLine1="        targetSdk = 36"
+        errorLine2="        ~~~~~~~~~~~~~~">
+        <location
+            file="build.gradle.kts"
+            line="18"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="AndroidGradlePluginVersion"
+        message="A newer version of Gradle than 9.8.1 is available: 9.9.1"
+        errorLine1="distributionUrl=https\://services.gradle.org/distributions/gradle-9.8.1-bin.zip"
+        errorLine2="                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="$HOME/work/InkNotes/InkNotes/gradle/wrapper/gradle-wrapper.properties"
+            line="3"
+            column="17"/>
+    </issue>
+
+    <issue
+        id="AndroidGradlePluginVersion"
+        message="A newer version of com.android.application than 9.4.1 is available: 9.5.1"
+        errorLine1="agp = &quot;9.4.1&quot;"
+        errorLine2="      ~~~~~~~">
+        <location
+            file="$HOME/work/InkNotes/InkNotes/gradle/libs.versions.toml"
+            line="2"
+            column="7"/>
+    </issue>
+
+    <issue
+        id="GradleDependency"
+        message="A newer version of androidx.input:input-motionprediction than 1.0.0 is available: 1.0.1"
+        errorLine1="motionPrediction = &quot;1.0.0&quot;"
+        errorLine2="                   ~~~~~~~">
+        <location
+            file="$HOME/work/InkNotes/InkNotes/gradle/libs.versions.toml"
+            line="8"
+            column="20"/>
+    </issue>
+
+    <issue
+        id="GradleDependency"
+        message="A newer version of androidx.test.uiautomator:uiautomator than 2.3.0 is available: 2.4.1"
+        errorLine1="uiautomator = &quot;2.3.0&quot;"
+        errorLine2="              ~~~~~~~">
+        <location
+            file="$HOME/work/InkNotes/InkNotes/gradle/libs.versions.toml"
+            line="11"
+            column="15"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of org.jetbrains.kotlinx:kotlinx-coroutines-android than 1.10.2 is available: 1.11.0"
+        errorLine1="coroutines = &quot;1.10.2&quot;"
+        errorLine2="             ~~~~~~~~">
+        <location
+            file="$HOME/work/InkNotes/InkNotes/gradle/libs.versions.toml"
+            line="15"
+            column="14"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of org.json:json than 20250517 is available: 20260814"
+        errorLine1="json = &quot;20250517&quot;"
+        errorLine2="       ~~~~~~~~~~">
+        <location
+            file="$HOME/work/InkNotes/InkNotes/gradle/libs.versions.toml"
+            line="16"
+            column="8"/>
+    </issue>
+
+    <issue
+        id="RestrictedApi"
+        message="StockTextureBitmapStore can only be called from within the same library group (referenced groupId=`androidx.ink` from groupId=`InkNotes`)"
+        errorLine1="        InkTextures.store = androidx.ink.brush.StockTextureBitmapStore(app.resources)"
+        errorLine2="                                               ~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/ui/AppServices.kt"
+            line="21"
+            column="48"/>
+    </issue>
+
+    <issue
+        id="RestrictedApi"
+        message="StockTextureBitmapStore can only be called from within the same library group (referenced groupId=`androidx.ink` from groupId=`InkNotes`)"
+        errorLine1="        InkTextures.store = androidx.ink.brush.StockTextureBitmapStore(app.resources)"
+        errorLine2="                                                                       ~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/ui/AppServices.kt"
+            line="21"
+            column="72"/>
+    </issue>
+
+    <issue
+        id="RestrictedApi"
+        message="ComponentActivity.dispatchKeyEvent can only be called from within the same library group prefix (referenced groupId=`androidx.core` with prefix androidx from groupId=`InkNotes`)"
+        errorLine1="    override fun dispatchKeyEvent(event: KeyEvent): Boolean ="
+        errorLine2="                 ~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/ui/MainActivity.kt"
+            line="318"
+            column="18"/>
+    </issue>
+
+    <issue
+        id="RestrictedApi"
+        message="ComponentActivity.dispatchKeyEvent can only be called from within the same library group prefix (referenced groupId=`androidx.core` with prefix androidx from groupId=`InkNotes`)"
+        errorLine1="        editor?.handleKey(event) == true || super.dispatchKeyEvent(event) || editor?.handleShortcut(event) == true"
+        errorLine2="                                                  ~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/ui/MainActivity.kt"
+            line="319"
+            column="51"/>
+    </issue>
+
+    <issue
+        id="RestrictedApi"
+        message="ComponentActivity.dispatchKeyEvent can only be called from within the same library group prefix (referenced groupId=`androidx.core` with prefix androidx from groupId=`InkNotes`)"
+        errorLine1="        editor?.handleKey(event) == true || super.dispatchKeyEvent(event) || editor?.handleShortcut(event) == true"
+        errorLine2="                                                                   ~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/ui/MainActivity.kt"
+            line="319"
+            column="68"/>
+    </issue>
+
+    <issue
+        id="RestrictedApi"
+        message="StockBrushes.getPencilUnstable can only be called from within the same library group (referenced groupId=`androidx.ink` from groupId=`InkNotes`)"
+        errorLine1="    private val pencil: BrushFamily by lazy { StockBrushes.pencilUnstable }"
+        errorLine2="                                                           ~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/data/PageCodec.kt"
+            line="332"
+            column="60"/>
+    </issue>
+
+    <issue
+        id="RestrictedApi"
+        message="BrushFamily.EXPERIMENTAL_NAIVE_MODEL can only be accessed from within the same library group (referenced groupId=`androidx.ink` from groupId=`InkNotes`)"
+        errorLine1="    private val line: BrushFamily by lazy { StockBrushes.marker().copy(inputModel = BrushFamily.EXPERIMENTAL_NAIVE_MODEL) }"
+        errorLine2="                                                                                                ~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/data/PageCodec.kt"
+            line="344"
+            column="97"/>
+    </issue>
+
+    <issue
+        id="RestrictedApi"
+        message="BrushBehavior can only be called from within the same library group (referenced groupId=`androidx.ink` from groupId=`InkNotes`)"
+        errorLine1="        val pressure = BrushBehavior(BrushBehavior.Source.NORMALIZED_PRESSURE, BrushBehavior.Target.SIZE_MULTIPLIER, 0f, 1f, 0.6f, 1.15f)"
+        errorLine2="                       ~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/data/PageCodec.kt"
+            line="352"
+            column="24"/>
+    </issue>
+
+    <issue
+        id="RestrictedApi"
+        message="BrushBehavior can only be called from within the same library group (referenced groupId=`androidx.ink` from groupId=`InkNotes`)"
+        errorLine1="        val pressure = BrushBehavior(BrushBehavior.Source.NORMALIZED_PRESSURE, BrushBehavior.Target.SIZE_MULTIPLIER, 0f, 1f, 0.6f, 1.15f)"
+        errorLine2="                                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/data/PageCodec.kt"
+            line="352"
+            column="38"/>
+    </issue>
+
+    <issue
+        id="RestrictedApi"
+        message="BrushBehavior can only be called from within the same library group (referenced groupId=`androidx.ink` from groupId=`InkNotes`)"
+        errorLine1="        val pressure = BrushBehavior(BrushBehavior.Source.NORMALIZED_PRESSURE, BrushBehavior.Target.SIZE_MULTIPLIER, 0f, 1f, 0.6f, 1.15f)"
+        errorLine2="                                                                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/data/PageCodec.kt"
+            line="352"
+            column="80"/>
+    </issue>
+
+    <issue
+        id="RestrictedApi"
+        message="Source.Companion can only be accessed from within the same library group (referenced groupId=`androidx.ink` from groupId=`InkNotes`)"
+        errorLine1="        val pressure = BrushBehavior(BrushBehavior.Source.NORMALIZED_PRESSURE, BrushBehavior.Target.SIZE_MULTIPLIER, 0f, 1f, 0.6f, 1.15f)"
+        errorLine2="                                                   ~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/data/PageCodec.kt"
+            line="352"
+            column="52"/>
+    </issue>
+
+    <issue
+        id="RestrictedApi"
+        message="Source.NORMALIZED_PRESSURE can only be accessed from within the same library group (referenced groupId=`androidx.ink` from groupId=`InkNotes`)"
+        errorLine1="        val pressure = BrushBehavior(BrushBehavior.Source.NORMALIZED_PRESSURE, BrushBehavior.Target.SIZE_MULTIPLIER, 0f, 1f, 0.6f, 1.15f)"
+        errorLine2="                                                          ~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/data/PageCodec.kt"
+            line="352"
+            column="59"/>
+    </issue>
+
+    <issue
+        id="RestrictedApi"
+        message="Target.Companion can only be accessed from within the same library group (referenced groupId=`androidx.ink` from groupId=`InkNotes`)"
+        errorLine1="        val pressure = BrushBehavior(BrushBehavior.Source.NORMALIZED_PRESSURE, BrushBehavior.Target.SIZE_MULTIPLIER, 0f, 1f, 0.6f, 1.15f)"
+        errorLine2="                                                                                             ~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/data/PageCodec.kt"
+            line="352"
+            column="94"/>
+    </issue>
+
+    <issue
+        id="RestrictedApi"
+        message="Target.SIZE_MULTIPLIER can only be accessed from within the same library group (referenced groupId=`androidx.ink` from groupId=`InkNotes`)"
+        errorLine1="        val pressure = BrushBehavior(BrushBehavior.Source.NORMALIZED_PRESSURE, BrushBehavior.Target.SIZE_MULTIPLIER, 0f, 1f, 0.6f, 1.15f)"
+        errorLine2="                                                                                                    ~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/data/PageCodec.kt"
+            line="352"
+            column="101"/>
+    </issue>
+
+    <issue
+        id="RestrictedApi"
+        message="BrushTip can only be called from within the same library group (referenced groupId=`androidx.ink` from groupId=`InkNotes`)"
+        errorLine1="        val tip = BrushTip(1f, 0.25f, 0.6f, 0f, 0f, 45f, 0f, 0L, listOf(pressure))"
+        errorLine2="                  ~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/data/PageCodec.kt"
+            line="353"
+            column="19"/>
+    </issue>
+
+    <issue
+        id="RestrictedApi"
+        message="BrushTip can only be called from within the same library group (referenced groupId=`androidx.ink` from groupId=`InkNotes`)"
+        errorLine1="        val tip = BrushTip(1f, 0.25f, 0.6f, 0f, 0f, 45f, 0f, 0L, listOf(pressure))"
+        errorLine2="                           ~~">
+        <location
+            file="src/main/java/dev/inknotes/data/PageCodec.kt"
+            line="353"
+            column="28"/>
+    </issue>
+
+    <issue
+        id="RestrictedApi"
+        message="BrushTip can only be called from within the same library group (referenced groupId=`androidx.ink` from groupId=`InkNotes`)"
+        errorLine1="        val tip = BrushTip(1f, 0.25f, 0.6f, 0f, 0f, 45f, 0f, 0L, listOf(pressure))"
+        errorLine2="                               ~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/data/PageCodec.kt"
+            line="353"
+            column="32"/>
+    </issue>
+
+    <issue
+        id="RestrictedApi"
+        message="BrushTip can only be called from within the same library group (referenced groupId=`androidx.ink` from groupId=`InkNotes`)"
+        errorLine1="        val tip = BrushTip(1f, 0.25f, 0.6f, 0f, 0f, 45f, 0f, 0L, listOf(pressure))"
+        errorLine2="                                      ~~~~">
+        <location
+            file="src/main/java/dev/inknotes/data/PageCodec.kt"
+            line="353"
+            column="39"/>
+    </issue>
+
+    <issue
+        id="RestrictedApi"
+        message="BrushTip can only be called from within the same library group (referenced groupId=`androidx.ink` from groupId=`InkNotes`)"
+        errorLine1="        val tip = BrushTip(1f, 0.25f, 0.6f, 0f, 0f, 45f, 0f, 0L, listOf(pressure))"
+        errorLine2="                                            ~~">
+        <location
+            file="src/main/java/dev/inknotes/data/PageCodec.kt"
+            line="353"
+            column="45"/>
+    </issue>
+
+    <issue
+        id="RestrictedApi"
+        message="BrushTip can only be called from within the same library group (referenced groupId=`androidx.ink` from groupId=`InkNotes`)"
+        errorLine1="        val tip = BrushTip(1f, 0.25f, 0.6f, 0f, 0f, 45f, 0f, 0L, listOf(pressure))"
+        errorLine2="                                                ~~">
+        <location
+            file="src/main/java/dev/inknotes/data/PageCodec.kt"
+            line="353"
+            column="49"/>
+    </issue>
+
+    <issue
+        id="RestrictedApi"
+        message="BrushTip can only be called from within the same library group (referenced groupId=`androidx.ink` from groupId=`InkNotes`)"
+        errorLine1="        val tip = BrushTip(1f, 0.25f, 0.6f, 0f, 0f, 45f, 0f, 0L, listOf(pressure))"
+        errorLine2="                                                         ~~">
+        <location
+            file="src/main/java/dev/inknotes/data/PageCodec.kt"
+            line="353"
+            column="58"/>
+    </issue>
+
+    <issue
+        id="RestrictedApi"
+        message="BrushTip can only be called from within the same library group (referenced groupId=`androidx.ink` from groupId=`InkNotes`)"
+        errorLine1="        val tip = BrushTip(1f, 0.25f, 0.6f, 0f, 0f, 45f, 0f, 0L, listOf(pressure))"
+        errorLine2="                                                             ~~">
+        <location
+            file="src/main/java/dev/inknotes/data/PageCodec.kt"
+            line="353"
+            column="62"/>
+    </issue>
+
+    <issue
+        id="RestrictedApi"
+        message="BrushTip can only be called from within the same library group (referenced groupId=`androidx.ink` from groupId=`InkNotes`)"
+        errorLine1="        val tip = BrushTip(1f, 0.25f, 0.6f, 0f, 0f, 45f, 0f, 0L, listOf(pressure))"
+        errorLine2="                                                                 ~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/data/PageCodec.kt"
+            line="353"
+            column="66"/>
+    </issue>
+
+    <issue
+        id="RestrictedApi"
+        message="BrushFamily can only be called from within the same library group (referenced groupId=`androidx.ink` from groupId=`InkNotes`)"
+        errorLine1="        BrushFamily(tip, BrushPaint(), &quot;inknotes-fountain&quot;)"
+        errorLine2="        ~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/data/PageCodec.kt"
+            line="354"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="RestrictedApi"
+        message="BrushPaint can only be called from within the same library group (referenced groupId=`androidx.ink` from groupId=`InkNotes`)"
+        errorLine1="        BrushFamily(tip, BrushPaint(), &quot;inknotes-fountain&quot;)"
+        errorLine2="                         ~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/data/PageCodec.kt"
+            line="354"
+            column="26"/>
+    </issue>
+
+    <issue
+        id="RestrictedApi"
+        message="BrushCoat can only be called from within the same library group (referenced groupId=`androidx.ink` from groupId=`InkNotes`)"
+        errorLine1="                val inner = BrushCoat("
+        errorLine2="                            ~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/data/PageCodec.kt"
+            line="376"
+            column="29"/>
+    </issue>
+
+    <issue
+        id="RestrictedApi"
+        message="BrushCoat can only be called from within the same library group (referenced groupId=`androidx.ink` from groupId=`InkNotes`)"
+        errorLine1="                    coat.tip.copy(scaleX = coat.tip.scaleX * coreShare, scaleY = coat.tip.scaleY * coreShare),"
+        errorLine2="                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/data/PageCodec.kt"
+            line="377"
+            column="21"/>
+    </issue>
+
+    <issue
+        id="RestrictedApi"
+        message="BrushCoat.tip can only be accessed from within the same library group (referenced groupId=`androidx.ink` from groupId=`InkNotes`)"
+        errorLine1="                    coat.tip.copy(scaleX = coat.tip.scaleX * coreShare, scaleY = coat.tip.scaleY * coreShare),"
+        errorLine2="                         ~~~">
+        <location
+            file="src/main/java/dev/inknotes/data/PageCodec.kt"
+            line="377"
+            column="26"/>
+    </issue>
+
+    <issue
+        id="RestrictedApi"
+        message="BrushCoat.tip can only be accessed from within the same library group (referenced groupId=`androidx.ink` from groupId=`InkNotes`)"
+        errorLine1="                    coat.tip.copy(scaleX = coat.tip.scaleX * coreShare, scaleY = coat.tip.scaleY * coreShare),"
+        errorLine2="                                                ~~~">
+        <location
+            file="src/main/java/dev/inknotes/data/PageCodec.kt"
+            line="377"
+            column="49"/>
+    </issue>
+
+    <issue
+        id="RestrictedApi"
+        message="BrushCoat.tip can only be accessed from within the same library group (referenced groupId=`androidx.ink` from groupId=`InkNotes`)"
+        errorLine1="                    coat.tip.copy(scaleX = coat.tip.scaleX * coreShare, scaleY = coat.tip.scaleY * coreShare),"
+        errorLine2="                                                                                      ~~~">
+        <location
+            file="src/main/java/dev/inknotes/data/PageCodec.kt"
+            line="377"
+            column="87"/>
+    </issue>
+
+    <issue
+        id="RestrictedApi"
+        message="BrushTip.copy can only be called from within the same library group (referenced groupId=`androidx.ink` from groupId=`InkNotes`)"
+        errorLine1="                    coat.tip.copy(scaleX = coat.tip.scaleX * coreShare, scaleY = coat.tip.scaleY * coreShare),"
+        errorLine2="                             ~~~~">
+        <location
+            file="src/main/java/dev/inknotes/data/PageCodec.kt"
+            line="377"
+            column="30"/>
+    </issue>
+
+    <issue
+        id="RestrictedApi"
+        message="BrushTip.getScaleX can only be called from within the same library group (referenced groupId=`androidx.ink` from groupId=`InkNotes`)"
+        errorLine1="                    coat.tip.copy(scaleX = coat.tip.scaleX * coreShare, scaleY = coat.tip.scaleY * coreShare),"
+        errorLine2="                                                    ~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/data/PageCodec.kt"
+            line="377"
+            column="53"/>
+    </issue>
+
+    <issue
+        id="RestrictedApi"
+        message="BrushTip.getScaleY can only be called from within the same library group (referenced groupId=`androidx.ink` from groupId=`InkNotes`)"
+        errorLine1="                    coat.tip.copy(scaleX = coat.tip.scaleX * coreShare, scaleY = coat.tip.scaleY * coreShare),"
+        errorLine2="                                                                                          ~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/data/PageCodec.kt"
+            line="377"
+            column="91"/>
+    </issue>
+
+    <issue
+        id="RestrictedApi"
+        message="BrushCoat can only be called from within the same library group (referenced groupId=`androidx.ink` from groupId=`InkNotes`)"
+        errorLine1="                    BrushPaint(emptyList(), listOf(ColorFunction.ReplaceColor.withColorIntArgb(core))),"
+        errorLine2="                    ~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/data/PageCodec.kt"
+            line="378"
+            column="21"/>
+    </issue>
+
+    <issue
+        id="RestrictedApi"
+        message="BrushPaint can only be called from within the same library group (referenced groupId=`androidx.ink` from groupId=`InkNotes`)"
+        errorLine1="                    BrushPaint(emptyList(), listOf(ColorFunction.ReplaceColor.withColorIntArgb(core))),"
+        errorLine2="                    ~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/data/PageCodec.kt"
+            line="378"
+            column="21"/>
+    </issue>
+
+    <issue
+        id="RestrictedApi"
+        message="BrushPaint can only be called from within the same library group (referenced groupId=`androidx.ink` from groupId=`InkNotes`)"
+        errorLine1="                    BrushPaint(emptyList(), listOf(ColorFunction.ReplaceColor.withColorIntArgb(core))),"
+        errorLine2="                               ~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/data/PageCodec.kt"
+            line="378"
+            column="32"/>
+    </issue>
+
+    <issue
+        id="RestrictedApi"
+        message="BrushPaint can only be called from within the same library group (referenced groupId=`androidx.ink` from groupId=`InkNotes`)"
+        errorLine1="                    BrushPaint(emptyList(), listOf(ColorFunction.ReplaceColor.withColorIntArgb(core))),"
+        errorLine2="                                            ~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/data/PageCodec.kt"
+            line="378"
+            column="45"/>
+    </issue>
+
+    <issue
+        id="RestrictedApi"
+        message="ComponentActivity.dispatchKeyEvent can only be called from within the same library group prefix (referenced groupId=`androidx.core` with prefix androidx from groupId=`InkNotes`)"
+        errorLine1="    override fun dispatchKeyEvent(event: KeyEvent): Boolean {"
+        errorLine2="                 ~~~~~~~~~~~~~~~~">
+        <location
+            file="src/debug/java/dev/inknotes/probe/ProbeActivity.kt"
+            line="112"
+            column="18"/>
+    </issue>
+
+    <issue
+        id="RestrictedApi"
+        message="ComponentActivity.dispatchKeyEvent can only be called from within the same library group prefix (referenced groupId=`androidx.core` with prefix androidx from groupId=`InkNotes`)"
+        errorLine1="        return super.dispatchKeyEvent(event)"
+        errorLine2="                     ~~~~~~~~~~~~~~~~">
+        <location
+            file="src/debug/java/dev/inknotes/probe/ProbeActivity.kt"
+            line="114"
+            column="22"/>
+    </issue>
+
+    <issue
+        id="RestrictedApi"
+        message="ComponentActivity.dispatchKeyEvent can only be called from within the same library group prefix (referenced groupId=`androidx.core` with prefix androidx from groupId=`InkNotes`)"
+        errorLine1="        return super.dispatchKeyEvent(event)"
+        errorLine2="                                      ~~~~~">
+        <location
+            file="src/debug/java/dev/inknotes/probe/ProbeActivity.kt"
+            line="114"
+            column="39"/>
+    </issue>
+
+    <issue
+        id="ConfigurationScreenWidthHeight"
+        message="Using Configuration.screenWidthDp instead of LocalWindowInfo.current.containerSize"
+        errorLine1="    val screenWidth = LocalConfiguration.current.screenWidthDp.dp"
+        errorLine2="                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/ui/Toolbar.kt"
+            line="385"
+            column="23"/>
+    </issue>
+
+    <issue
+        id="TrustAllX509TrustManager"
+        message="`checkClientTrusted` is empty, which could cause insecure network traffic due to trusting arbitrary TLS/SSL certificates presented by peers">
+        <location
+            file="$GRADLE_USER_HOME/caches/modules-2/files-2.1/org.bouncycastle/bcpkix-jdk15to18/1.72/32faf4d74dbc333fb3a7a6c80c30417cf888fc7a/bcpkix-jdk15to18-1.72.jar"/>
+    </issue>
+
+    <issue
+        id="TrustAllX509TrustManager"
+        message="`checkClientTrusted` is empty, which could cause insecure network traffic due to trusting arbitrary TLS/SSL certificates presented by peers">
+        <location
+            file="$GRADLE_USER_HOME/caches/modules-2/files-2.1/org.bouncycastle/bcpkix-jdk15to18/1.72/32faf4d74dbc333fb3a7a6c80c30417cf888fc7a/bcpkix-jdk15to18-1.72.jar"/>
+    </issue>
+
+    <issue
+        id="TrustAllX509TrustManager"
+        message="`checkServerTrusted` is empty, which could cause insecure network traffic due to trusting arbitrary TLS/SSL certificates presented by peers">
+        <location
+            file="$GRADLE_USER_HOME/caches/modules-2/files-2.1/org.bouncycastle/bcpkix-jdk15to18/1.72/32faf4d74dbc333fb3a7a6c80c30417cf888fc7a/bcpkix-jdk15to18-1.72.jar"/>
+    </issue>
+
+    <issue
+        id="DataExtractionRules"
+        message="The attribute `android:allowBackup` is deprecated from Android 12 and higher and may be removed in future versions. Consider adding the attribute `android:dataExtractionRules` specifying an `@xml` resource which configures cloud backups and device transfers on Android 12 and higher."
+        errorLine1="        android:allowBackup=&quot;false&quot;"
+        errorLine2="                             ~~~~~">
+        <location
+            file="src/main/AndroidManifest.xml"
+            line="9"
+            column="30"/>
+    </issue>
+
+    <issue
+        id="DrawAllocation"
+        message="Avoid object allocations during draw/layout operations (preallocate and reuse instead)"
+        errorLine1="        val loc = IntArray(2)"
+        errorLine2="                  ~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/editor/PageEditorView.kt"
+            line="575"
+            column="19"/>
+    </issue>
+
+    <issue
+        id="DrawAllocation"
+        message="Avoid object allocations during draw/layout operations (preallocate and reuse instead)"
+        errorLine1="            dashPaint.pathEffect = DashPathEffect(floatArrayOf(6f * density / scale, 4f * density / scale), 0f)"
+        errorLine2="                                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/editor/PageEditorView.kt"
+            line="3394"
+            column="36"/>
+    </issue>
+
+    <issue
+        id="DrawAllocation"
+        message="Avoid object allocations during draw/layout operations (preallocate and reuse instead)"
+        errorLine1="            dashPaint.pathEffect = DashPathEffect(floatArrayOf(6f * density / scale, 4f * density / scale), 0f)"
+        errorLine2="                                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/editor/PageEditorView.kt"
+            line="3394"
+            column="36"/>
+    </issue>
+
+    <issue
+        id="DrawAllocation"
+        message="Avoid object allocations during draw/layout operations (preallocate and reuse instead)"
+        errorLine1="                    src.thumbnail(i)?.let { canvas.drawBitmap(it, null, RectF(0f, 0f, widths[i], heights[i]), thumbPaint) }"
+        errorLine2="                                                                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/editor/PageEditorView.kt"
+            line="3411"
+            column="73"/>
+    </issue>
+
+    <issue
+        id="DrawAllocation"
+        message="Avoid object allocations during draw/layout operations (preallocate and reuse instead)"
+        errorLine1="                    dragging &amp;&amp; connectors.isNotEmpty() &amp;&amp; moveKx == 1f &amp;&amp; moveKy == 1f &amp;&amp; moveAngle == 0f -> Collections.newSetFromMap&lt;Any>(IdentityHashMap()).apply { addAll(selected); addAll(connectorSet) }"
+        errorLine2="                                                                                                                                             ~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/editor/PageEditorView.kt"
+            line="3418"
+            column="142"/>
+    </issue>
+
+    <issue
+        id="DrawAllocation"
+        message="Avoid object allocations during draw/layout operations (preallocate and reuse instead)"
+        errorLine1="                val out: Set&lt;Any> = if (hidden.isEmpty()) sel else Collections.newSetFromMap&lt;Any>(IdentityHashMap()).apply { addAll(sel); addAll(hidden) }"
+        errorLine2="                                                                                                  ~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/editor/PageEditorView.kt"
+            line="3422"
+            column="99"/>
+    </issue>
+
+    <issue
+        id="DrawAllocation"
+        message="Avoid object allocations during draw/layout operations (preallocate and reuse instead)"
+        errorLine1="                val look = PageCache.Look(widths[i], heights[i], pageRenderer.paper, pageRenderer.dark, pageRenderer.photo, pdf, doc.images.map { src.image(it.file) }, pdfDark &amp;&amp; pdf != null)"
+        errorLine2="                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/editor/PageEditorView.kt"
+            line="3423"
+            column="28"/>
+    </issue>
+
+    <issue
+        id="DrawAllocation"
+        message="Avoid object allocations during draw/layout operations (preallocate and reuse instead)"
+        errorLine1="                        src.thumbnail(i)?.let { canvas.drawBitmap(it, null, RectF(0f, 0f, widths[i], heights[i]), thumbPaint) }"
+        errorLine2="                                                                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/editor/PageEditorView.kt"
+            line="3440"
+            column="77"/>
+    </issue>
+
+    <issue
+        id="DrawAllocation"
+        message="Avoid object allocations during draw/layout operations (preallocate and reuse instead)"
+        errorLine1="            guidePaint.pathEffect = DashPathEffect(floatArrayOf(6 * density, 6 * density), 0f)"
+        errorLine2="                                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/editor/ZoomPad.kt"
+            line="267"
+            column="37"/>
+    </issue>
+
+    <issue
+        id="DrawAllocation"
+        message="Avoid object allocations during draw/layout operations (preallocate and reuse instead)"
+        errorLine1="            guidePaint.pathEffect = DashPathEffect(floatArrayOf(6 * density, 6 * density), 0f)"
+        errorLine2="                                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/editor/ZoomPad.kt"
+            line="267"
+            column="37"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="This folder configuration (`v26`) is unnecessary; `minSdkVersion` is 29. Merge all the resources in this folder into `mipmap-anydpi`.">
+        <location
+            file="src/main/res/mipmap-anydpi-v26"/>
+    </issue>
+
+    <issue
+        id="AutoboxingStateCreation"
+        message="Prefer `mutableFloatStateOf` instead of `mutableStateOf`"
+        errorLine1="    var azimuth by remember { mutableStateOf(dev.inknotes.math.Plot3D.AZIMUTH) }"
+        errorLine2="                              ~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/ui/AnswerDialog.kt"
+            line="159"
+            column="31"/>
+    </issue>
+
+    <issue
+        id="AutoboxingStateCreation"
+        message="Prefer `mutableFloatStateOf` instead of `mutableStateOf`"
+        errorLine1="    var elevation by remember { mutableStateOf(dev.inknotes.math.Plot3D.ELEVATION) }"
+        errorLine2="                                ~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/ui/AnswerDialog.kt"
+            line="160"
+            column="33"/>
+    </issue>
+
+    <issue
+        id="AutoboxingStateCreation"
+        message="Prefer `mutableIntStateOf` instead of `mutableStateOf`"
+        errorLine1="    var done by remember(cards) { mutableStateOf(0) }"
+        errorLine2="                                  ~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/ui/CardsDialog.kt"
+            line="55"
+            column="35"/>
+    </issue>
+
+    <issue
+        id="AutoboxingStateCreation"
+        message="Prefer `mutableIntStateOf` instead of `mutableStateOf`"
+        errorLine1="    var cover by remember { mutableStateOf(Notebook.COVERS.random()) }"
+        errorLine2="                            ~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/ui/LibraryScreen.kt"
+            line="892"
+            column="29"/>
+    </issue>
+
+    <issue
+        id="AutoboxingStateCreation"
+        message="Prefer `mutableIntStateOf` instead of `mutableStateOf`"
+        errorLine1="    var cover by remember { mutableStateOf(nb.coverColor()) }"
+        errorLine2="                            ~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/ui/LibraryScreen.kt"
+            line="950"
+            column="29"/>
+    </issue>
+
+    <issue
+        id="AutoboxingStateCreation"
+        message="Prefer `mutableIntStateOf` instead of `mutableStateOf`"
+        errorLine1="    private var libraryVersion by mutableStateOf(0)"
+        errorLine2="                                  ~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/ui/MainActivity.kt"
+            line="50"
+            column="35"/>
+    </issue>
+
+    <issue
+        id="AutoboxingStateCreation"
+        message="Prefer `mutableLongStateOf` instead of `mutableStateOf`"
+        errorLine1="    var last by remember { mutableStateOf(prefs.lastBackupAt) }"
+        errorLine2="                           ~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/ui/TrashBackup.kt"
+            line="115"
+            column="28"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        set(value) = prefs.edit().putString(STYLE, value.name).apply()"
+        errorLine2="                     ~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/ui/AppTheme.kt"
+            line="75"
+            column="22"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        set(value) = prefs.edit().putBoolean(GLASS, value).apply()"
+        errorLine2="                     ~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/ui/AppTheme.kt"
+            line="80"
+            column="22"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        set(value) = prefs.edit().putString(THEME, value.name).apply()"
+        errorLine2="                     ~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/ui/AppTheme.kt"
+            line="84"
+            column="22"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        set(value) = prefs.edit().putString(RECENT, value.joinToString(&quot;,&quot;) { Integer.toHexString(it) }).apply()"
+        errorLine2="                     ~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/ui/AppTheme.kt"
+            line="88"
+            column="22"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        set(value) = prefs.edit().putString(HATCH_PATTERN, value.name).apply()"
+        errorLine2="                     ~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/ui/AppTheme.kt"
+            line="92"
+            column="22"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        set(value) = prefs.edit().putString(HATCH_STYLE, with(value) { &quot;$width,$spacing,$angle,$scale,$opacity,${lineType.name}&quot; }).apply()"
+        errorLine2="                     ~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/ui/AppTheme.kt"
+            line="102"
+            column="22"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="    fun setToolSize(tool: String, size: Float) = prefs.edit().putFloat(&quot;size.$tool&quot;, size).apply()"
+        errorLine2="                                                 ~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/ui/AppTheme.kt"
+            line="107"
+            column="50"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        set(value) = prefs.edit().putBoolean(HANDWRITING, value).apply()"
+        errorLine2="                     ~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/ui/AppTheme.kt"
+            line="112"
+            column="22"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        set(value) = prefs.edit().putBoolean(MATH, value).apply()"
+        errorLine2="                     ~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/ui/AppTheme.kt"
+            line="117"
+            column="22"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        set(value) = prefs.edit().putBoolean(STRAIGHT_HIGHLIGHTER, value).apply()"
+        errorLine2="                     ~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/ui/AppTheme.kt"
+            line="122"
+            column="22"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        set(value) = prefs.edit().putBoolean(&quot;penPressure&quot;, value).apply()"
+        errorLine2="                     ~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/ui/AppTheme.kt"
+            line="127"
+            column="22"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        set(value) = prefs.edit().putBoolean(&quot;pdfDark&quot;, value).apply()"
+        errorLine2="                     ~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/ui/AppTheme.kt"
+            line="132"
+            column="22"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        set(value) = prefs.edit().putString(&quot;exportFormat&quot;, value).apply()"
+        errorLine2="                     ~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/ui/AppTheme.kt"
+            line="137"
+            column="22"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        set(value) = prefs.edit().putString(&quot;exportPages&quot;, value).apply()"
+        errorLine2="                     ~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/ui/AppTheme.kt"
+            line="140"
+            column="22"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        set(value) = prefs.edit().putBoolean(SCRIBBLE, value).apply()"
+        errorLine2="                     ~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/ui/AppTheme.kt"
+            line="145"
+            column="22"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        set(value) = prefs.edit().putBoolean(FRACTIONS, value).apply()"
+        errorLine2="                     ~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/ui/AppTheme.kt"
+            line="150"
+            column="22"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        set(value) = prefs.edit().putBoolean(UNITS, value).apply()"
+        errorLine2="                     ~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/ui/AppTheme.kt"
+            line="155"
+            column="22"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        set(value) = prefs.edit().putString(TOOLBAR, value).apply()"
+        errorLine2="                     ~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/ui/AppTheme.kt"
+            line="160"
+            column="22"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        set(value) = prefs.edit().putBoolean(TOOLBAR_INTRO, value).apply()"
+        errorLine2="                     ~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/ui/AppTheme.kt"
+            line="165"
+            column="22"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        set(value) = prefs.edit().putString(BACKUP_FOLDER, value).apply()"
+        errorLine2="                     ~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/ui/AppTheme.kt"
+            line="170"
+            column="22"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        set(value) = prefs.edit().putString(&quot;openTabs&quot;, value).apply()"
+        errorLine2="                     ~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/ui/AppTheme.kt"
+            line="175"
+            column="22"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        set(value) = prefs.edit().putStringSet(&quot;backupWhole&quot;, value.toSet()).apply()"
+        errorLine2="                     ~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/ui/AppTheme.kt"
+            line="180"
+            column="22"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        set(value) = prefs.edit().putLong(BACKUP_AT, value).apply()"
+        errorLine2="                     ~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/ui/AppTheme.kt"
+            line="185"
+            column="22"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        set(value) = prefs.edit().putString(SORT, value.name).apply()"
+        errorLine2="                     ~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/ui/AppTheme.kt"
+            line="190"
+            column="22"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        set(value) = prefs.edit().putString(PEN_KIND, value.name).apply()"
+        errorLine2="                     ~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/ui/AppTheme.kt"
+            line="196"
+            column="22"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        set(value) = prefs.edit().putFloat(PAGE_SHIFT, value).apply()"
+        errorLine2="                     ~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/ui/AppTheme.kt"
+            line="201"
+            column="22"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        set(value) = prefs.edit().putString(DASH_STYLE, with(value) { &quot;${pattern.name},$dash,$gap&quot; }).apply()"
+        errorLine2="                     ~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/ui/AppTheme.kt"
+            line="212"
+            column="22"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX function `createBitmap` instead?"
+        errorLine1="            val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ALPHA_8)"
+        errorLine2="                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/editor/AreaFinder.kt"
+            line="95"
+            column="26"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX function `createBitmap` instead?"
+        errorLine1="            val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ALPHA_8)"
+        errorLine2="                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/editor/AreaFinder.kt"
+            line="221"
+            column="26"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX function `createBitmap` instead?"
+        errorLine1="        val bitmap = Bitmap.createBitmap(WIDTH, height, Bitmap.Config.ARGB_8888)"
+        errorLine2="                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/ui/CoverPreviews.kt"
+            line="88"
+            column="22"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toUri` instead?"
+        errorLine1="                ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))"
+        errorLine2="                                                                                             ~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/ui/EditorController.kt"
+            line="1021"
+            column="94"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX function `createBitmap` instead?"
+        errorLine1="        val bitmap = Bitmap.createBitmap(THUMB_WIDTH, (pageHeight * k).toInt(), Bitmap.Config.ARGB_8888)"
+        errorLine2="                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/ui/EditorController.kt"
+            line="1995"
+            column="22"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX function `createBitmap` instead?"
+        errorLine1="                    val bmp = Bitmap.createBitmap(widthPx, maxOf(1, (card.area.height() * k).toInt()), Bitmap.Config.ARGB_8888)"
+        errorLine2="                              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/ui/EditorController.kt"
+            line="2096"
+            column="31"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX function `createBitmap` instead?"
+        errorLine1="        val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)"
+        errorLine2="                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/ui/FormulaUi.kt"
+            line="71"
+            column="19"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `Canvas.withRotation` instead?"
+        errorLine1="        canvas.save()"
+        errorLine2="        ~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/editor/Hatch.kt"
+            line="92"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `Canvas.withSave` instead?"
+        errorLine1="        native.save()"
+        errorLine2="        ~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/ui/HatchDialog.kt"
+            line="58"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX function `createBitmap` instead?"
+        errorLine1="        val bmp = Bitmap.createBitmap(cols, rows, Bitmap.Config.ARGB_8888)"
+        errorLine2="                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/editor/HighlightAligner.kt"
+            line="60"
+            column="19"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `Canvas.withScale` instead?"
+        errorLine1="        native.save()"
+        errorLine2="        ~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/ui/LineDialogs.kt"
+            line="61"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX function `createBitmap` instead?"
+        errorLine1="                    val bitmap = Bitmap.createBitmap(bw, bh, Bitmap.Config.ARGB_8888)"
+        errorLine2="                                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/editor/PageCache.kt"
+            line="285"
+            column="34"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX function `createBitmap` instead?"
+        errorLine1="                    val whole = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)"
+        errorLine2="                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/editor/PageCache.kt"
+            line="436"
+            column="33"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX function `createBitmap` instead?"
+        errorLine1="                        Bitmap.createBitmap(w, sh, Bitmap.Config.ARGB_8888).also { strip ->"
+        errorLine2="                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/editor/PageCache.kt"
+            line="443"
+            column="25"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension property `View.isVisible` instead?"
+        errorLine1="    internal val zoomPad: ZoomPad? get() = padView?.takeIf { it.visibility == VISIBLE }"
+        errorLine2="                                                             ~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/editor/PageEditorView.kt"
+            line="1475"
+            column="62"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX function `createBitmap` instead?"
+        errorLine1="                    Bitmap.createBitmap(pageLayer.width, pageLayer.height, Bitmap.Config.ARGB_8888)"
+        errorLine2="                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/editor/PageEditorView.kt"
+            line="2939"
+            column="21"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `Bitmap.get` instead?"
+        errorLine1="            val c = shot.getPixel(xx, yy)"
+        errorLine2="                    ~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/editor/PageEditorView.kt"
+            line="2969"
+            column="21"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX function `createBitmap` instead?"
+        errorLine1="        val canvas = Canvas(Bitmap.createBitmap(64, 64, Bitmap.Config.ARGB_8888))"
+        errorLine2="                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/editor/PageEditorView.kt"
+            line="3329"
+            column="29"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `Canvas.withMatrix` instead?"
+        errorLine1="            canvas.save()"
+        errorLine2="            ~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/editor/PageEditorView.kt"
+            line="3373"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `Canvas.withMatrix` instead?"
+        errorLine1="                canvas.save()"
+        errorLine2="                ~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/editor/PageEditorView.kt"
+            line="3401"
+            column="17"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `Canvas.withClip` instead?"
+        errorLine1="            canvas.save()"
+        errorLine2="            ~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/editor/PageEditorView.kt"
+            line="3636"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `Canvas.withMatrix` instead?"
+        errorLine1="            canvas.save()"
+        errorLine2="            ~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/editor/PageEditorView.kt"
+            line="3789"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `Canvas.withMatrix` instead?"
+        errorLine1="            canvas.save()"
+        errorLine2="            ~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/editor/PageEditorView.kt"
+            line="3821"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `Canvas.withMatrix` instead?"
+        errorLine1="            canvas.save()"
+        errorLine2="            ~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/editor/PageEditorView.kt"
+            line="3831"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `Canvas.withClip` instead?"
+        errorLine1="        canvas.save()"
+        errorLine2="        ~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/editor/PageRenderer.kt"
+            line="462"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `Canvas.withSave` instead?"
+        errorLine1="        canvas.save()"
+        errorLine2="        ~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/editor/PageRenderer.kt"
+            line="526"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX function `createBitmap` instead?"
+        errorLine1="        val tile = Bitmap.createBitmap(px, px, Bitmap.Config.ARGB_8888)"
+        errorLine2="                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/editor/PageRenderer.kt"
+            line="577"
+            column="20"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `Bitmap.set` instead?"
+        errorLine1="            tile.setPixel(rnd.nextInt(px), rnd.nextInt(px), if (light) 0x88FFFFFF.toInt() else 0x44000000)"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/editor/PageRenderer.kt"
+            line="581"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX function `createBitmap` instead?"
+        errorLine1="        val bitmap = Bitmap.createBitmap(max(1, (widthPt * density).roundToInt()), max(1, (heightPt * density).roundToInt()), Bitmap.Config.ARGB_8888)"
+        errorLine2="                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/data/PdfExporter.kt"
+            line="83"
+            column="22"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `Canvas.withMatrix` instead?"
+        errorLine1="        canvas.save()"
+        errorLine2="        ~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/data/PdfExporter.kt"
+            line="114"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX function `createBitmap` instead?"
+        errorLine1="            val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)"
+        errorLine2="                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/data/PdfPages.kt"
+            line="119"
+            column="26"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX function `createBitmap` instead?"
+        errorLine1="            val out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)"
+        errorLine2="                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/data/PdfPages.kt"
+            line="133"
+            column="23"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        prefs.edit().putInt(KEY_CODE, keyCode).putString(KEY_DEVICE, deviceName).apply()"
+        errorLine2="        ~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/editor/PenButtonBinding.kt"
+            line="30"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX function `createBitmap` instead?"
+        errorLine1="        val out = Bitmap.createBitmap(max(1, outW), max(1, outH), Bitmap.Config.ARGB_8888)"
+        errorLine2="                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/ui/PhotoEditor.kt"
+            line="75"
+            column="19"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX function `createBitmap` instead?"
+        errorLine1="        val out = Bitmap.createBitmap(src.width, src.height, Bitmap.Config.ARGB_8888)"
+        errorLine2="                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/ui/PhotoEditor.kt"
+            line="115"
+            column="19"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `Bitmap.scale` instead?"
+        errorLine1="        return Bitmap.createScaledBitmap(src, max(1, (src.width * k).roundToInt()), max(1, (src.height * k).roundToInt()), true)"
+        errorLine2="               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/ui/PhotoEditor.kt"
+            line="129"
+            column="16"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `Canvas.withTranslation` instead?"
+        errorLine1="        canvas.save()"
+        errorLine2="        ~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/editor/Ruler.kt"
+            line="124"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `Canvas.withTranslation` instead?"
+        errorLine1="        canvas.save()"
+        errorLine2="        ~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/editor/Ruler.kt"
+            line="167"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX function `createBitmap` instead?"
+        errorLine1="        val bmp = Bitmap.createBitmap(widthPx, h, Bitmap.Config.ARGB_8888)"
+        errorLine2="                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/editor/SurfaceArt.kt"
+            line="60"
+            column="19"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `Canvas.withClip` instead?"
+        errorLine1="            canvas.save()"
+        errorLine2="            ~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/dev/inknotes/editor/ZoomPad.kt"
+            line="261"
+            column="13"/>
+    </issue>
+
+</issues>

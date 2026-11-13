@@ -115,6 +115,9 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         /** The eyedropper was lifted over this colour (opaque); [pickingColor] is off again. */
         fun onColorPicked(color: Int) {}
 
+        /** The pen touched page [page], which could not be read and so can't be changed. */
+        fun onPageLocked(page: Int) {}
+
         /** Words [from]…[to] of the PDF text of page [page] picked (from < 0: the pick is gone). */
         fun onPdfTextPicked(page: Int, from: Int, to: Int) {}
 
@@ -181,6 +184,9 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
 
         /** Follows the link at ([x], [y]) of page [index]; false when there is none. */
         fun followLink(index: Int, x: Float, y: Float): Boolean = false
+
+        /** Page [index] could not be read (it is shown empty) and must not be changed. */
+        fun pageLocked(index: Int): Boolean = false
 
         /** Words of the PDF under page [index] (page units), null for other pages or while they are read. */
         fun pdfWords(index: Int): List<dev.inknotes.data.PdfWord>? = null
@@ -1359,6 +1365,19 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         if (pdfTextOn && pen && !penButton && !eraserEnd) {
             activePage = pageAt(e.getX(index), e.getY(index))
             if (source?.pdfWords(activePage) != null) return Mode.PDF_TEXT
+        }
+        if (pen || eraserEnd) {
+            // A page still being read is not waited for on the main thread: the pen does
+            // nothing until it is there (it is read as it comes into view, so this is rare).
+            val at = pageAt(e.getX(index), e.getY(index))
+            if (source?.loadedDocument(at) == null) return Mode.NONE
+        }
+        if ((pen || eraserEnd) && !penButton) {
+            val at = pageAt(e.getX(index), e.getY(index))
+            if (source?.pageLocked(at) == true) {
+                listener?.onPageLocked(at)
+                return Mode.NONE
+            }
         }
         if (insertingSpace && (pen || toolType == MotionEvent.TOOL_TYPE_FINGER)) {
             activePage = pageAt(e.getX(index), e.getY(index))

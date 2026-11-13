@@ -534,8 +534,12 @@ class EditorController(
         private set
     private var player: android.media.MediaPlayer? = null
 
-    /** A finger tap on writing made during a recording plays it from that moment. */
-    var listenByTouch by mutableStateOf(false)
+    /**
+     * A finger tap on writing made during a recording plays it from that moment; such places
+     * are underlined. On by itself in a notebook that has them (it was hidden behind a switch
+     * before 0.35, so recordings looked as if nothing could be heard from them).
+     */
+    var listenByTouch by mutableStateOf(notebook.audioMarks.isNotEmpty())
         private set
 
     fun toggleListenByTouch() {
@@ -586,9 +590,15 @@ class EditorController(
             return
         }
         val rec = dev.inknotes.data.Recording(file.name, since, System.currentTimeMillis() - since)
-        notebook = repo.addRecording(notebook, rec, pendingMarks.toList())
+        val marks = pendingMarks.toList()
+        notebook = repo.addRecording(notebook, rec, marks)
         pendingMarks.clear()
-        showStatus("Запись сохранена: касание написанного во время неё включает звук")
+        if (marks.isNotEmpty()) {
+            listenByTouch = true
+            showStatus("Запись сохранена. Написанное во время неё подчёркнуто оранжевым — коснитесь пальцем, и включится звук")
+        } else {
+            showStatus("Запись сохранена. Во время неё ничего не написано — слушайте её в «Записи звука…»")
+        }
         view?.refresh()
     }
 
@@ -616,7 +626,7 @@ class EditorController(
     fun play(rec: dev.inknotes.data.Recording, fromMs: Long = 0) {
         val file = repo.recordingFile(notebook, rec.file) ?: return showStatus("Файл записи не найден")
         if (playing == rec && player != null) {
-            player?.seekTo(fromMs.toInt().coerceAtLeast(0))
+            player?.seekTo(fromMs.coerceAtLeast(0), android.media.MediaPlayer.SEEK_CLOSEST)
             player?.start()
             playPaused = false
             return
@@ -626,7 +636,7 @@ class EditorController(
         val ok = runCatching {
             p.setDataSource(file.path)
             p.prepare()
-            p.seekTo(fromMs.toInt().coerceAtLeast(0))
+            p.seekTo(fromMs.coerceAtLeast(0), android.media.MediaPlayer.SEEK_CLOSEST)
             p.start()
         }.isSuccess
         if (!ok) {
@@ -651,7 +661,7 @@ class EditorController(
     }
 
     fun seekPlaying(ms: Long) {
-        player?.seekTo(ms.toInt().coerceAtLeast(0))
+        player?.seekTo(ms.coerceAtLeast(0), android.media.MediaPlayer.SEEK_CLOSEST)
     }
 
     fun playPosition(): Long = runCatching { player?.currentPosition?.toLong() }.getOrNull() ?: 0L
@@ -848,13 +858,23 @@ class EditorController(
             it.onEdit = ::onPageEdited
         }
 
+    private fun prefetch(index: Int) {
+        val id = notebook.pageIds.getOrNull(index) ?: return
+        if (id !in docs && id !in loading) loadedDocument(index)
+    }
+
     /**
      * Pages are read in the background as they come into view, so scrolling never waits for
      * a page file: a page with thousands of strokes takes a noticeable moment to decode.
      */
     override fun loadedDocument(index: Int): PageDocument? {
         val pageId = notebook.pageIds.getOrNull(index) ?: return null
-        docs[pageId]?.let { return it }
+        docs[pageId]?.let {
+            // The neighbours are read ahead, so a touch there finds them ready.
+            prefetch(index - 1)
+            prefetch(index + 1)
+            return it
+        }
         if (loading.add(pageId)) {
             val nb = notebook
             runCatching {
@@ -978,6 +998,13 @@ class EditorController(
 
     /** From shares (0…1) of the PDF page as shown to page units. */
     private fun unitToPage(ref: PdfPageRef) = PdfGeometry.then(PdfGeometry.scale(ref.width, ref.height), ref.pdfToUnits())
+
+    override fun pageLocked(index: Int): Boolean =
+        notebook.pageIds.getOrNull(index)?.let { repo.isLocked(notebook, it) } == true
+
+    override fun onPageLocked(page: Int) {
+        showStatus("Страницу ${page + 1} не удалось прочитать, она открыта только для просмотра. Файл не тронут — откройте тетрадь заново позже.")
+    }
 
     override fun pdfWords(index: Int): List<PdfWord>? {
         val pageId = notebook.pageIds.getOrNull(index) ?: return null
@@ -1246,7 +1273,7 @@ class EditorController(
     fun exportTo(uri: Uri, resolver: ContentResolver, pages: List<Int>, format: ExportFormat) {
         if (pages.isEmpty()) return
         val only = if (format == ExportFormat.PNG) pages.take(1) else pages
-        runExport(only, format, { _, _ -> resolver.openOutputStream(uri) }) { ok ->
+        runExport(only, format, { _, _ -> resolver.openOutputStream(uri, "wt") }) { ok ->
             showStatus(if (!ok) "Не удалось сохранить" else if (format == ExportFormat.PDF) "PDF сохранён" else "Картинка сохранена")
         }
     }
@@ -1257,7 +1284,7 @@ class EditorController(
         val dir = android.provider.DocumentsContract.buildDocumentUriUsingTree(tree, android.provider.DocumentsContract.getTreeDocumentId(tree))
         runExport(pages, ExportFormat.PNG, { page, _ ->
             val name = exportName(pages, ExportFormat.PNG, page).removeSuffix(".png")
-            android.provider.DocumentsContract.createDocument(resolver, dir, "image/png", name)?.let { resolver.openOutputStream(it) }
+            android.provider.DocumentsContract.createDocument(resolver, dir, "image/png", name)?.let { resolver.openOutputStream(it, "wt") }
         }) { ok -> showStatus(if (ok) "Сохранено картинок: ${pages.size}" else "Не удалось сохранить картинки") }
     }
 
@@ -1327,7 +1354,7 @@ class EditorController(
     fun saveNotebookFile(uri: Uri, resolver: ContentResolver) {
         flush()
         status = "Сохраняю файл…"
-        repo.exportArchiveAsync(notebook, { resolver.openOutputStream(uri) }) { ok ->
+        repo.exportArchiveAsync(notebook, { resolver.openOutputStream(uri, "wt") }) { ok ->
             showStatus(if (ok) "Файл сохранён" else "Не удалось сохранить файл")
         }
     }
@@ -2132,6 +2159,8 @@ class EditorController(
                 penButtonLabel = penButton.describe()
                 return true
             }
+            // A typing key or a keyboard's key: refused, it keeps its meaning.
+            showStatus("Эту клавишу назначить нельзя: она нужна для набора текста. Нажмите кнопку пера.")
             return false
         }
         if (!penButton.matches(e)) return false

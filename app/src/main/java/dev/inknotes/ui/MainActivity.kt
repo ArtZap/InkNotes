@@ -21,10 +21,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.IntentCompat
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import dev.inknotes.data.NotebookRepository
 import dev.inknotes.data.NotebookRepository.ArchiveImport
 import dev.inknotes.editor.PenButtonBinding
-import dev.inknotes.probe.ProbeActivity
 import dev.inknotes.search.HandwritingIndex
 import dev.inknotes.search.SearchHit
 
@@ -59,6 +60,9 @@ class MainActivity : ComponentActivity() {
         themeMode = prefs.themeMode
         uiStyle = prefs.uiStyle
         if (savedInstanceState == null) handleIntent(intent)
+        // The tabs open when the app was last stopped (or closed by the system) come back.
+        // Not when a shared file is being opened: an import closes the tabs anyway.
+        if (tabs.isEmpty() && pendingTabs == null && (intent?.action == Intent.ACTION_MAIN || intent?.action == null)) restoreTabs()
         // The name of the app greets a fresh start only (not a rotation or a theme change).
         var splash by mutableStateOf(savedInstanceState == null)
 
@@ -104,7 +108,8 @@ class MainActivity : ComponentActivity() {
                         message = libraryMessage,
                         onOpen = { openNotebook(it) },
                         onOpenFiles = ::importNotebookFiles,
-                        onProbe = { startActivity(Intent(this, ProbeActivity::class.java)) },
+                        // The probe is in debug builds only (src/debug): started by name.
+                        onProbe = { runCatching { startActivity(Intent().setClassName(this, "dev.inknotes.probe.ProbeActivity")) } },
                         version = libraryVersion,
                     ) }
                 } else {
@@ -148,8 +153,15 @@ class MainActivity : ComponentActivity() {
         libraryMessage = null
         // Another notebook may be open (an import finished meanwhile): its last strokes are saved first.
         editor?.flush()
-        // Tabs of notebooks deleted or replaced in the library meanwhile are closed.
-        dropStaleTabs()
+        // Tabs of notebooks deleted or replaced in the library meanwhile are closed: the library
+        // is read off the main thread, then the notebook opens.
+        lifecycleScope.launch {
+            dropStaleTabs()
+            showNotebook(nb, hit)
+        }
+    }
+
+    private fun showNotebook(nb: dev.inknotes.data.Notebook, hit: SearchHit? = null) {
         tabs.firstOrNull { it.notebook.id == nb.id }?.let { open ->
             open.pendingHit = hit
             editor = open
@@ -165,8 +177,10 @@ class MainActivity : ComponentActivity() {
     private fun switchTo(c: EditorController) {
         if (c === editor) return
         editor?.flush()
-        dropStaleTabs()
-        if (c in tabs) editor = c
+        lifecycleScope.launch {
+            dropStaleTabs()
+            if (c in tabs) editor = c
+        }
     }
 
     /** Closes a tab; the next one (or the library) is shown if it was the current one. */
@@ -179,9 +193,9 @@ class MainActivity : ComponentActivity() {
         c.close()
     }
 
-    private fun dropStaleTabs() {
+    private suspend fun dropStaleTabs() {
         if (tabs.isEmpty()) return
-        val live = repo.list().associateBy { it.id }
+        val live = repo.io { list() }.associateBy { it.id }
         for (t in tabs) {
             val now = live[t.notebook.id]
             // Gone, or replaced by an imported version: the tab would write over it.
@@ -206,13 +220,19 @@ class MainActivity : ComponentActivity() {
         repo.readImportsAsync(uris.map { uri -> { contentResolver.openInputStream(uri) } }) { set ->
             when {
                 set.items.isEmpty() -> libraryMessage = set.failures.firstOrNull() ?: "Не удалось открыть файл"
-                set.conflicts > 0 -> pendingImport = set to into
+                set.conflicts > 0 -> {
+                    // A second import while the first one's question is open: the first one's
+                    // unpacked files go, it is replaced by the new one.
+                    pendingImport?.let { (old, _) -> repo.discardImports(old) }
+                    pendingImport = set to into
+                }
                 else -> commit(set, into, replace = false)
             }
         }
     }
 
     private fun commit(set: NotebookRepository.ImportSet, into: String?, replace: Boolean) {
+        pendingImport?.let { (old, _) -> if (old !== set) repo.discardImports(old) }
         pendingImport = null
         repo.commitImportsAsync(set, replace, into) { added ->
             handwriting.indexAll()
@@ -257,7 +277,32 @@ class MainActivity : ComponentActivity() {
         )
     }
 
+    /** Set while the tabs of the last run are being opened again. */
+    private var pendingTabs: TabsMemory.Saved? = null
+
+    private fun restoreTabs() {
+        val saved = TabsMemory.decode(prefs.openTabs)
+        if (saved.ids.isEmpty()) return
+        pendingTabs = saved
+        lifecycleScope.launch {
+            val all = repo.io { list() }.associateBy { it.id }
+            val plan = TabsMemory.restore(saved, all.keys, MAX_TABS)
+            pendingTabs = null
+            // Opened meanwhile by the user (or a shared file): theirs wins.
+            if (tabs.isNotEmpty()) return@launch
+            tabs = plan.ids.mapNotNull(all::get).map { nb -> EditorController(repo, nb, penButton, prefs, darkNow, handwriting, AppServices.get(this@MainActivity).math) }
+            editor = tabs.firstOrNull { it.notebook.id == plan.active }
+        }
+    }
+
+    /** What is open now, kept for the next start. */
+    private fun rememberTabs() {
+        if (pendingTabs != null) return
+        prefs.openTabs = TabsMemory.encode(tabs.map { it.notebook.id }, editor?.notebook?.id)
+    }
+
     override fun onPause() {
+        rememberTabs()
         for (t in tabs) t.flush()
         super.onPause()
     }

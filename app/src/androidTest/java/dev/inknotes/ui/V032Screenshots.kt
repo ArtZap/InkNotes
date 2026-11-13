@@ -75,7 +75,7 @@ class V032Screenshots {
     @Test
     fun zoomWindowExportPhotoEditor() {
         val prefs = ctx.getSharedPreferences("app", 0)
-        prefs.edit().putBoolean("toolbarIntroShown", true).remove("toolbarLayout").commit()
+        prefs.edit().putBoolean("toolbarIntroShown", true).remove("openTabs").remove("toolbarLayout").commit()
         val repo = NotebookRepository(ctx.filesDir)
         if (repo.list().none { it.title == "Скриншоты 0.32" }) repo.create("Скриншоты 0.32", PaperKind.LINED)
         device.setOrientationLandscape()

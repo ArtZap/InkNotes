@@ -16,18 +16,22 @@ class PenButtonBinding(context: Context) {
     var deviceName: String? = prefs.getString(KEY_DEVICE, DEFAULT_DEVICE)
         private set
 
+    /** Keys from a full keyboard never count (typing must work), nor a typing key taught before. */
     fun matches(e: KeyEvent): Boolean =
         keyCode != KeyEvent.KEYCODE_UNKNOWN && e.keyCode == keyCode &&
-            (deviceName == null || e.device?.name == deviceName)
+            (deviceName == null || e.device?.name == deviceName) &&
+            PenKeys.canLearn(e.keyCode, alphabetic(e))
 
-    /** Returns false for keys that must keep their system meaning. */
+    /** Returns false for keys that must keep their meaning: system, typing and keyboard keys. */
     fun learn(e: KeyEvent): Boolean {
-        if (e.keyCode in RESERVED) return false
+        if (!PenKeys.canLearn(e.keyCode, alphabetic(e))) return false
         keyCode = e.keyCode
         deviceName = e.device?.name
         prefs.edit().putInt(KEY_CODE, keyCode).putString(KEY_DEVICE, deviceName).apply()
         return true
     }
+
+    private fun alphabetic(e: KeyEvent) = e.device?.keyboardType == android.view.InputDevice.KEYBOARD_TYPE_ALPHABETIC
 
     fun describe(): String =
         if (keyCode == KeyEvent.KEYCODE_UNKNOWN) "не назначена"
@@ -38,9 +42,5 @@ class PenButtonBinding(context: Context) {
         const val KEY_DEVICE = "device"
         const val DEFAULT_KEY_CODE = 718
         const val DEFAULT_DEVICE = "M-Pencil"
-        val RESERVED = setOf(
-            KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_HOME, KeyEvent.KEYCODE_POWER,
-            KeyEvent.KEYCODE_VOLUME_UP, KeyEvent.KEYCODE_VOLUME_DOWN,
-        )
     }
 }
