@@ -430,6 +430,7 @@ class EditorController(
         view?.let { v -> returnPlace = pageIndex to (v.pagePlace(pageIndex) ?: 0f) }
         math.onReady = null
         handler.removeCallbacks(mathRunnable)
+        handler.removeCallbacks(growRunnable)
         view?.listener = null
         view = null
         zoomPadOpen = false
@@ -1867,7 +1868,7 @@ class EditorController(
     override fun addPageAfter(after: Int): Int? {
         if (after !in notebook.pageIds.indices) return null
         val pageId = notebook.pageIds[after]
-        val size = pageId.takeIf { it !in notebook.pdfPages }?.let(notebook::pageSize) ?: PageSize.DEFAULT
+        val size = pageId.takeIf { it !in notebook.pdfPages }?.let(notebook::pageSize)?.let(::freshSize) ?: PageSize.DEFAULT
         notebook = repo.insertPage(notebook, after + 1, size)
         view?.relayout()
         showStatus("Не поместившееся — на новой странице ${after + 2}")
@@ -1878,7 +1879,7 @@ class EditorController(
         flush()
         // A new page continues the one before it: same paper size and orientation.
         val before = notebook.pageIds.getOrNull(index - 1)
-        val size = before?.takeIf { it !in notebook.pdfPages }?.let(notebook::pageSize) ?: PageSize.DEFAULT
+        val size = before?.takeIf { it !in notebook.pdfPages }?.let(notebook::pageSize)?.let(::freshSize) ?: PageSize.DEFAULT
         notebook = repo.insertPage(notebook, index.coerceIn(0, notebook.pageIds.size), size)
         view?.relayout()
         goToPage(index)
@@ -1901,6 +1902,52 @@ class EditorController(
         updateUndo()
         view?.relayout()
         goToPage(index.coerceAtMost(notebook.pageIds.lastIndex))
+    }
+
+    /** A new page after one of [size]: the same paper; a canvas starts small again. */
+    private fun freshSize(size: PageSize) = if (size.isCanvas) PageSize.CANVAS else size
+
+    private val growRunnable = Runnable { growCanvases() }
+
+    /**
+     * Canvas pages whose writing came near the right or bottom edge get room past it. Checked
+     * a moment after a change, once the pen is off and nothing is selected.
+     */
+    private fun growCanvases() {
+        val v = view ?: return
+        if (notebook.pageSizes.values.none { it.isCanvas }) return
+        if (v.isBusy) {
+            handler.postDelayed(growRunnable, GROW_DELAY_MS)
+            return
+        }
+        var nb = notebook
+        val k = dev.inknotes.data.Notebook.MM_PER_UNIT
+        for ((i, id) in nb.pageIds.withIndex()) {
+            val size = nb.pageSize(id)
+            if (!size.isCanvas) continue
+            val b = v.contentBounds(i) ?: continue
+            val (w, h) = dev.inknotes.data.CanvasGrowth.grow(size.canvasW, size.canvasH, b.right * k, b.bottom * k) ?: continue
+            nb = repo.setPageSize(nb, listOf(id), size.copy(canvasW = w, canvasH = h))
+        }
+        if (nb === notebook) return
+        notebook = nb
+        invalidateThumbnails()
+        v.relayout(keepZoom = true)
+    }
+
+    /** Page size of page [index] if it is a canvas: back to what is written on it. */
+    fun fitCanvas(index: Int) {
+        val id = notebook.pageIds.getOrNull(index) ?: return
+        val size = notebook.pageSize(id)
+        if (!size.isCanvas) return
+        flush()
+        val k = dev.inknotes.data.Notebook.MM_PER_UNIT
+        val b = view?.contentBounds(index)
+        val (w, h) = if (b == null) PageSize.CANVAS.canvasW to PageSize.CANVAS.canvasH else dev.inknotes.data.CanvasGrowth.fit(b.right * k, b.bottom * k)
+        notebook = repo.setPageSize(notebook, listOf(id), size.copy(canvasW = w, canvasH = h))
+        invalidateThumbnails()
+        view?.relayout()
+        goToPage(index)
     }
 
     /** Paper size of page [index], or of every paper page when [all]. */
@@ -2231,6 +2278,8 @@ class EditorController(
         handler.postDelayed(thumbnailRunnable, THUMBNAIL_DELAY_MS)
         handler.removeCallbacks(mathRunnable)
         handler.postDelayed(mathRunnable, MATH_DELAY_MS)
+        handler.removeCallbacks(growRunnable)
+        handler.postDelayed(growRunnable, GROW_DELAY_MS)
     }
 
     // The finger gesture itself is still on: it ends right after.
@@ -2523,6 +2572,7 @@ class EditorController(
         private const val KEEP_PAGES = 4
         private const val THUMBNAIL_DELAY_MS = 1200L
         private const val MATH_DELAY_MS = 700L
+        private const val GROW_DELAY_MS = 500L
         private const val PEN_BUTTON_DEBOUNCE_MS = 400L
         /** Custom colours kept in the palette (it scrolls). */
         private const val MAX_CUSTOM = 40

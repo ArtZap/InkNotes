@@ -500,8 +500,12 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         pageLayer.invalidate()
     }
 
-    /** Recomputes page positions after pages were added, removed, moved or resized. */
-    fun relayout() {
+    /**
+     * Recomputes page positions after pages were added, removed, moved or resized. [keepZoom]:
+     * the zoom stays as it is even if the pages were fitted to the width (a canvas that grew
+     * under the pen must not shrink on screen).
+     */
+    fun relayout(keepZoom: Boolean = false) {
         val src = source
         val n = src?.pageCount ?: 0
         heights = FloatArray(n) { src!!.pageHeight(it) }
@@ -519,8 +523,17 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         clearSelection()
         clearPendingArea()
         // A page of another width came or went: same place and zoom, refitted.
-        if (worldWidth != oldWidth && width > 0 && n > 0) refit(width) else applyViewport()
+        if (worldWidth != oldWidth && width > 0 && n > 0) refit(width, keepZoom) else applyViewport()
     }
+
+    /** The box of everything on page [index] in page units; null when it is empty or not loaded yet. */
+    fun contentBounds(index: Int): RectF? {
+        val doc = source?.takeIf { index < it.pageCount }?.loadedDocument(index) ?: return null
+        return boundsOf(doc.strokes, doc.fills, doc.images)
+    }
+
+    /** Something is being written, moved or picked: no time to move the pages under it. */
+    val isBusy get() = mode != Mode.NONE || selected.isNotEmpty() || pendingArea != null
 
     /** Where page [index] is on screen: how far its top is from the view's top (pixels). */
     fun pagePlace(index: Int): Float? {
@@ -636,12 +649,12 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
      * changed: what was at the top of the screen stays there, the zoom stays (or the pages stay
      * fitted, if they were), nothing scrolls back to the start of a page.
      */
-    private fun refit(oldWidth: Int) {
+    private fun refit(oldWidth: Int, keepZoom: Boolean = false) {
         if (width == 0) return
         stopFling()
         val v = FloatArray(9).also(worldToView::getValues)
         val s = v[Matrix.MSCALE_X]
-        val fitted = abs(s - fitScale) <= fitScale * 0.01f
+        val fitted = !keepZoom && abs(s - fitScale) <= fitScale * 0.01f
         fitScale = fitScaleNow()
         val ns = if (fitted) fitScale else s
         val worldTop = -v[Matrix.MTRANS_Y] / s

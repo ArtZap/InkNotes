@@ -895,6 +895,7 @@ private fun CreateNotebookDialog(onDismiss: () -> Unit, onCreate: (String, PageB
     var title by remember { mutableStateOf("") }
     var format by remember { mutableStateOf(PaperFormat.A4) }
     var landscape by remember { mutableStateOf(false) }
+    var canvas by remember { mutableStateOf(false) }
     var template by remember { mutableStateOf(PaperKind.LINED) }
     var lines by remember { mutableFloatStateOf(1f) }
     val darkUi = MaterialTheme.colorScheme.surface.luminance() < 0.5f
@@ -922,17 +923,17 @@ private fun CreateNotebookDialog(onDismiss: () -> Unit, onCreate: (String, PageB
                 }
                 if (!more) {
                     Text(
-                        "${format.title}, ${if (landscape) "альбомная" else "книжная"} · ${template.title}",
+                        (if (canvas) "Холст" else "${format.title}, ${if (landscape) "альбомная" else "книжная"}") + " · ${template.title}",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 13.sp,
                     )
                 } else {
-                    PaperSizeChoices(format, landscape, onFormat = { format = it }, onLandscape = { landscape = it })
+                    PaperSizeChoices(format, landscape, onFormat = { format = it }, onLandscape = { landscape = it }, canvas = canvas, onCanvas = { canvas = it })
                     Text("Фон страниц")
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         // Photo backgrounds are set from inside the notebook ("Фон").
                         for (t in PaperKind.entries - PaperKind.PHOTO) {
-                            PaperPreview(kind = t, dark = darkUi, color = null, photo = null, selected = t == template, lines = lines, aspect = PageSize(format, landscape).let { it.widthMm / it.heightMm }, onClick = { template = t })
+                            PaperPreview(kind = t, dark = darkUi, color = null, photo = null, selected = t == template, lines = lines, aspect = (if (canvas) PageSize.CANVAS else PageSize(format, landscape)).let { it.widthMm / it.heightMm }, onClick = { template = t })
                         }
                     }
                     if (template != PaperKind.BLANK) LinesSlider(lines, onChange = { lines = it })
@@ -940,7 +941,7 @@ private fun CreateNotebookDialog(onDismiss: () -> Unit, onCreate: (String, PageB
             }
         },
         confirmButton = {
-            Button(onClick = { onCreate(title.trim().ifEmpty { "Без названия" }, PageBackground(template, lines = lines), PageSize(format, landscape), cover, art.ordinal, plastic.ordinal) }) { Text("Создать") }
+            Button(onClick = { onCreate(title.trim().ifEmpty { "Без названия" }, PageBackground(template, lines = lines), if (canvas) PageSize.CANVAS else PageSize(format, landscape), cover, art.ordinal, plastic.ordinal) }) { Text("Создать") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } },
     )

@@ -146,19 +146,47 @@ fun SelectionSizeDialog(c: EditorController, onDismiss: () -> Unit) {
     )
 }
 
-/** Paper format chips, portrait or landscape, and the size in millimetres they give. */
+/**
+ * Paper format chips, portrait or landscape, and the size in millimetres they give; or the
+ * canvas ([canvas] true; [canvasSize] its size now, if it is one already).
+ */
 @Composable
-fun PaperSizeChoices(format: PaperFormat, landscape: Boolean, onFormat: (PaperFormat) -> Unit, onLandscape: (Boolean) -> Unit) {
+fun PaperSizeChoices(
+    format: PaperFormat,
+    landscape: Boolean,
+    onFormat: (PaperFormat) -> Unit,
+    onLandscape: (Boolean) -> Unit,
+    canvas: Boolean = false,
+    onCanvas: ((Boolean) -> Unit)? = null,
+    canvasSize: PageSize? = null,
+) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("Формат страницы", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             for (f in PaperFormat.entries) {
                 FilterChip(
-                    selected = f == format,
-                    onClick = { onFormat(f) },
+                    selected = !canvas && f == format,
+                    onClick = {
+                        onCanvas?.invoke(false)
+                        onFormat(f)
+                    },
                     label = { Text(f.title) },
                 )
             }
+            if (onCanvas != null) {
+                FilterChip(selected = canvas, onClick = { onCanvas(true) }, label = { Text("Холст ∞") })
+            }
+        }
+        if (canvas) {
+            val size = canvasSize?.takeIf { it.isCanvas } ?: PageSize.CANVAS
+            Text(
+                "Страница без формата: растёт вправо и вниз, когда пишете у края (до 2 м). " +
+                    "Для схем, карт понятий и задач, которым тесно на листе. Отдалите пальцами, чтобы увидеть всё.",
+                fontSize = 13.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text("Сейчас ${format(size.widthMm, 0)} × ${format(size.heightMm, 0)} мм", fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
+            return@Column
         }
         Text("Ориентация", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -176,6 +204,7 @@ fun PageSizeDialog(c: EditorController, index: Int, onDismiss: () -> Unit) {
     val current = remember { c.pageSize(index) }
     var format by remember { mutableStateOf(current.format) }
     var landscape by remember { mutableStateOf(current.landscape) }
+    var canvas by remember { mutableStateOf(current.isCanvas) }
     var all by remember { mutableStateOf(false) }
     val pdf = c.isPdfPage(index)
     AlertDialog(
@@ -190,7 +219,13 @@ fun PageSizeDialog(c: EditorController, index: Int, onDismiss: () -> Unit) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                PaperSizeChoices(format, landscape, onFormat = { format = it }, onLandscape = { landscape = it })
+                PaperSizeChoices(format, landscape, onFormat = { format = it }, onLandscape = { landscape = it }, canvas = canvas, onCanvas = { canvas = it }, canvasSize = current)
+                if (canvas && current.isCanvas) {
+                    TextButton(onClick = {
+                        c.fitCanvas(index)
+                        onDismiss()
+                    }) { Text("Обрезать по написанному") }
+                }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(checked = all || pdf, enabled = !pdf, onCheckedChange = { all = it })
                     Text("Ко всем страницам тетради")
@@ -204,7 +239,12 @@ fun PageSizeDialog(c: EditorController, index: Int, onDismiss: () -> Unit) {
         },
         confirmButton = {
             Button(onClick = {
-                c.setPageSize(index, PageSize(format, landscape), all = all || pdf)
+                val size = when {
+                    !canvas -> PageSize(format, landscape)
+                    current.isCanvas -> current
+                    else -> PageSize.CANVAS
+                }
+                c.setPageSize(index, size, all = all || pdf)
                 onDismiss()
             }) { Text("Применить") }
         },
