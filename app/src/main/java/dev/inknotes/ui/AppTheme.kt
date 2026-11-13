@@ -136,6 +136,16 @@ class AppPrefs(context: Context) {
         get() = prefs.getBoolean(UNITS, false)
         set(value) = prefs.edit().putBoolean(UNITS, value).apply()
 
+    /** Where the editor's buttons are (see [dev.inknotes.data.ToolbarLayout]); null: the full layout. */
+    var toolbarLayout: String?
+        get() = prefs.getString(TOOLBAR, null)
+        set(value) = prefs.edit().putString(TOOLBAR, value).apply()
+
+    /** The choice of a ready-made layout was offered once. */
+    var toolbarIntroShown: Boolean
+        get() = prefs.getBoolean(TOOLBAR_INTRO, false)
+        set(value) = prefs.edit().putBoolean(TOOLBAR_INTRO, value).apply()
+
     /** The folder (a document tree the user granted) for automatic backups, or null. */
     var backupFolder: String?
         get() = prefs.getString(BACKUP_FOLDER, null)
@@ -184,6 +194,8 @@ class AppPrefs(context: Context) {
         const val BACKUP_AT = "backupAt"
         const val FRACTIONS = "fractionAnswers"
         const val UNITS = "mathUnits"
+        const val TOOLBAR = "toolbarLayout"
+        const val TOOLBAR_INTRO = "toolbarIntroShown"
         const val STRAIGHT_HIGHLIGHTER = "straightHighlighter"
         const val MATH = "math"
         const val THEME = "theme"

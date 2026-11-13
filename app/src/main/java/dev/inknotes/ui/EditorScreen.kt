@@ -134,6 +134,8 @@ fun EditorScreen(
     var showToc by remember { mutableStateOf(false) }
     var showLayers by remember { mutableStateOf(false) }
     var showRecordings by remember { mutableStateOf(false) }
+    var showCustomize by remember { mutableStateOf(false) }
+    var showAllFunctions by remember { mutableStateOf(false) }
     var textEdit by remember { mutableStateOf<String?>(null) }
     var textNew by remember { mutableStateOf(false) }
     var pageSizeOf by remember { mutableStateOf<Int?>(null) }
@@ -169,6 +171,36 @@ fun EditorScreen(
         }
     }
 
+    val placing = Placing(
+        controller.toolbar,
+        place = { id, zone -> controller.changeToolbar(controller.toolbar.moved(id, zone)) },
+        customize = { showCustomize = true },
+    )
+    val actions = barActions(
+        controller,
+        themeMode = themeMode,
+        onThemeModeChange = onThemeModeChange,
+        pagesShown = showPages,
+        onTogglePages = { showPages = !showPages },
+        searchShown = showSearch,
+        onToggleSearch = { showSearch = !showSearch },
+        onInsertImage = { imagePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+        onInsertTable = { showTable = true },
+        onInsertStamp = { showStamps = true },
+        onText = { textNew = true },
+        onPageText = { controller.currentPageText { pageText = it } },
+        onToc = { showToc = true },
+        onLayers = { showLayers = true },
+        onRecord = { if (controller.recordingSince == null) record() else controller.stopRecording() },
+        onRecordings = { showRecordings = true },
+        onBackground = { showBackground = true },
+        onPageSize = { pageSizeOf = controller.pageIndex },
+        onPageShift = { showShift = true },
+        onShare = { share() },
+        onSave = { saveLauncher.launch("${controller.fileName(controller.notebook.title)}.inknote") },
+        onPdf = { exportLauncher.launch("${controller.fileName(controller.notebook.title)}.pdf") },
+        onHelp = { showHelp = true },
+    )
     Column(
         Modifier
             .fillMaxSize()
@@ -176,54 +208,25 @@ fun EditorScreen(
             .safeDrawingPadding()
     ) {
         if (tabs.size > 1) TabStrip(controller, tabs, onTab, onCloseTab, onLibrary = onClose)
+        val layout = controller.toolbar
         TopRow(
             c = controller,
-            pagesShown = showPages,
-            onTogglePages = { showPages = !showPages },
-            searchShown = showSearch,
-            onToggleSearch = { showSearch = !showSearch },
-            onInsertImage = { imagePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
-            onInsertTable = { showTable = true },
-            onInsertStamp = { showStamps = true },
+            top = layout.top.mapNotNull(actions::get),
+            menu = layout.menu.mapNotNull(actions::get),
+            hiddenCount = layout.hidden.size,
+            placing = placing,
             onClose = onClose,
-            menu = {
-                // Groups, without icons: a few items with icons and most without look untidy.
-                MenuItem("Вставить печатный текст…") { textNew = true }
-                MenuItem(if (controller.insertingSpace) "Вставить место: отменить" else "Вставить место (раздвинуть строки)") { controller.toggleInsertSpace() }
-                MenuItem("Распознанный текст страницы") { controller.currentPageText { pageText = it } }
-                Divider()
-                MenuItem("Оглавление…") { showToc = true }
-                MenuItem("Слои (сейчас: ${controller.notebook.layerList().getOrNull(controller.notebook.activeLayer)?.name ?: "Основной"})…") { showLayers = true }
-                MenuItem("Повторение: карточки из маркера подсказок") { controller.openCards() }
-                Divider()
-                if (controller.recordingSince == null) MenuItem("Записать звук") { record() } else MenuItem("Остановить запись") { controller.stopRecording() }
-                MenuItem("Записи звука…") { showRecordings = true }
-                Divider()
-                MenuItem("Фон") { showBackground = true }
-                MenuItem("Размер и ориентация страницы…") { pageSizeOf = controller.pageIndex }
-                MenuItem("Отступ страницы слева или справа…") { showShift = true }
-                Divider()
-                MenuItem(if (controller.fractionAnswers) "Ответы: обыкновенные дроби (1/3)" else "Ответы: десятичные дроби (0,333…)") {
-                    controller.toggleFractionAnswers()
-                }
-                MenuItem(if (controller.mathUnits) "Единицы и константы в формулах: вкл." else "Единицы и константы в формулах: выкл.") {
-                    controller.toggleMathUnits()
-                }
-                Divider()
-                MenuItem("Поделиться файлом тетради") { share() }
-                MenuItem("Сохранить файл тетради…") { saveLauncher.launch("${controller.fileName(controller.notebook.title)}.inknote") }
-                MenuItem("Экспорт в PDF…") { exportLauncher.launch("${controller.fileName(controller.notebook.title)}.pdf") }
-                Divider()
-                MenuItem("Тема: ${themeMode.title.lowercase()}") {
-                    onThemeModeChange(ThemeMode.entries[(themeMode.ordinal + 1) % ThemeMode.entries.size])
-                }
-                MenuItem("Кнопка пера: ${controller.penButtonLabel}") { controller.learningPenButton = true }
-                MenuItem(if (controller.scribbleErase) "Стирание зачёркиванием: вкл." else "Стирание зачёркиванием: выкл.") { controller.toggleScribbleErase() }
-                MenuItem("Справка: все инструменты") { showHelp = true }
-            },
+            onAllFunctions = { showAllFunctions = true },
         )
         SoundBar(controller)
-        ToolRow(controller, onPickColor = { showPicker = true }, onHatchSettings = { showHatch = true }, onSelectionSize = { showSelectionSize = true })
+        ToolRow(
+            controller,
+            tools = layout.tools.mapNotNull(actions::get),
+            placing = placing,
+            onPickColor = { showPicker = true },
+            onHatchSettings = { showHatch = true },
+            onSelectionSize = { showSelectionSize = true },
+        )
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         Row(Modifier.fillMaxSize()) {
             // Slides in and out; the page beside it keeps its place (see PageEditorView.refit).
@@ -254,6 +257,27 @@ fun EditorScreen(
     controller.tappedAnswer?.let { AnswerDialog(controller, it, onDismiss = { controller.tappedAnswer = null }) }
     controller.studyCards?.let { CardsDialog(controller, it, onDismiss = { controller.closeCards() }) }
     if (showToc) TocDialog(controller, onDismiss = { showToc = false })
+    if (showCustomize) CustomizeBarsDialog(controller.toolbar, onChange = controller::changeToolbar, onDismiss = { showCustomize = false })
+    if (showAllFunctions) {
+        AllFunctionsDialog(
+            controller.toolbar.hidden.flatMap { id -> if (id == "page-nav") pageNavMenu(controller) else listOfNotNull(actions[id]) },
+            placing,
+            onDismiss = { showAllFunctions = false },
+        )
+    }
+    if (controller.toolbarIntro) {
+        ToolbarIntroDialog(
+            onPick = {
+                controller.changeToolbar(it.layout)
+                controller.closeToolbarIntro()
+            },
+            onCustomize = {
+                controller.closeToolbarIntro()
+                showCustomize = true
+            },
+            onDismiss = controller::closeToolbarIntro,
+        )
+    }
     if (showRecordings) RecordingsDialog(controller, onRecord = { record() }, onDismiss = { showRecordings = false })
     if (showLayers || controller.showLayersDialog) LayersDialog(controller, onDismiss = { showLayers = false; controller.showLayersDialog = false })
     if (textNew) TypeTextDialog("Печатный текст", "", onDismiss = { textNew = false }) { controller.insertText(it) }
@@ -299,30 +323,15 @@ fun EditorScreen(
     }
 }
 
-/** Entry of the "Ещё" menu; the menu closes itself after a click. */
-class MenuScope(private val close: () -> Unit) {
-    class Item(val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector?, val action: () -> Unit)
-
-    val items = ArrayList<Item>()
-
-    @Suppress("FunctionName")
-    fun MenuItem(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector? = null, onClick: () -> Unit) {
-        items += Item(label, icon) {
-            close()
-            onClick()
-        }
-    }
-
-    /** A line between groups of items. */
-    @Suppress("FunctionName")
-    fun Divider() {
-        if (items.isNotEmpty() && items.last().label.isNotEmpty()) items += Item("", null) {}
-    }
-}
-
+/**
+ * Every button of the editor as an action (see [Toolbars]): what it does, its icon and name,
+ * whether it is on or available now. Where each goes is the user's layout.
+ */
 @Composable
-private fun TopRow(
+private fun barActions(
     c: EditorController,
+    themeMode: ThemeMode,
+    onThemeModeChange: (ThemeMode) -> Unit,
     pagesShown: Boolean,
     onTogglePages: () -> Unit,
     searchShown: Boolean,
@@ -330,117 +339,202 @@ private fun TopRow(
     onInsertImage: () -> Unit,
     onInsertTable: () -> Unit,
     onInsertStamp: () -> Unit,
-    onClose: () -> Unit,
-    menu: MenuScope.() -> Unit,
-) {
-    var menuOpen by remember { mutableStateOf(false) }
-    // On a narrow screen (a tablet held upright) the insert buttons move into the menu, so
-    // the page buttons and the menu itself stay on screen.
-    val compact = LocalConfiguration.current.screenWidthDp < COMPACT_TOP_BAR_DP
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        IconAction(InkIcons.Back, "К тетрадям", onClose)
-        val math = c.math.state
-        val status = c.status ?: when (math) {
-            MathNotes.State.Downloading -> "Загружаю модель формул…"
-            is MathNotes.State.Failed -> math.message
-            else -> null
-        }
-        // Title with the status under it: they share the room left by the buttons.
-        Column(Modifier.weight(1f)) {
-            Text(
-                c.notebook.title,
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 18.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            when {
-                c.learningPenButton -> Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Нажмите кнопку пера…", color = MaterialTheme.colorScheme.primary, fontSize = 13.sp, maxLines = 1)
-                    TextButton(onClick = { c.learningPenButton = false }, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp)) {
-                        Text("Отмена", fontSize = 13.sp)
-                    }
-                }
-                status != null -> Text(
-                    status,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 13.sp,
-                    lineHeight = 15.sp,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-        }
-        // The buttons scroll when even they do not fit; the menu after them always stays.
-        Row(
-            Modifier.weight(2.5f, fill = false).horizontalScroll(rememberScrollState()),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-        val gap = if (compact) 0.dp else 12.dp
-        // Tools used now and then: up here, so the tool bar below has room for colours.
-        IconAction(InkIcons.Spoiler, "Маркер подсказок: прячет текст, касание пальцем открывает", { c.selectTool(Tool.SPOILER) }, selected = c.tool == Tool.SPOILER)
-        IconAction(InkIcons.Laser, "Указка: след гаснет сам", { c.selectTool(Tool.LASER) }, selected = c.tool == Tool.LASER)
-        Spacer(Modifier.width(gap))
-        if (!compact) {
-            IconAction(InkIcons.Picture, "Вставить картинку", onInsertImage, enabled = !c.importingImage)
-            IconAction(InkIcons.Table, "Вставить таблицу", onInsertTable)
-            IconAction(InkIcons.Stamp, "Штампы: готовые рисунки", onInsertStamp)
-            IconAction(InkIcons.RulerTool, "Линейка: положить на лист", c::toggleRuler, selected = c.rulerShown)
-        }
-        Spacer(Modifier.width(gap))
-        IconAction(InkIcons.Undo, "Отменить", c::undo, enabled = c.canUndo)
-        IconAction(InkIcons.Redo, "Повторить", c::redo, enabled = c.canRedo)
-        Spacer(Modifier.width(gap))
-        IconAction(InkIcons.Pages, "Страницы", onTogglePages, selected = pagesShown)
-        IconAction(InkIcons.Search, "Поиск в тетради", onToggleSearch, selected = searchShown)
-        IconAction(
-            InkIcons.Calc,
+    onText: () -> Unit,
+    onPageText: () -> Unit,
+    onToc: () -> Unit,
+    onLayers: () -> Unit,
+    onRecord: () -> Unit,
+    onRecordings: () -> Unit,
+    onBackground: () -> Unit,
+    onPageSize: () -> Unit,
+    onPageShift: () -> Unit,
+    onShare: () -> Unit,
+    onSave: () -> Unit,
+    onPdf: () -> Unit,
+    onHelp: () -> Unit,
+): Map<String, BarAction> {
+    val math = c.math.state
+    fun a(id: String, hint: String, onClick: () -> Unit, enabled: Boolean = true, selected: Boolean? = null, title: String = BarCatalog.title(id), icon: ImageVector = BarCatalog.icon(id)) =
+        id to BarAction(id, title, hint, icon, onClick, enabled, selected)
+    fun tool(id: String, t: Tool, hint: String) = a(id, hint, { c.selectTool(t) }, selected = c.tool == t)
+    val fountain = c.penIsFountain
+    val layer = c.notebook.layerList().getOrNull(c.notebook.activeLayer)?.name ?: "Основной"
+    return mapOf(
+        a(
+            "pen",
+            if (fountain) "Перьевая ручка (вид — в «Ручка ▾»)" else "Ручка (вид — в «Ручка ▾»)",
+            { c.selectTool(if (fountain) Tool.FOUNTAIN else Tool.PEN) },
+            selected = c.tool == Tool.PEN || c.tool == Tool.FOUNTAIN,
+            title = if (fountain) "Перьевая ручка" else "Ручка",
+            icon = if (fountain) InkIcons.Fountain else InkIcons.Pen,
+        ),
+        tool("highlighter", Tool.HIGHLIGHTER, "Маркер"),
+        tool("neon", Tool.NEON, "Неон"),
+        tool("eraser", Tool.ERASER, "Ластик"),
+        tool("lasso", Tool.LASSO, "Лассо: выделить и двигать"),
+        tool("area", Tool.AREA, "Область: заштриховать"),
+        tool("spoiler", Tool.SPOILER, "Маркер подсказок: прячет текст, касание пальцем открывает"),
+        tool("laser", Tool.LASER, "Указка: след гаснет сам"),
+        a("picture", "Вставить картинку", onInsertImage, enabled = !c.importingImage, title = "Вставить картинку"),
+        a("table", "Вставить таблицу", onInsertTable, title = "Вставить таблицу"),
+        a("stamps", "Штампы: готовые рисунки", onInsertStamp),
+        a("ruler", "Линейка: положить на лист", c::toggleRuler, selected = c.rulerShown),
+        a("text", "Вставить печатный текст", onText, title = "Вставить печатный текст…"),
+        a(
+            "space",
+            "Вставить место: штрих вниз раздвигает строки, вверх — убирает пустое",
+            c::toggleInsertSpace,
+            selected = c.insertingSpace,
+            title = if (c.insertingSpace) "Вставить место: отменить" else "Вставить место (раздвинуть строки)",
+        ),
+        a("undo", "Отменить", c::undo, enabled = c.canUndo),
+        a("redo", "Повторить", c::redo, enabled = c.canRedo),
+        a("pages", "Страницы", onTogglePages, selected = pagesShown),
+        a("search", "Поиск в тетради", onToggleSearch, selected = searchShown, title = "Поиск в тетради"),
+        a("page-nav", "Листать страницы", {}),
+        a("add-page", "Добавить страницу после текущей", c::addPageAfterCurrent, title = "Добавить страницу"),
+        a("toc", "Оглавление тетради", onToc, title = "Оглавление…"),
+        a("page-text", "Распознанный текст страницы", onPageText, title = "Распознанный текст страницы"),
+        a(
+            "math",
             "Ответы после «=»: вычисления, переменные, системы",
             c::toggleMath,
             selected = math == MathNotes.State.Ready || math == MathNotes.State.Downloading,
-        )
-        Spacer(Modifier.width(gap))
-        IconAction(InkIcons.Previous, "Предыдущая страница", { c.goToPage(c.pageIndex - 1) }, enabled = c.pageIndex > 0)
-        Text("${c.pageIndex + 1} / ${c.notebook.pageIds.size}")
-        IconAction(
-            InkIcons.Next,
-            "Следующая страница",
-            { c.goToPage(c.pageIndex + 1) },
-            enabled = c.pageIndex < c.notebook.pageIds.lastIndex,
-        )
-        IconAction(InkIcons.AddPage, "Добавить страницу после текущей", c::addPageAfterCurrent)
-        }
-        Box {
-            IconAction(InkIcons.More, "Ещё", { menuOpen = true })
-            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                if (compact) {
-                    @Composable
-                    fun item(label: String, icon: ImageVector, enabled: Boolean = true, action: () -> Unit) = DropdownMenuItem(
-                        text = { Text(label) },
-                        enabled = enabled,
-                        onClick = {
-                            menuOpen = false
-                            action()
-                        },
-                    )
-                    item("Вставить картинку", InkIcons.Picture, enabled = !c.importingImage, action = onInsertImage)
-                    item("Вставить таблицу", InkIcons.Table, action = onInsertTable)
-                    item("Штампы", InkIcons.Stamp, action = onInsertStamp)
-                    item(if (c.rulerShown) "Убрать линейку" else "Линейка", InkIcons.RulerTool, action = c::toggleRuler)
-                    HorizontalDivider()
-                }
-                val scope = MenuScope { menuOpen = false }.apply(menu)
-                for (item in scope.items) {
-                    if (item.label.isEmpty()) {
-                        HorizontalDivider()
-                        continue
+            title = "Ответы после «=»",
+        ),
+        a(
+            "fractions",
+            "Ответы обыкновенными или десятичными дробями",
+            c::toggleFractionAnswers,
+            title = if (c.fractionAnswers) "Ответы: обыкновенные дроби (1/3)" else "Ответы: десятичные дроби (0,333…)",
+        ),
+        a(
+            "units",
+            "Единицы измерения и физические константы в формулах",
+            c::toggleMathUnits,
+            selected = c.mathUnits,
+            title = "Единицы и константы в формулах",
+        ),
+        a("layers", "Слои (сейчас: $layer)", onLayers, title = "Слои (сейчас: $layer)…"),
+        a("cards", "Повторение: карточки из маркера подсказок", c::openCards, title = "Повторение: карточки"),
+        a(
+            "record",
+            if (c.recordingSince == null) "Записать звук" else "Остановить запись",
+            onRecord,
+            selected = c.recordingSince != null,
+            title = if (c.recordingSince == null) "Записать звук" else "Остановить запись",
+        ),
+        a("recordings", "Записи звука", onRecordings, title = "Записи звука…"),
+        a("background", "Фон страниц", onBackground),
+        a("page-size", "Размер и ориентация страницы", onPageSize, title = "Размер и ориентация страницы…"),
+        a("page-shift", "Отступ страницы слева или справа", onPageShift, title = "Отступ страницы слева или справа…"),
+        a("share", "Поделиться файлом тетради", onShare, title = "Поделиться файлом тетради"),
+        a("save", "Сохранить файл тетради", onSave, title = "Сохранить файл тетради…"),
+        a("pdf", "Экспорт в PDF", onPdf, title = "Экспорт в PDF…"),
+        a(
+            "theme",
+            "Тема: ${themeMode.title.lowercase()} (нажмите, чтобы сменить)",
+            { onThemeModeChange(ThemeMode.entries[(themeMode.ordinal + 1) % ThemeMode.entries.size]) },
+            title = "Тема: ${themeMode.title.lowercase()}",
+            icon = themeIcon(themeMode),
+        ),
+        a("pen-button", "Кнопка пера: ${c.penButtonLabel}", { c.learningPenButton = true }, title = "Кнопка пера: ${c.penButtonLabel}"),
+        a("scribble", "Стирание зачёркиванием", c::toggleScribbleErase, selected = c.scribbleErase, title = "Стирание зачёркиванием"),
+        a("help", "Справка: все инструменты", onHelp, title = "Справка: все инструменты"),
+    )
+}
+
+/** The page arrows with the page number between them, as one group on a bar. */
+@Composable
+private fun PageNav(c: EditorController, placing: Placing) {
+    BarButton(BarAction("page-nav", "", "Предыдущая страница", InkIcons.Previous, { c.goToPage(c.pageIndex - 1) }, enabled = c.pageIndex > 0), placing)
+    Text("${c.pageIndex + 1} / ${c.notebook.pageIds.size}", maxLines = 1)
+    BarButton(BarAction("page-nav", "", "Следующая страница", InkIcons.Next, { c.goToPage(c.pageIndex + 1) }, enabled = c.pageIndex < c.notebook.pageIds.lastIndex), placing)
+}
+
+/** Buttons of a bar in order, with a small gap where the group changes. */
+@Composable
+private fun BarButtons(c: EditorController, actions: List<BarAction>, placing: Placing, gap: androidx.compose.ui.unit.Dp) {
+    var last = -1
+    for (a in actions) {
+        val g = BarCatalog.group(a.id)
+        if (last >= 0 && g != last && gap > 0.dp) Spacer(Modifier.width(gap))
+        last = g
+        if (a.id == "page-nav") PageNav(c, placing) else BarButton(a, placing)
+    }
+}
+
+@Composable
+private fun TopRow(
+    c: EditorController,
+    top: List<BarAction>,
+    menu: List<BarAction>,
+    hiddenCount: Int,
+    placing: Placing,
+    onClose: () -> Unit,
+    onAllFunctions: () -> Unit,
+) {
+    var menuOpen by remember { mutableStateOf(false) }
+    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth()) {
+        // What does not fit goes to the top of the menu, in order.
+        val (fits, spill) = fitOnBar(top.map { it.id }, maxWidth - TOP_BAR_RESERVED)
+        val shown = top.filter { it.id in fits }
+        val spilled = top.filter { it.id in spill }.flatMap { if (it.id == "page-nav") pageNavMenu(c) else listOf(it) }
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconAction(InkIcons.Back, "К тетрадям", onClose)
+            val math = c.math.state
+            val status = c.status ?: when (math) {
+                MathNotes.State.Downloading -> "Загружаю модель формул…"
+                is MathNotes.State.Failed -> math.message
+                else -> null
+            }
+            // Title with the status under it: they share the room left by the buttons.
+            Column(Modifier.weight(1f)) {
+                Text(
+                    c.notebook.title,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 18.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                when {
+                    c.learningPenButton -> Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Нажмите кнопку пера…", color = MaterialTheme.colorScheme.primary, fontSize = 13.sp, maxLines = 1)
+                        TextButton(onClick = { c.learningPenButton = false }, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp)) {
+                            Text("Отмена", fontSize = 13.sp)
+                        }
                     }
-                    DropdownMenuItem(text = { Text(item.label) }, onClick = item.action)
+                    status != null -> Text(
+                        status,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 13.sp,
+                        lineHeight = 15.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) { BarButtons(c, shown, placing, BarCatalog.GROUP_GAP) }
+            Box {
+                IconAction(InkIcons.More, "Ещё", { menuOpen = true })
+                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    val close = { menuOpen = false }
+                    // Settings of the bars first: a long menu would hide them at its end.
+                    MenuRow(BarAction("customize", "Настроить панели…", "Какие кнопки где", InkIcons.Tune, placing.customize), null, close)
+                    if (hiddenCount > 0) {
+                        MenuRow(BarAction("all", "Все функции… ($hiddenCount скрыто)", "Скрытые функции", InkIcons.AllFunctions, onAllFunctions), null, close)
+                    }
+                    HorizontalDivider()
+                    if (spilled.isNotEmpty()) {
+                        MenuRows(spilled, placing, close)
+                        HorizontalDivider()
+                    }
+                    MenuRows(menu.flatMap { if (it.id == "page-nav") pageNavMenu(c) else listOf(it) }, placing, close)
                 }
             }
         }
@@ -449,9 +543,6 @@ private fun TopRow(
 
 /** How long the pages panel takes to slide in or out. */
 private const val PANEL_MS = 220
-
-/** Narrower than this (dp), the editor's top bar keeps only the essentials; the rest is in its menu. */
-private const val COMPACT_TOP_BAR_DP = 1000
 
 /** Cycles system → light → dark; the icon shows the current mode. */
 @Composable
@@ -770,24 +861,17 @@ private fun PageThumbnail(
  * bar keeps its height when switching tools.
  */
 @Composable
-private fun ToolRow(c: EditorController, onPickColor: () -> Unit, onHatchSettings: () -> Unit, onSelectionSize: () -> Unit) {
+private fun ToolRow(
+    c: EditorController,
+    tools: List<BarAction>,
+    placing: Placing,
+    onPickColor: () -> Unit,
+    onHatchSettings: () -> Unit,
+    onSelectionSize: () -> Unit,
+) {
     val selection = c.selectionCount > 0
-    val tools: @Composable () -> Unit = {
-        for ((t, icon, label) in TOOLS) {
-            if (t == Tool.PEN) {
-                // One button for the pen, pencil, dashes and the fountain pen (chosen in its menu).
-                val fountain = c.penIsFountain
-                IconAction(
-                    if (fountain) InkIcons.Fountain else icon,
-                    if (fountain) "Перьевая ручка" else label,
-                    { c.selectTool(if (fountain) Tool.FOUNTAIN else Tool.PEN) },
-                    selected = c.tool == Tool.PEN || c.tool == Tool.FOUNTAIN,
-                )
-            } else {
-                IconAction(icon, label, { c.selectTool(t) }, selected = c.tool == t)
-            }
-        }
-    }
+    val toolButtons = tools
+    val tools: @Composable () -> Unit = { BarButtons(c, toolButtons, placing, 0.dp) }
     val divider: @Composable () -> Unit = {
         VerticalDivider(Modifier.height(28.dp).padding(horizontal = 4.dp), color = MaterialTheme.colorScheme.outlineVariant)
     }
@@ -1222,14 +1306,6 @@ private fun ColorChoices(c: EditorController, selected: Int?, onPickColor: () ->
 
 private fun sameRgb(a: Int, b: Int) = (a and 0xFFFFFF) == (b and 0xFFFFFF)
 
-private val TOOLS = listOf(
-    Triple(Tool.PEN, InkIcons.Pen, "Ручка"),
-    Triple(Tool.HIGHLIGHTER, InkIcons.Highlighter, "Маркер"),
-    Triple(Tool.NEON, InkIcons.Neon, "Неон"),
-    Triple(Tool.ERASER, InkIcons.Eraser, "Ластик"),
-    Triple(Tool.LASSO, InkIcons.Lasso, "Лассо: выделить и двигать"),
-    Triple(Tool.AREA, InkIcons.Area, "Область: заштриховать"),
-)
 
 @Composable
 private fun Swatch(color: Color, selected: Boolean, onLongClick: (() -> Unit)? = null, onClick: () -> Unit) {

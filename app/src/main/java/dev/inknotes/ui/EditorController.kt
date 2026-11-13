@@ -122,6 +122,24 @@ class EditorController(
     }
 
     /** The ruler is lying on the page. */
+    /** Where the buttons are; read again on attach, as another tab may have changed it. */
+    var toolbar by mutableStateOf(dev.inknotes.data.ToolbarLayout.decode(prefs.toolbarLayout))
+        private set
+
+    fun changeToolbar(layout: dev.inknotes.data.ToolbarLayout) {
+        toolbar = layout
+        prefs.toolbarLayout = layout.encode()
+    }
+
+    /** The choice of a ready-made layout, offered the first time a notebook is opened. */
+    var toolbarIntro by mutableStateOf(!prefs.toolbarIntroShown)
+        private set
+
+    fun closeToolbarIntro() {
+        toolbarIntro = false
+        prefs.toolbarIntroShown = true
+    }
+
     var rulerShown by mutableStateOf(false)
         private set
 
@@ -249,6 +267,8 @@ class EditorController(
 
     fun attach(v: PageEditorView) {
         view = v
+        toolbar = dev.inknotes.data.ToolbarLayout.decode(prefs.toolbarLayout)
+        toolbarIntro = !prefs.toolbarIntroShown
         dev.inknotes.data.Layers.active = notebook.activeLayer
         rulerShown = false
         v.listener = this
