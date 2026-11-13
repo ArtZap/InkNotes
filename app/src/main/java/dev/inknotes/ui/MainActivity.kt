@@ -521,7 +521,7 @@ class MainActivity : ComponentActivity() {
     private var tabDragAt by mutableStateOf<androidx.compose.ui.geometry.Offset?>(null)
     private var rootSize = androidx.compose.ui.unit.IntSize.Zero
 
-    private val tabDragging = TabDragging(
+    private val tabDragging: TabDragging = TabDragging(
         start = { t, at ->
             startTabDrag(t)
             tabDragAt = at
