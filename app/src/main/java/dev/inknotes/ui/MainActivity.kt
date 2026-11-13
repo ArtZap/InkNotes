@@ -526,7 +526,10 @@ class MainActivity : ComponentActivity() {
             startTabDrag(t)
             tabDragAt = at
         },
-        move = { tabDragAt = it },
+        move = { at ->
+            tabDragAt = at
+            tabDragging.tab?.let { t -> tabDragging.target = tabTarget(t, at) }
+        },
         drop = { t, at -> dropTab(t, at) },
         cancel = ::endTabDrag,
     )
@@ -537,6 +540,7 @@ class MainActivity : ComponentActivity() {
 
     private fun endTabDrag() {
         tabDragging.tab = null
+        tabDragging.target = null
         tabDragAt = null
     }
 
@@ -557,20 +561,34 @@ class MainActivity : ComponentActivity() {
      * with one half only, it opens a half beside.
      */
     private fun dropTab(t: EditorController, at: androidx.compose.ui.geometry.Offset) {
+        val target = tabTarget(t, at)
         endTabDrag()
+        if (t !in sideTabs && t !in tabs) return
+        if (target != null) {
+            moveTab(t, target.first, target.second)
+            return
+        }
+        // At the right edge with one half only: a half beside opens with it.
+        if (side == null && tabDropHalf(at) == true) moveTab(t, true, null)
+    }
+
+    /**
+     * Where tab [t] would land if let go at [at]: the strip (true: the right half's) and its
+     * place among the other tabs there. Over a strip: where it is pointed at; elsewhere over the
+     * other half: at the end of that half's tabs. Null: nowhere (it stays where it was).
+     */
+    private fun tabTarget(t: EditorController, at: androidx.compose.ui.geometry.Offset): Pair<Boolean, Int>? {
         val fromRight = t in sideTabs
-        if (!fromRight && t !in tabs) return
         val band = 24 * resources.displayMetrics.density
         for ((right, strip) in tabDragging.strips) {
             val r = strip.rect
             if (at.x in r.left..r.right && at.y in r.top - band..r.bottom + band) {
-                val index = strip.tabs.filterKeys { it !== t }.values.count { it.center.x < at.x }
-                moveTab(t, right, index)
-                return
+                return right to strip.tabs.filterKeys { it !== t }.values.count { it.center.x < at.x }
             }
         }
-        val right = tabDropHalf(at) ?: return
-        if (right != fromRight) moveTab(t, right, null)
+        val right = tabDropHalf(at) ?: return null
+        if (right == fromRight || side == null) return null
+        return right to (if (right) sideTabs else tabs).count { it !== t }
     }
 
     /**

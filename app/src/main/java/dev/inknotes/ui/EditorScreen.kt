@@ -79,6 +79,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -1249,6 +1251,29 @@ private fun TabStrip(
     }
     val bounds = info.tabs
     info.tabs.keys.retainAll(tabs.toSet())
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val dragging = drag?.tab
+    // The gap where the dragged tab would land, as wide as that tab; the other tabs slide.
+    val gapAt = drag?.target?.takeIf { it.first == right }?.second
+    val gapWidth = with(density) { ((dragging?.let { drag.strips.values.firstNotNullOfOrNull { s -> s.tabs[it] } }?.width ?: 0f)).toDp() }
+    val others = tabs.filter { it !== dragging }
+    @Composable
+    fun gap(at: Int) {
+        val w by androidx.compose.animation.core.animateDpAsState(
+            if (gapAt == at) gapWidth else 0.dp,
+            androidx.compose.animation.core.tween(TAB_SLIDE_MS, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+            label = "tab gap",
+        )
+        if (w > 0.5.dp) {
+            Box(
+                Modifier
+                    .width(w)
+                    .height(TAB_HEIGHT)
+                    .border(1.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.6f), RoundedCornerShape(6.dp))
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.10f), RoundedCornerShape(6.dp)),
+            )
+        }
+    }
     Row(
         Modifier
             .fillMaxWidth()
@@ -1260,12 +1285,25 @@ private fun TabStrip(
     ) {
         for (t in tabs) {
             val selected = t === current
-            val dragged = drag?.tab === t
+            val dragged = dragging === t
+            if (!dragged) gap(others.indexOf(t))
+            // The dragged tab folds away where it was (it stays composed: the drag goes on in it).
+            val fold by androidx.compose.animation.core.animateFloatAsState(
+                if (dragged) 0f else 1f,
+                androidx.compose.animation.core.tween(TAB_SLIDE_MS, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+                label = "tab fold",
+            )
             Row(
                 Modifier
                     .height(TAB_HEIGHT)
-                    .onGloballyPositioned { bounds[t] = it.boundsInRoot() }
-                    .alpha(if (dragged) 0.4f else 1f)
+                    .clipToBounds()
+                    .layout { measurable, constraints ->
+                        val p = measurable.measure(constraints)
+                        // Only its laid-out width folds; where it was measured stays for the gap.
+                        layout((p.width * fold).toInt(), p.height) { p.placeRelative(0, 0) }
+                    }
+                    .onGloballyPositioned { if (!dragged) bounds[t] = it.boundsInRoot() }
+                    .alpha(fold)
                     .clip(RoundedCornerShape(6.dp))
                     .background(if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant)
                     .let { m ->
@@ -1308,6 +1346,7 @@ private fun TabStrip(
                 ) { Text("✕", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             }
         }
+        gap(others.size)
         Box(
             Modifier.height(TAB_HEIGHT).clip(RoundedCornerShape(6.dp)).clickable(onClick = onAdd).padding(horizontal = 10.dp),
             contentAlignment = Alignment.Center,
@@ -1367,6 +1406,7 @@ private fun ArrowRow(content: @Composable () -> Unit) {
 }
 
 private const val ARROW_SCROLL_MS = 450
+private const val TAB_SLIDE_MS = 220
 private const val ARROW_FADE_MS = 180
 
 /** Height of a tab: a thin strip, the page keeps the room. */
@@ -1385,6 +1425,12 @@ class TabDragging(
 ) {
     /** The tab being dragged now (null: none). */
     var tab by mutableStateOf<EditorController?>(null)
+
+    /**
+     * Where it would land now: the strip (true: the right half's) and its place among the other
+     * tabs there. That strip opens a gap there (the others slide aside); null: none does.
+     */
+    var target by mutableStateOf<Pair<Boolean, Int>?>(null)
 
     class Strip {
         var rect = androidx.compose.ui.geometry.Rect.Zero
