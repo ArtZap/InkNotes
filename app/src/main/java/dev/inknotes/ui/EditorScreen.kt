@@ -660,7 +660,9 @@ private fun TopRow(
     var menuOpen by remember { mutableStateOf(false) }
     androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth()) {
         // What does not fit goes to the top of the menu, in order (compact: room for the tools button).
-        val (fits, spill) = fitOnBar(top.map { it.id }, maxWidth - TOP_BAR_RESERVED - (if (compact) 48.dp else 0.dp))
+        // In a narrow pane undo and redo come first: they are the last to go into the menu.
+        val order = if (compact) top.sortedBy { if (it.id == "undo" || it.id == "redo") 0 else 1 } else top
+        val (fits, spill) = fitOnBar(order.map { it.id }, maxWidth - TOP_BAR_RESERVED - (if (compact) 48.dp else 0.dp))
         val shown = top.filter { it.id in fits }
         val spilled = top.filter { it.id in spill }.flatMap { if (it.id == "page-nav") pageNavMenu(c) else listOf(it) }
         Row(
