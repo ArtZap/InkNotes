@@ -160,7 +160,10 @@ mkdir -p release
 HISTORY=release/history.txt
 if [ -f "$HISTORY" ]; then
   LAST_CODE=$(awk '{print $2}' "$HISTORY" | sort -n | tail -1)
-  if [ -n "$LAST_CODE" ] && [ "$VERSION_CODE" -le "$LAST_CODE" ]; then
+  if [ -n "$LAST_CODE" ] && [ "$VERSION_CODE" -eq "$LAST_CODE" ]; then
+    # The same code installs over the last release (only a lower one is refused): a rebuild, e.g. with a key added.
+    warn "versionCode $VERSION_CODE уже собирался: этот APK встанет поверх него, но на других устройствах обновление с тем же номером могут не предложить."
+  elif [ -n "$LAST_CODE" ] && [ "$VERSION_CODE" -lt "$LAST_CODE" ]; then
     LAST_NAME=$(awk -v c="$LAST_CODE" '$2==c{print $1}' "$HISTORY" | tail -1)
     warn "уже был релиз с versionCode $LAST_CODE ($LAST_NAME): поверх него этот APK не установится как обновление."
     warn "Поднимите версию: tools/release.sh --version <новая>"
