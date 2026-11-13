@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>InkNotes — конфиденциальность</title>
+<style>
+  body { font: 17px/1.6 system-ui, sans-serif; max-width: 720px; margin: 0 auto; padding: 32px 16px; color: #1d1d1f; background: #fff; }
+  a { color: #2457c5; }
+  @media (prefers-color-scheme: dark) { body { color: #e8e8e8; background: #141414; } a { color: #8ab4ff; } }
+</style>
+</head>
+<body>
+<h1>Политика конфиденциальности InkNotes</h1>
+<p>Обновлено: 13 ноября 2026 г.</p>
+
+<h2>Где хранятся данные</h2>
+<p>Тетради, страницы, записи звука и настройки хранятся только на устройстве пользователя. У InkNotes нет своего сервера: разработчик не получает и не видит ни записей, ни данных аккаунта.</p>
+
+<h2>Google Диск</h2>
+<p>Если пользователь сам включит синхронизацию («Ещё → Google Диск»), приложение входит в его аккаунт Google и использует:</p>
+<ul>
+  <li><code>https://www.googleapis.com/auth/drive.file</code> — создание, чтение, изменение и удаление (в корзину Диска) только тех файлов, которые создал InkNotes: папки InkNotes и файлов тетрадей <code>.inknote</code> в ней. Остальные файлы Диска приложению недоступны.</li>
+  <li><code>openid</code> и <code>email</code> — чтобы показать в настройках, к какому аккаунту подключена синхронизация.</li>
+</ul>
+<p>Файлы передаются напрямую между устройством и Google Диском пользователя. Токен доступа хранится только на устройстве. Данные Google не передаются третьим лицам, не используются для рекламы и для обучения моделей.</p>
+<p>Использование данных, полученных через API Google, соответствует <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>, включая требования Limited Use.</p>
+
+<h2>Как отключить и удалить</h2>
+<p>«Ещё → Google Диск → Выйти» отключает синхронизацию и удаляет токен с устройства. Доступ приложения можно отозвать в <a href="https://myaccount.google.com/permissions">настройках аккаунта Google</a>. Файлы на Диске удаляются как обычные файлы — папка InkNotes.</p>
+
+<h2>Распознавание почерка</h2>
+<p>Распознавание рукописного текста и формул работает на устройстве; из интернета один раз загружается модель распознавания.</p>
+
+<h2>Связь</h2>
+<p>Вопросы — через <a href="https://github.com/ArtZap/InkNotes/issues">GitHub</a>.</p>
+</body>
+</html>
