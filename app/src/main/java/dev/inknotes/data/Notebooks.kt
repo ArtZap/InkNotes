@@ -324,9 +324,19 @@ class NotebookRepository(filesDir: File) {
     }
 
     // Reads go through the same executor as writes, so they always see queued saves.
-    fun list(): List<Notebook> = onIo {
+    fun list(): List<Notebook> = onIo { listIn(root.listFiles().orEmpty()) }
+
+    /**
+     * Like [list], but a library folder that can't be read at all (storage trouble) is an error,
+     * not an empty library: the sync must never take every notebook for deleted here.
+     */
+    fun listForSync(): List<Notebook> = onIo {
+        listIn(root.listFiles() ?: throw IOException("library folder unreadable"))
+    }
+
+    private fun listIn(dirs: Array<File>): List<Notebook> {
         val missing = HashSet<String>()
-        root.listFiles().orEmpty()
+        return dirs.asList()
             .filter { !it.name.startsWith(".") } // skip import staging folders
             .filter { !File(it, LOCK_NOTE).exists() } // a note being written over the lock screen
             .mapNotNull { dir ->
@@ -362,7 +372,20 @@ class NotebookRepository(filesDir: File) {
         val copy = nb.copy(id = newId(), updatedAt = System.currentTimeMillis())
         if (!from.renameTo(dir(copy.id))) return@onIo null
         writeMetaNow(copy)
+        // Done once: from now on it is a notebook like any other (its files are still kept).
+        settle(dir(copy.id))
         copy.id
+    }
+
+    /**
+     * Recovered notebook [id] has nothing on the Drive to be confused with: from now on it syncs
+     * like any other. Its files stay protected from the orphan sweep.
+     */
+    fun settleRecovered(id: String) = onIo { settle(dir(id)) }
+
+    private fun settle(d: File) {
+        val mark = File(d, RECOVERED)
+        if (mark.exists() && !mark.renameTo(File(d, RECOVERED_KEPT))) mark.delete()
     }
 
     /**
@@ -765,7 +788,8 @@ class NotebookRepository(filesDir: File) {
             deleteQuietly(old)
             return
         }
-        val copy = nb.copy(id = newId(), title = "${nb.title} (старая копия)".take(MAX_TITLE))
+        val title = if (nb.title.endsWith(OLD_COPY)) nb.title else "${nb.title}$OLD_COPY".take(MAX_TITLE)
+        val copy = nb.copy(id = newId(), title = title)
         val moved = File(trashDir(), copy.id)
         if (!old.renameTo(moved)) {
             deleteQuietly(old)
@@ -1243,7 +1267,7 @@ class NotebookRepository(filesDir: File) {
      */
     private fun sweepOrphans(dir: File) {
         val old = System.currentTimeMillis() - 24L * 3600 * 1000
-        if (!dir.isDirectory || File(dir, RECOVERED).exists() || dir.name in savedThisRun) return
+        if (!dir.isDirectory || File(dir, RECOVERED).exists() || File(dir, RECOVERED_KEPT).exists() || dir.name in savedThisRun) return
         val nb = runCatching { readMeta(dir) }.getOrNull() ?: return
         val used = runCatching { usedPictures(nb, dir) }.getOrNull() ?: return
         val pdfs = nb.pdfPages.values.map { it.file }.toSet()
@@ -1736,10 +1760,11 @@ class NotebookRepository(filesDir: File) {
 
     /**
      * [content] must be immutable: it is encoded on the IO thread. [onTooComplex] is told on the
-     * main thread when the page holds more than a page file may ([PageTooComplexException]):
-     * nothing is written then, and it gets what is too much, in words for the user.
+     * main thread when the page holds more than a shared page file may: what is too much, in
+     * words for the user, and whether it was saved here all the same (saved: over the shared
+     * limits only; not saved: over even this device's, nothing written, the old copy stays).
      */
-    fun savePageAsync(nb: Notebook, pageId: String, content: PageContent, onTooComplex: ((String) -> Unit)? = null) {
+    fun savePageAsync(nb: Notebook, pageId: String, content: PageContent, onTooComplex: ((problem: String, saved: Boolean) -> Unit)? = null) {
         savedThisRun += nb.id
         val file = pageFile(nb.id, pageId)
         background {
@@ -1748,13 +1773,18 @@ class NotebookRepository(filesDir: File) {
                 Log.w(TAG, "page $pageId is locked, not saved")
                 return@background
             }
+            // A page over what may be shared is still saved here (this device reads it with its
+            // own, wider limits): nothing written is lost. It only can't go to another device as
+            // it is, which the editor says.
+            val overShared = PageCodec.tooComplex(content)
             try {
-                atomicWrite(file) { out -> PageCodec.write(out, content) }
+                atomicWrite(file) { out -> PageCodec.write(out, content, PageCodec.Limits.OWN) }
+                if (overShared != null && onTooComplex != null) main.post { onTooComplex(overShared, true) }
             } catch (e: PageTooComplexException) {
                 // Nothing was written: the copy on disk is still the last one that fits.
                 Log.w(TAG, "page $pageId not saved: ${e.message}")
                 val problem = e.message.orEmpty()
-                if (onTooComplex != null) main.post { onTooComplex(problem) }
+                if (onTooComplex != null) main.post { onTooComplex(problem, false) }
                 return@background
             }
             unreadable -= file.path
@@ -2074,6 +2104,7 @@ class NotebookRepository(filesDir: File) {
 
     private companion object {
         const val TRASH_DAYS = 30
+        private const val OLD_COPY = " (старая копия)"
         const val TAG = "NotebookRepository"
         const val META = "notebook.json"
         private const val TOUCHED = "touched"
@@ -2089,6 +2120,9 @@ class NotebookRepository(filesDir: File) {
 
         /** Marks a notebook rebuilt from its pages ([recoverMeta]): its files are never swept. */
         private const val RECOVERED = "recovered"
+
+        /** A recovered notebook that syncs as any other now; its files are still never swept. */
+        private const val RECOVERED_KEPT = "recovered-kept"
         const val FOLDERS = ".folders.json"
         const val TRASH = ".trash"
         const val DELETED_AT = "deleted-at"

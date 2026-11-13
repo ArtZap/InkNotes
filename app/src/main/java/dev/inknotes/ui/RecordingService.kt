@@ -42,7 +42,10 @@ class RecordingService : Service() {
                 if (Build.VERSION.SDK_INT >= 30) ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE else 0,
             )
         }.isSuccess
-        if (!started) stopSelf()
+        if (!started) {
+            onNotKept?.let { Handler(Looper.getMainLooper()).post(it) }
+            stopSelf()
+        }
         // Killed by the system, it is not restarted: the recorder went with the process.
         return START_NOT_STICKY
     }
@@ -90,11 +93,14 @@ class RecordingService : Service() {
         var onStopRequested: (() -> Unit)? = null
 
         /** Called while the app is on screen (Android 14 lets a microphone service start only then). */
-        fun start(context: Context, title: String) {
-            runCatching {
-                ContextCompat.startForegroundService(context, Intent(context, RecordingService::class.java).putExtra(EXTRA_TITLE, title))
-            }
-        }
+        /** False if Android did not let it start: the recording then goes on only while on screen. */
+        fun start(context: Context, title: String): Boolean = runCatching {
+            ContextCompat.startForegroundService(context, Intent(context, RecordingService::class.java).putExtra(EXTRA_TITLE, title))
+        }.onFailure { android.util.Log.w("RecordingService", "not started", it) }.isSuccess
+
+        /** Set by the editor that records: told on the main thread if the service could not stay in the foreground. */
+        @Volatile
+        var onNotKept: (() -> Unit)? = null
 
         fun stop(context: Context) {
             runCatching { context.stopService(Intent(context, RecordingService::class.java)) }

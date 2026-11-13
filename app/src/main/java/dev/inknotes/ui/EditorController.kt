@@ -604,7 +604,8 @@ class EditorController(
         // Keeps the microphone with the app when the screen goes off or another app is opened.
         appContext = context.applicationContext
         RecordingService.onStopRequested = { stopRecording() }
-        RecordingService.start(context.applicationContext, notebook.title)
+        RecordingService.onNotKept = { if (recorder != null) showStatus(RECORDING_ON_SCREEN_ONLY) }
+        if (!RecordingService.start(context.applicationContext, notebook.title)) showStatus(RECORDING_ON_SCREEN_ONLY)
     }
 
     /** For stopping the recording service from wherever the recording is stopped. */
@@ -618,6 +619,7 @@ class EditorController(
         recordingSince = null
         recordingFile = null
         RecordingService.onStopRequested = null
+        RecordingService.onNotKept = null
         appContext?.let(RecordingService::stop)
         val ok = runCatching { r.stop() }.isSuccess
         runCatching { r.release() }
@@ -1141,7 +1143,7 @@ class EditorController(
         for ((id, m) in moves) {
             val content = docs[id]?.content() ?: repo.loadPage(nb, id)
             val moved = movedContent(content, m)
-            repo.savePageAsync(nb, id, moved) { problem -> notSaved(id, problem) }
+            repo.savePageAsync(nb, id, moved) { problem, saved -> notSaved(id, problem, saved) }
             handwriting.pageSaved(nb, id, moved)
             val open = docs.remove(id) != null
             savedRevision.remove(id)
@@ -2300,9 +2302,18 @@ class EditorController(
      * Page [id] holds more than a page file may and was not written (the copy on disk is the
      * last one that fit): said on screen, and tried again at the next save.
      */
-    private fun notSaved(id: String, problem: String) {
+    private val warnedComplex = HashSet<String>()
+
+    private fun notSaved(id: String, problem: String, saved: Boolean) {
+        val n = notebook.pageIds.indexOf(id) + 1
+        if (saved) {
+            // Said once per page: it is saved at every pause in writing.
+            if (!warnedComplex.add(id)) return
+            showStatus("Страница $n сохранена, но $problem — на другой планшет и в файл тетради она так не попадёт. Перенесите часть на другую страницу или сотрите лишнее")
+            return
+        }
         savedRevision.remove(id)
-        showStatus("Страница не сохранена: $problem. Перенесите часть на другую страницу")
+        showStatus("Страница $n не сохранена: $problem. Перенесите часть на другую страницу")
     }
 
     /** Writes every page whose revision changed since the last save. */
@@ -2312,7 +2323,7 @@ class EditorController(
         for ((id, doc) in docs) {
             if (savedRevision[id] == doc.revision) continue
             val content = doc.content()
-            repo.savePageAsync(notebook, id, content) { problem -> notSaved(id, problem) }
+            repo.savePageAsync(notebook, id, content) { problem, saved -> notSaved(id, problem, saved) }
             handwriting.pageSaved(notebook, id, content)
             savedRevision[id] = doc.revision
             any = true
@@ -2637,6 +2648,8 @@ class EditorController(
     }
 
     companion object {
+        const val RECORDING_ON_SCREEN_ONLY = "Запись идёт, но Android не дал записывать в фоне: не выключайте экран и не уходите из приложения до конца записи"
+
         /** Less than this is a recording header with no sound in it. */
         private const val MIN_RECORDING_BYTES = 2048L
 

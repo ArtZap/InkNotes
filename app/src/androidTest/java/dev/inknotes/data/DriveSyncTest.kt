@@ -198,6 +198,21 @@ class DriveSyncTest {
         // The whole one came back from the Drive under its id; what was rebuilt is a notebook of its own.
         assertEquals(listOf("Восстановленная тетрадь", "Лекция"), a.titles())
         assertEquals("Лекция", a.repo.list().first { it.id == nb.id }.title)
+        // Split off once only: more syncs make no more copies, here or on the Drive.
+        repeat(3) { a.run() }
+        assertEquals(listOf("Восстановленная тетрадь", "Лекция"), a.titles())
+        assertEquals(2, drive.live())
+    }
+
+    @Test
+    fun aRecoveredNotebookNeverSyncedIsSplitOffNever() {
+        val drive = FakeDrive()
+        val a = Device("recovered-new", drive)
+        val nb = a.repo.create("Своя", PaperKind.LINED)
+        File(a.root, "notebooks/${nb.id}/notebook.json").writeText("{damaged")
+        repeat(3) { a.run() }
+        assertEquals(listOf("Восстановленная тетрадь"), a.titles())
+        assertEquals(1, drive.live())
     }
 
     @Test

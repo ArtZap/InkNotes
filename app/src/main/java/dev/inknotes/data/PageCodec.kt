@@ -468,8 +468,7 @@ object PageCodec {
      * user, or null if it fits. Counts only: numbers out of range are brought into range by
      * [write] itself. The size of each line's encoding is checked while writing.
      */
-    fun tooComplex(content: PageContent): String? {
-        val l = Limits.STRICT
+    fun tooComplex(content: PageContent, l: Limits = Limits.STRICT): String? {
         val pictures = content.images.count { !it.isText }
         val texts = content.images.size - pictures
         val fills = content.fills.filter { it.outline.size >= 6 }
@@ -498,8 +497,8 @@ object PageCodec {
      * sizes are brought into range, degenerate fills and cuts (invisible) are left out, and a
      * page over the counts throws [PageTooComplexException] before anything is written.
      */
-    fun write(out: OutputStream, content: PageContent) {
-        tooComplex(content)?.let { throw PageTooComplexException(it) }
+    fun write(out: OutputStream, content: PageContent, limits: Limits = Limits.STRICT) {
+        tooComplex(content, limits)?.let { throw PageTooComplexException(it) }
         val data = DataOutputStream(BufferedOutputStream(out))
         data.writeInt(MAGIC)
         data.writeInt(
@@ -521,7 +520,7 @@ object PageCodec {
             data.writeFloat(if (size.isFinite() && size > 0f) size.coerceAtMost(MAX_BRUSH) else 1f)
             buffer.reset()
             s.stroke.inputs.encode(buffer)
-            if (buffer.size() > Limits.STRICT.strokeBytes) throw PageTooComplexException("на странице есть слишком длинная линия")
+            if (buffer.size() > limits.strokeBytes) throw PageTooComplexException("на странице есть слишком длинная линия")
             data.writeInt(buffer.size())
             buffer.writeTo(data)
         }

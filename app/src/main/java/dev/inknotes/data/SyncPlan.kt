@@ -90,9 +90,12 @@ object SyncPlan {
      * [MASS_TRASH_MAX] and more). Then the sync asks before it does that; [localCount] is the
      * number of notebooks here.
      */
-    fun massTrash(actions: List<Action>, localCount: Int): Boolean {
-        val n = actions.count { it is Action.TrashLocal }
-        return n >= MASS_TRASH_MIN && (n * 2 >= localCount || n >= MASS_TRASH_MAX)
+    fun massTrash(actions: List<Action>, localCount: Int, remoteCount: Int = 0): Boolean {
+        fun many(n: Int, of: Int) = n >= MASS_TRASH_MIN && (n * 2 >= of || n >= MASS_TRASH_MAX)
+        // Either way: gone there at once (folder emptied), or gone here at once (a library that
+        // could not be read would look like every notebook deleted here).
+        return many(actions.count { it is Action.TrashLocal }, localCount) ||
+            many(actions.count { it is Action.TrashRemote }, remoteCount)
     }
 
     const val MASS_TRASH_MIN = 2

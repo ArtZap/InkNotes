@@ -143,8 +143,10 @@ fun EditorScreen(
     alwaysTabs: Boolean = false,
     /** "+" in the strip: another notebook in this half (null: the library). */
     onAddTab: (() -> Unit)? = null,
+    /** The system back gesture (null: as the back arrow). */
+    onBack: (() -> Unit)? = null,
 ) {
-    BackHandler(onBack = onClose)
+    BackHandler(onBack = onBack ?: onClose)
     // The view this screen made: only it is let go of when the screen goes.
     val shownView = remember { arrayOfNulls<PageEditorView>(1) }
     DisposableEffect(controller) {
@@ -1251,6 +1253,14 @@ private fun TabStrip(
     }
     val bounds = info.tabs
     info.tabs.keys.retainAll(tabs.toSet())
+    // A tab of this strip being dragged when the strip goes (its half closed): the drag ends,
+    // the overlay does not stay on screen.
+    if (drag != null) {
+        val mine = tabs.toSet()
+        androidx.compose.runtime.DisposableEffect(drag, mine) {
+            onDispose { if (drag.tab != null && drag.tab in mine) drag.cancel() }
+        }
+    }
     val density = androidx.compose.ui.platform.LocalDensity.current
     val dragging = drag?.tab
     // The gap where the dragged tab would land, as wide as that tab; the other tabs slide.
@@ -1274,14 +1284,12 @@ private fun TabStrip(
             )
         }
     }
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .onGloballyPositioned { info.rect = it.boundsInRoot() }
-            .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 6.dp, vertical = 1.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-        verticalAlignment = Alignment.CenterVertically,
+    // Many tabs scroll sideways, with the same arrows at the ends as the tool line.
+    ArrowRow(
+        Modifier.onGloballyPositioned { info.rect = it.boundsInRoot() },
+        height = TAB_HEIGHT,
+        spacing = 4.dp,
+        padding = PaddingValues(horizontal = 6.dp, vertical = 1.dp),
     ) {
         for (t in tabs) {
             val selected = t === current
@@ -1340,10 +1348,11 @@ private fun TabStrip(
                     fontSize = 13.sp,
                     modifier = Modifier.widthIn(max = 180.dp),
                 )
+                // Wider than it looks: easy to hit with a finger, the strip stays thin.
                 Box(
-                    Modifier.size(TAB_HEIGHT).clip(CircleShape).clickable { onCloseTab(t) }.semantics { contentDescription = "Закрыть вкладку" },
+                    Modifier.width(36.dp).height(TAB_HEIGHT).clip(RoundedCornerShape(6.dp)).clickable { onCloseTab(t) }.semantics { contentDescription = "Закрыть вкладку" },
                     contentAlignment = Alignment.Center,
-                ) { Text("✕", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                ) { Text("✕", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             }
         }
         gap(others.size)
@@ -1359,15 +1368,22 @@ private fun TabStrip(
  * sight: a tap on one moves the line, by finger or pen, and shows that there is more.
  */
 @Composable
-private fun ArrowRow(content: @Composable () -> Unit) {
+private fun ArrowRow(
+    modifier: Modifier = Modifier,
+    /** Height of the arrows: that of the line. */
+    height: androidx.compose.ui.unit.Dp = 48.dp,
+    spacing: androidx.compose.ui.unit.Dp = 8.dp,
+    padding: PaddingValues = PaddingValues(horizontal = 8.dp),
+    content: @Composable () -> Unit,
+) {
     val scroll = rememberScrollState()
     val scope = rememberCoroutineScope()
     var width by remember { mutableStateOf(0) }
-    Box(Modifier.fillMaxWidth().onSizeChanged { width = it.width }) {
+    Box(modifier.fillMaxWidth().onSizeChanged { width = it.width }) {
         Row(
-            Modifier.fillMaxWidth().horizontalScroll(scroll).padding(horizontal = 8.dp),
+            Modifier.fillMaxWidth().horizontalScroll(scroll).padding(padding),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(spacing),
         ) { content() }
         val bg = MaterialTheme.colorScheme.surface
         @Composable
@@ -1375,8 +1391,8 @@ private fun ArrowRow(content: @Composable () -> Unit) {
             Box(
                 Modifier
                     .align(align)
-                    .width(44.dp)
-                    .height(48.dp)
+                    .width(if (height < 40.dp) 36.dp else 44.dp)
+                    .height(height)
                     .background(
                         androidx.compose.ui.graphics.Brush.horizontalGradient(
                             if (forward) listOf(bg.copy(alpha = 0f), bg, bg) else listOf(bg, bg, bg.copy(alpha = 0f)),
@@ -1393,7 +1409,7 @@ private fun ArrowRow(content: @Composable () -> Unit) {
                     }
                     .semantics { contentDescription = if (forward) "Дальше по панели" else "Назад по панели" },
                 contentAlignment = if (forward) Alignment.CenterEnd else Alignment.CenterStart,
-            ) { InkIcon(if (forward) InkIcons.Next else InkIcons.Previous, contentDescription = null, modifier = Modifier.size(20.dp)) }
+            ) { InkIcon(if (forward) InkIcons.Next else InkIcons.Previous, contentDescription = null, modifier = Modifier.size(if (height < 40.dp) 16.dp else 20.dp)) }
         }
         // The arrows fade in and out as the line reaches its ends, instead of popping.
         AnimatedVisibility(scroll.canScrollBackward, Modifier.align(Alignment.CenterStart), enter = fadeIn(tween(ARROW_FADE_MS)), exit = fadeOut(tween(ARROW_FADE_MS))) {

@@ -103,16 +103,17 @@ fun SyncDialog(cloud: CloudSync, prefs: AppPrefs, busy: () -> Set<String>, onDis
                 }
                 if (cloud.held.isNotEmpty() && !cloud.running) {
                     HorizontalDivider()
-                    Text("На Диске пропали сразу ${cloud.held.size} тетрадей", fontWeight = FontWeight.Medium)
+                    Text("Пропали сразу ${cloud.held.size} тетрадей", fontWeight = FontWeight.Medium)
                     Text(
                         cloud.held.take(5).joinToString(", ") { "«${it.second}»" } + (if (cloud.held.size > 5) " и другие" else "") +
-                            ". Так бывает, если папку InkNotes удалили или подменили. Здесь они пока целы.",
+                            ". Их нет на одной стороне — на Диске или на этом планшете. Так бывает, если папку InkNotes удалили или подменили " +
+                            "или память планшета не прочиталась. Пока ничего не удалено.",
                         fontSize = 13.sp,
                         color = muted,
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = { cloud.resolveHeld(trash = false) }) { Text("Оставить и отправить снова") }
-                        OutlinedButton(onClick = { cloud.resolveHeld(trash = true) }) { Text("Удалить и здесь") }
+                        Button(onClick = { cloud.resolveHeld(trash = false) }) { Text("Оставить везде") }
+                        OutlinedButton(onClick = { cloud.resolveHeld(trash = true) }) { Text("Удалить везде") }
                     }
                 }
             }

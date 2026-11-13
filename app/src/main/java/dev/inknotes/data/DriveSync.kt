@@ -45,7 +45,7 @@ class DriveSync(
             if (conflicts > 0) add("изменены в двух местах $conflicts (сохранены обе версии)")
             if (trashedHere > 0) add("в корзину здесь $trashedHere")
             if (trashedThere > 0) add("в корзину на Диске $trashedThere")
-            if (held.isNotEmpty()) add("на Диске нет ${held.size} тетрадей — здесь они не удалены, решите ниже")
+            if (held.isNotEmpty()) add("пропало сразу ${held.size} тетрадей — ничего не удалено, решите ниже")
             if (unread > 0) add("не удалось прочитать файлов с Диска: $unread")
         }.joinToString(", ").ifEmpty { "всё уже совпадает" }
     }
@@ -85,19 +85,26 @@ class DriveSync(
         // notebook of its own, and the copy on the Drive comes down in its place.
         val remoteIds = remote.map { it.notebookId }.toSet()
         // Read once first: a damaged notebook.json is recovered while the library is read.
-        repo.io { list() }
-        for (id in repo.io { recoveredIds() }.filter { it in remoteIds && it in synced && it !in busy() }) {
-            if (repo.io { detachRecovered(id) } != null) {
-                synced.remove(id)
-                saveState(state)
+        repo.io { listForSync() }
+        for (id in repo.io { recoveredIds() }) {
+            if (id in busy()) continue
+            if (id in remoteIds && id in synced) {
+                if (repo.io { detachRecovered(id) } != null) {
+                    synced.remove(id)
+                    saveState(state)
+                }
+            } else {
+                // Nothing of it on the Drive to write over: it syncs as any other from now on
+                // (else it would be split off again at every sync).
+                repo.io { settleRecovered(id) }
             }
         }
-        val notebooks = repo.io { list() }.associateBy { it.id }
+        val notebooks = repo.io { listForSync() }.associateBy { it.id }
         // Here but unreadable for now: neither deleted here nor to be replaced.
         val unknown = repo.unlisted
         val local = notebooks.values.map { SyncPlan.Local(it.id, it.title, it.updatedAt) }
         val actions = SyncPlan.plan(local, remote, synced, busy() + unknown)
-        val holdTrash = !trashMany && SyncPlan.massTrash(actions, local.size)
+        val holdTrash = !trashMany && SyncPlan.massTrash(actions, local.size, remote.map { it.notebookId }.distinct().size)
         val held = ArrayList<Pair<String, String>>()
         var up = 0
         var down = 0
@@ -149,6 +156,12 @@ class DriveSync(
                     trashHere++
                 }
                 is SyncPlan.Action.TrashRemote -> {
+                    if (holdTrash) {
+                        // So many gone here at once (a library that could not be read?): asked first.
+                        val name = remoteFiles.firstOrNull { it.id == a.fileId }?.name?.removeSuffix(".inknote") ?: "?"
+                        held += a.notebookId to name
+                        continue
+                    }
                     // Every file of it: an older second one would bring it back next time.
                     for (f in remote.filter { it.notebookId == a.notebookId }) api.trash(f.fileId)
                     synced.remove(a.notebookId)

@@ -39,6 +39,10 @@ object Secrets {
         val c = Cipher.getInstance(TRANSFORM).apply { init(Cipher.ENCRYPT_MODE, key()) }
         val data = c.iv + c.doFinal(plain.toByteArray())
         PREFIX + Base64.encodeToString(data, Base64.NO_WRAP)
+    }.onFailure {
+        // Without a working Keystore the key stays as before (in the app's private storage):
+        // better than no sign-in at all.
+        android.util.Log.w("Secrets", "Keystore unavailable, kept unencrypted", it)
     }.getOrDefault(plain)
 
     /** What [seal] stored; null if it can no longer be read (the key is gone: sign in again). */

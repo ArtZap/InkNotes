@@ -184,7 +184,17 @@ class MainActivity : ComponentActivity() {
                                     controller = other,
                                     themeMode = themeMode,
                                     onThemeModeChange = changeTheme,
-                                    onClose = ::closeSide,
+                                    // The arrow closes this tab (the half goes with its last one).
+                                    onClose = { closeSideTab(other) },
+                                    // Back acts on the half last touched: here this tab, there the library.
+                                    onBack = {
+                                        if (focused === other) {
+                                            closeSideTab(other)
+                                        } else {
+                                            current.flush()
+                                            editor = null
+                                        }
+                                    },
                                     tabs = sideTabs,
                                     onTab = ::switchSide,
                                     onCloseTab = ::closeSideTab,
@@ -255,10 +265,19 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun showNotebook(nb: dev.inknotes.data.Notebook, hit: SearchHit? = null) {
-        // Open in the half beside: shown there (one notebook is never open twice).
+        // Open in the half beside: shown there (one notebook is never open twice). With the
+        // library on screen (no notebook on the left) it comes over to the left to be seen.
         sideTabs.firstOrNull { it.notebook.id == nb.id }?.let { s ->
             s.pendingHit = hit
-            side = s
+            if (editor == null) {
+                val rest = sideTabs - s
+                sideTabs = rest
+                if (side === s) side = rest.lastOrNull()
+                tabs = tabs + s
+                editor = s
+            } else {
+                side = s
+            }
             focused = s
             return
         }
@@ -268,8 +287,8 @@ class MainActivity : ComponentActivity() {
             return
         }
         val c = EditorController(repo, nb, penButton, prefs, darkNow, handwriting, AppServices.get(this).math).also { it.pendingHit = hit }
-        // The oldest tab gives way past the limit.
-        val kept = if (tabs.size >= MAX_TABS) tabs.drop(1).also { tabs.first().close() } else tabs
+        // The oldest tab gives way past the limit (of this half, or of both together).
+        val kept = if (tabs.size >= MAX_TABS || tabs.isNotEmpty() && tabs.size + sideTabs.size >= MAX_OPEN) tabs.drop(1).also { tabs.first().close() } else tabs
         tabs = kept + c
         editor = c
     }
@@ -295,7 +314,7 @@ class MainActivity : ComponentActivity() {
         }
         val c = tab ?: EditorController(repo, nb, penButton, prefs, darkNow, handwriting, AppServices.get(this).math)
         // The oldest tab of that half gives way past the limit.
-        val kept = if (sideTabs.size >= MAX_TABS) sideTabs.drop(1).also { sideTabs.first().close() } else sideTabs
+        val kept = if (sideTabs.size >= MAX_TABS || sideTabs.isNotEmpty() && tabs.size + sideTabs.size >= MAX_OPEN) sideTabs.drop(1).also { sideTabs.first().close() } else sideTabs
         sideTabs = kept + c
         side = c
     }
@@ -606,7 +625,10 @@ class MainActivity : ComponentActivity() {
             rememberTabs()
             return
         }
-        if (target.size >= MAX_TABS) return
+        if (target.size >= MAX_TABS) {
+            (focused ?: editor)?.showStatus("В той половине уже $MAX_TABS вкладок — закройте одну, чтобы перенести сюда ещё")
+            return
+        }
         t.flush()
         if (fromRight) {
             val rest = sideTabs - t
@@ -739,6 +761,12 @@ class MainActivity : ComponentActivity() {
 
     private companion object {
         const val MAX_TABS = 5
+
+        /**
+         * Notebooks open in both halves together: each keeps pages, pictures and PDF pages in
+         * memory, and a 4 GB tablet runs short with ten.
+         */
+        const val MAX_OPEN = 7
 
         /** Share of the width at the right edge where a dragged tab opens beside. */
         const val BESIDE_EDGE = 0.25f

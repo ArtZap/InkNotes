@@ -84,4 +84,12 @@ class SyncPlanTest {
         val s = mapOf("a" to Synced("f", 10, 3))
         assertEquals(listOf(Action.Upload("a", "f")), plan(listOf(Local("a", "A", 5)), listOf(Remote("f", "a", 3, 10)), s))
     }
+
+    @Test
+    fun manyGoneHereAtOnceAreAskedAboutToo() {
+        val gone = List(4) { Action.TrashRemote("n$it", "f$it") }
+        // An unreadable library looks like every notebook deleted here: not sent to the Drive's trash unasked.
+        assertEquals(true, SyncPlan.massTrash(gone, 0, 4))
+        assertEquals(false, SyncPlan.massTrash(gone.take(1), 0, 40))
+    }
 }
