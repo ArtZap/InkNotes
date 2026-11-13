@@ -522,7 +522,14 @@ class PageRenderer {
         val r = RectF(img.x, img.y, img.x + img.w, img.y + img.h)
         canvas.save()
         if (img.rotation != 0f) canvas.rotate(img.rotation, r.centerX(), r.centerY())
-        if (bitmap != null) {
+        val text = img.text
+        if (text != null) {
+            val color = InkColors.forPaper(text.color, inkOnDark)
+            val layout = textLayouts[img]?.takeIf { it.first == color }?.second
+                ?: TextBoxes.layout(text, img.w, color).also { textLayouts[img] = color to it }
+            canvas.translate(img.x, img.y)
+            layout.draw(canvas)
+        } else if (bitmap != null) {
             canvas.drawBitmap(bitmap, null, r, bitmapPaint)
         } else {
             edgePaint.strokeWidth = 1f
@@ -558,6 +565,7 @@ class PageRenderer {
     }
 
     private val spoilerBands = WeakHashMap<PageStroke, Stroke>()
+    private val textLayouts = WeakHashMap<PageImage, Pair<Int, android.text.StaticLayout>>()
     private val spoilerTints = WeakHashMap<PageStroke, Stroke>()
 
     /** Light and dark specks laid only over the band drawn just before (SRC_ATOP). */
@@ -583,6 +591,7 @@ class PageRenderer {
         toScreen: Matrix,
         images: List<PageImage> = emptyList(),
         loadImage: (String) -> Bitmap? = { null },
+        revealed: (PageStroke) -> Boolean = { false },
     ) {
         for (img in images) drawImage(canvas, img, loadImage(img.file))
         drawFills(canvas, fills)
@@ -592,7 +601,7 @@ class PageRenderer {
             endHighlighter(canvas)
         }
         drawInk(canvas, strokes, toScreen)
-        for (s in strokes) if (s.kind == InkKind.SPOILER) drawSpoiler(canvas, s, toScreen, revealed = false)
+        for (s in strokes) if (s.kind == InkKind.SPOILER) drawSpoiler(canvas, s, toScreen, revealed = revealed(s))
     }
 
     /** Stroke recoloured for the current paper (see [InkColors.forPaper]), cached per stroke. */

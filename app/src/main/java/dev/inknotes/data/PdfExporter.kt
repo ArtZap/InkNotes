@@ -45,7 +45,8 @@ object PdfExporter {
                 val size = nb.pageSize(pageId)
                 val widthPt = ref?.width ?: (size.widthMm / Notebook.MM_PER_POINT)
                 val heightPt = ref?.height ?: (size.heightMm / Notebook.MM_PER_POINT)
-                val content = repo.loadPage(nb, pageId)
+                // Hidden layers stay out of the PDF, as they are off the screen.
+                val content = Layers.visible(repo.loadPage(nb, pageId), nb.hiddenLayers())
                 val page = doc.startPage(PdfDocument.PageInfo.Builder(widthPt.roundToInt(), heightPt.roundToInt(), i + 1).create())
                 val widthUnits = nb.pageWidthUnits(pageId)
                 val k = widthPt / widthUnits
@@ -62,7 +63,7 @@ object PdfExporter {
                 val names = content.images.map { it.file }.distinct()
                 val side = if (names.isEmpty()) 0 else sqrt(PAGE_IMAGE_PIXELS / names.size).toInt().coerceIn(MIN_IMAGE_SIDE, MAX_IMAGE_SIDE)
                 val pictures = names.associateWith { repo.loadImage(nb, it, side) }
-                renderer.drawContent(page.canvas, content.strokes, content.fills, detail, content.images) { pictures[it] }
+                renderer.drawContent(page.canvas, content.strokes, content.fills, detail, content.images, loadImage = { pictures[it] })
                 pictures.values.forEach { it?.recycle() }
                 doc.finishPage(page)
                 renderer.pdf?.recycle()

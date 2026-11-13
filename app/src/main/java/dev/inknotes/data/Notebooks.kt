@@ -80,6 +80,36 @@ const val COVER_ARTS = 6
 /** Number of plastic covers of the notebook style. */
 const val PLASTIC_KINDS = 3
 
+/** An entry of the table of contents: [title] at [y] page units from the top of page [pageId]. */
+data class Bookmark(val pageId: String, val y: Float, val title: String)
+
+/**
+ * A link: a finger tap on the rectangle [left]…[bottom] of page [pageId] goes to page [target]
+ * ([targetY] units from its top). Shared with the notebook.
+ */
+data class PageLink(
+    val pageId: String,
+    val left: Float,
+    val top: Float,
+    val right: Float,
+    val bottom: Float,
+    val target: String,
+    val targetY: Float = 0f,
+) {
+    fun contains(x: Float, y: Float) = x in left..right && y in top..bottom
+}
+
+/** A sound recording of a notebook: its file (`rec-<uuid>.m4a`), when it began and how long it is. */
+data class Recording(val file: String, val startedAt: Long, val durationMs: Long)
+
+/** Writing made during [file]'s recording: the box it covers on [pageId] and the moment, [atMs] into it. */
+data class AudioMark(val pageId: String, val left: Float, val top: Float, val right: Float, val bottom: Float, val file: String, val atMs: Long) {
+    fun contains(x: Float, y: Float, slop: Float) = x in left - slop..right + slop && y in top - slop..bottom + slop
+}
+
+/** A layer of a notebook (see [Layers]): its name, and whether it is shown and can be changed. */
+data class LayerInfo(val name: String, val visible: Boolean = true, val locked: Boolean = false)
+
 data class Notebook(
     val id: String,
     val title: String,
@@ -101,7 +131,23 @@ data class Notebook(
     val coverArt: Int? = null,
     /** Kind of plastic cover in the notebook style (0 until [PLASTIC_KINDS]); null = picked from the id. */
     val plasticKind: Int? = null,
+    /** Table of contents, in the order of the pages. */
+    val toc: List<Bookmark> = emptyList(),
+    val links: List<PageLink> = emptyList(),
+    /** Layers by number; empty: only the main one, shown and unlocked. */
+    val layers: List<LayerInfo> = emptyList(),
+    /** Layer new writing goes onto. */
+    val activeLayer: Int = 0,
+    val recordings: List<Recording> = emptyList(),
+    val audioMarks: List<AudioMark> = emptyList(),
 ) {
+    fun layerList(): List<LayerInfo> = layers.ifEmpty { listOf(LayerInfo(MAIN_LAYER)) }
+
+    fun hiddenLayers(): Set<Int> = layers.withIndex().filter { !it.value.visible }.map { it.index }.toSet()
+
+    /** Layers whose elements cannot be erased, selected or moved (locked or hidden). */
+    fun frozenLayers(): Set<Int> = layers.withIndex().filter { !it.value.visible || it.value.locked }.map { it.index }.toSet()
+
     fun plasticKindOrDefault(): Int = plasticKind ?: ((id.hashCode() ushr 3 and 0x7fffffff) % PLASTIC_KINDS)
 
     fun coverArtOrDefault(): Int = coverArt ?: ((id.hashCode() and 0x7fffffff) % COVER_ARTS)
@@ -130,6 +176,7 @@ data class Notebook(
     fun coverColor(): Int = cover ?: DEFAULT_COVERS[(id.hashCode() and 0x7fffffff) % DEFAULT_COVERS.size]
 
     companion object {
+        const val MAIN_LAYER = "Основной"
         const val PAGE_UNITS = 1000f
         const val MM_PER_POINT = 25.4f / 72f
 
@@ -261,6 +308,47 @@ class NotebookRepository(filesDir: File) {
 
     fun setPlasticKind(nb: Notebook, kind: Int?): Notebook =
         nb.copy(plasticKind = kind?.takeIf { it in 0 until PLASTIC_KINDS }, updatedAt = System.currentTimeMillis()).also(::writeMeta)
+
+    /** Keeps the entries in page order, top to bottom; entries of missing pages are dropped. */
+    fun setToc(nb: Notebook, toc: List<Bookmark>): Notebook {
+        val order = nb.pageIds.withIndex().associate { it.value to it.index }
+        val sorted = toc.filter { it.pageId in order }.sortedWith(compareBy({ order[it.pageId] }, { it.y }))
+            .map { it.copy(title = it.title.take(MAX_TITLE)) }.take(MAX_TOC)
+        return nb.copy(toc = sorted, updatedAt = System.currentTimeMillis()).also(::writeMeta)
+    }
+
+    fun setLinks(nb: Notebook, links: List<PageLink>): Notebook =
+        nb.copy(links = links.filter { it.pageId in nb.pageIds && it.target in nb.pageIds }.take(MAX_LINKS), updatedAt = System.currentTimeMillis())
+            .also(::writeMeta)
+
+    fun setLayers(nb: Notebook, layers: List<LayerInfo>, active: Int): Notebook {
+        val list = layers.take(Layers.MAX).map { it.copy(name = it.name.take(MAX_TITLE)) }
+        return nb.copy(layers = list, activeLayer = active.coerceIn(0, maxOf(0, list.lastIndex)), updatedAt = System.currentTimeMillis()).also(::writeMeta)
+    }
+
+    // ------------------------------------------------------------ recordings
+
+    /** A file for a new recording in the notebook's folder. */
+    fun newRecordingFile(nb: Notebook): File = File(dir(nb.id).apply { mkdirs() }, "rec-${newId()}.m4a")
+
+    fun recordingFile(nb: Notebook, name: String): File? = if (REC_NAME.matches(name)) File(dir(nb.id), name).takeIf { it.isFile } else null
+
+    fun addRecording(nb: Notebook, rec: Recording, marks: List<AudioMark>): Notebook =
+        nb.copy(
+            recordings = nb.recordings + rec,
+            audioMarks = (nb.audioMarks + marks.filter { it.pageId in nb.pageIds }).takeLast(MAX_MARKS),
+            updatedAt = System.currentTimeMillis(),
+        ).also(::writeMeta)
+
+    fun setAudioMarks(nb: Notebook, marks: List<AudioMark>): Notebook =
+        nb.copy(audioMarks = marks.filter { it.pageId in nb.pageIds }.takeLast(MAX_MARKS)).also(::writeMeta)
+
+    fun deleteRecording(nb: Notebook, rec: Recording): Notebook {
+        val updated = nb.copy(recordings = nb.recordings - rec, audioMarks = nb.audioMarks.filter { it.file != rec.file }, updatedAt = System.currentTimeMillis())
+        writeMeta(updated)
+        if (REC_NAME.matches(rec.file)) background { File(dir(nb.id), rec.file).delete() }
+        return updated
+    }
 
     fun setFavorite(nb: Notebook, favorite: Boolean): Notebook =
         nb.copy(favorite = favorite).also(::writeMeta)
@@ -428,6 +516,9 @@ class NotebookRepository(filesDir: File) {
             pageIds = nb.pageIds - pageId,
             pdfPages = nb.pdfPages - pageId,
             pageSizes = nb.pageSizes - pageId,
+            toc = nb.toc.filter { it.pageId != pageId },
+            audioMarks = nb.audioMarks.filter { it.pageId != pageId },
+            links = nb.links.filter { it.pageId != pageId && it.target != pageId },
             updatedAt = System.currentTimeMillis(),
         )
         writeMeta(updated)
@@ -670,7 +761,7 @@ class NotebookRepository(filesDir: File) {
         put(META, encodeMeta(nb.copy(folder = null, favorite = false)).second)
         for (pageId in nb.pageIds) putFile("pages/$pageId.ink", File(dir, "pages/$pageId.ink"))
         val pictures = dir.list().orEmpty().filter { PageImage.NAME.matches(it) }
-        val extras = listOfNotNull(nb.light.photo, nb.dark.photo) + nb.pdfPages.values.map { it.file } + pictures
+        val extras = listOfNotNull(nb.light.photo, nb.dark.photo) + nb.pdfPages.values.map { it.file } + pictures + nb.recordings.map { it.file }
         for (name in extras.distinct()) putFile(name, File(dir, name))
         zip.finish()
         zip.flush()
@@ -1092,7 +1183,7 @@ class NotebookRepository(filesDir: File) {
     }
 
     private fun isArchiveName(name: String) =
-        name == ARCHIVE_MANIFEST || name == META || PHOTO_NAME.matches(name) || PDF_NAME.matches(name) || PageImage.NAME.matches(name) ||
+        name == ARCHIVE_MANIFEST || name == META || PHOTO_NAME.matches(name) || PDF_NAME.matches(name) || PageImage.NAME.matches(name) || REC_NAME.matches(name) ||
             (name.startsWith("pages/") && name.endsWith(".ink") && UUID_RE.matches(name.removePrefix("pages/").removeSuffix(".ink")))
 
     fun loadPhoto(nb: Notebook, name: String): Bitmap? = loadPhoto(nb, name, MAX_PHOTO_SIDE)
@@ -1127,6 +1218,26 @@ class NotebookRepository(filesDir: File) {
             // A page shown empty because it could not be read is set aside before it is replaced.
             if (unreadable.remove(file.path) && file.exists()) file.renameTo(File(file.parentFile, "${file.name}.kept-${System.currentTimeMillis()}"))
             atomicWrite(file) { out -> PageCodec.write(out, content) }
+        }
+    }
+
+    // ------------------------------------------------- flash cards
+
+    /** Review states of a notebook's cards ([Cards.encode]); empty when none were reviewed. */
+    fun loadCards(nbId: String): Map<String, Cards.State> = onIo {
+        if (!UUID_RE.matches(nbId)) return@onIo emptyMap()
+        val f = File(dir(nbId), CARDS)
+        if (!f.isFile || f.length() > MAX_JSON_BYTES) return@onIo emptyMap()
+        runCatching { Cards.decode(f.readText()) }.getOrDefault(emptyMap())
+    }
+
+    /** Kept on this device only, like the text index: a friend's notebook starts unreviewed. */
+    fun saveCardsAsync(nbId: String, states: Map<String, Cards.State>) {
+        if (!UUID_RE.matches(nbId)) return
+        val text = Cards.encode(states)
+        background {
+            val d = dir(nbId)
+            if (File(d, META).isFile) runCatching { atomicWrite(File(d, CARDS)) { it.write(text.toByteArray()) } }
         }
     }
 
@@ -1211,7 +1322,48 @@ class NotebookRepository(filesDir: File) {
             favorite = json.optBoolean("favorite"),
             coverArt = json.optInt("coverArt", -1).takeIf { it in 0 until COVER_ARTS },
             plasticKind = json.optInt("plasticKind", -1).takeIf { it in 0 until PLASTIC_KINDS },
-        )
+            toc = json.optJSONArray("toc")?.let { readToc(it, pageIds.toSet()) }.orEmpty(),
+            links = json.optJSONArray("links")?.let { readLinks(it, pageIds.toSet()) }.orEmpty(),
+            layers = json.optJSONArray("layers")?.let { a ->
+                (0 until minOf(a.length(), Layers.MAX)).mapNotNull { i ->
+                    a.optJSONObject(i)?.let { o -> LayerInfo(o.optString("name").take(MAX_TITLE), o.optBoolean("visible", true), o.optBoolean("locked")) }
+                }
+            }.orEmpty(),
+            activeLayer = json.optInt("activeLayer", 0).coerceIn(0, Layers.MAX - 1),
+            recordings = json.optJSONArray("recordings")?.let { a ->
+                (0 until minOf(a.length(), MAX_RECORDINGS)).mapNotNull { i ->
+                    val o = a.optJSONObject(i) ?: return@mapNotNull null
+                    val file = o.optString("file").takeIf { REC_NAME.matches(it) } ?: return@mapNotNull null
+                    Recording(file, o.optLong("at"), o.optLong("ms").coerceAtLeast(0))
+                }
+            }.orEmpty(),
+            audioMarks = json.optJSONArray("marks")?.let { a -> readMarks(a, pageIds.toSet()) }.orEmpty(),
+        ).let { it.copy(activeLayer = it.activeLayer.coerceAtMost(maxOf(0, it.layers.lastIndex))) }
+    }
+
+    private fun readMarks(a: JSONArray, pages: Set<String>): List<AudioMark> = (0 until minOf(a.length(), MAX_MARKS)).mapNotNull { i ->
+        val o = a.optJSONObject(i) ?: return@mapNotNull null
+        val page = o.optString("page").takeIf { it in pages } ?: return@mapNotNull null
+        val file = o.optString("file").takeIf { REC_NAME.matches(it) } ?: return@mapNotNull null
+        val r = listOf("l", "t", "r", "b").map { o.optDouble(it, 0.0).toFloat() }
+        if (r.any { !it.isFinite() || it < -MAX_Y || it > MAX_Y }) return@mapNotNull null
+        AudioMark(page, r[0], r[1], r[2], r[3], file, o.optLong("ms").coerceAtLeast(0))
+    }
+
+    private fun readToc(a: JSONArray, pages: Set<String>): List<Bookmark> = (0 until minOf(a.length(), MAX_TOC)).mapNotNull { i ->
+        val o = a.optJSONObject(i) ?: return@mapNotNull null
+        val page = o.optString("page").takeIf { it in pages } ?: return@mapNotNull null
+        val y = o.optDouble("y", 0.0).toFloat().takeIf { it.isFinite() } ?: 0f
+        Bookmark(page, y.coerceIn(0f, MAX_Y), o.optString("title").take(MAX_TITLE))
+    }
+
+    private fun readLinks(a: JSONArray, pages: Set<String>): List<PageLink> = (0 until minOf(a.length(), MAX_LINKS)).mapNotNull { i ->
+        val o = a.optJSONObject(i) ?: return@mapNotNull null
+        val page = o.optString("page").takeIf { it in pages } ?: return@mapNotNull null
+        val target = o.optString("target").takeIf { it in pages } ?: return@mapNotNull null
+        val r = listOf("l", "t", "r", "b", "ty").map { o.optDouble(it, 0.0).toFloat() }
+        if (r.any { !it.isFinite() || it < -MAX_Y || it > MAX_Y } || r[2] <= r[0] || r[3] <= r[1]) return@mapNotNull null
+        PageLink(page, r[0], r[1], r[2], r[3], target, r[4].coerceAtLeast(0f))
     }
 
     private fun readPageSizes(json: JSONObject): Map<String, PageSize> =
@@ -1271,6 +1423,39 @@ class NotebookRepository(filesDir: File) {
         if (nb.favorite) json.put("favorite", true)
         nb.coverArt?.let { json.put("coverArt", it) }
         nb.plasticKind?.let { json.put("plasticKind", it) }
+        if (nb.recordings.isNotEmpty()) {
+            json.put("recordings", JSONArray(nb.recordings.map { JSONObject().put("file", it.file).put("at", it.startedAt).put("ms", it.durationMs) }))
+            val marks = nb.audioMarks.filter { it.pageId in nb.pageIds }
+            json.put(
+                "marks",
+                JSONArray(
+                    marks.map {
+                        JSONObject().put("page", it.pageId).put("l", it.left.toDouble()).put("t", it.top.toDouble())
+                            .put("r", it.right.toDouble()).put("b", it.bottom.toDouble()).put("file", it.file).put("ms", it.atMs)
+                    },
+                ),
+            )
+        }
+        if (nb.layers.isNotEmpty()) {
+            json.put("layers", JSONArray(nb.layers.map { JSONObject().put("name", it.name).put("visible", it.visible).put("locked", it.locked) }))
+            json.put("activeLayer", nb.activeLayer)
+        }
+        val toc = nb.toc.filter { it.pageId in nb.pageIds }
+        if (toc.isNotEmpty()) {
+            json.put("toc", JSONArray(toc.map { JSONObject().put("page", it.pageId).put("y", it.y.toDouble()).put("title", it.title) }))
+        }
+        val links = nb.links.filter { it.pageId in nb.pageIds && it.target in nb.pageIds }
+        if (links.isNotEmpty()) {
+            json.put(
+                "links",
+                JSONArray(
+                    links.map {
+                        JSONObject().put("page", it.pageId).put("l", it.left.toDouble()).put("t", it.top.toDouble())
+                            .put("r", it.right.toDouble()).put("b", it.bottom.toDouble()).put("target", it.target).put("ty", it.targetY.toDouble())
+                    },
+                ),
+            )
+        }
         val sizes = nb.pageSizes.filter { (id, size) -> id in nb.pageIds && size != PageSize.DEFAULT }
         if (sizes.isNotEmpty()) {
             val o = JSONObject()
@@ -1306,6 +1491,12 @@ class NotebookRepository(filesDir: File) {
         const val TRASH = ".trash"
         const val DELETED_AT = "deleted-at"
         const val TEXT_INDEX = "text.json"
+        const val CARDS = "cards.tsv"
+        const val MAX_TOC = 2000
+        const val MAX_LINKS = 5000
+
+        /** Places within a few page heights: anything farther is not from this app. */
+        const val MAX_Y = 100_000f
         const val MAX_PHOTO_SIDE = 2048
 
         /** notebook.json and archive manifests are a few kilobytes; anything far bigger is not ours. */
@@ -1314,6 +1505,9 @@ class NotebookRepository(filesDir: File) {
         const val MAX_IMAGE_HEADER_SIDE = 20_000
         val PHOTO_NAME = Regex("bg-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.jpg")
         val PDF_NAME = Regex("doc-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.pdf")
+        val REC_NAME = Regex("rec-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.m4a")
+        const val MAX_RECORDINGS = 500
+        const val MAX_MARKS = 50_000
         val UUID_RE = Regex("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
         const val MAX_TITLE = 200
         const val ARCHIVE_MANIFEST = "inknote.json"

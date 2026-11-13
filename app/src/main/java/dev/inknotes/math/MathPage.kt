@@ -90,10 +90,19 @@ object MathPage {
                 continue
             }
             // f(x) among the readings ("flx" first) is a function being defined.
-            val l = readings(left, eq.h, eq.cy, reader, Prefer.FIRST).let { all -> all.firstOrNull { it is Expr.Apply && graphParam(it) != null } ?: all.firstOrNull() } ?: continue
+            val l = readings(left, eq.h, eq.cy, reader, Prefer.FIRST).let { all ->
+                all.firstOrNull { it is Expr.Apply && graphParam(it) != null }
+                    // A lone number before "=" with a formula after it defines nothing: the
+                    // reader took the z or y of z = x² + y² for a 2 or a 4.
+                    ?: all.firstOrNull { it is Expr.Sym && it.name.lowercase() in GRAPH_LETTERS }?.takeIf { all.firstOrNull() is Expr.Num }
+                    ?: all.firstOrNull()
+            } ?: continue
             // y = 2x + 1 is a formula in x: "2+1" (fewest letters) would lose it.
             // y = 5x − 1: a formula in x ("5x−1", not "bx−I" or "5−1").
+            val surface = (l as? Expr.Sym)?.name?.equals("z", ignoreCase = true) == true
             val r = graphParam(l)?.let { v -> readings(right, eq.h, eq.cy, reader, Prefer.GRAPH, variable = v.ifEmpty { "x" }).firstOrNull() }
+                // z = x² + y²: about letters, not the reading with fewest of them.
+                ?: (if (surface) read(right, eq.h, eq.cy, reader, Prefer.FIRST) else null)
                 ?: read(right, eq.h, eq.cy, reader, Prefer.NUMBERS) ?: continue
             if (Calc.isDefinition(l)) defs += Def(i, l, r) else single += Def(i, l, r)
         }
@@ -146,8 +155,13 @@ object MathPage {
         class Area(val left: Float, val top: Float, val right: Float, val bottom: Float)
         val graphs = ArrayList<Area>()
         for (d in defs) {
-            val param = graphParam(d.left) ?: continue
-            val graph = runCatching { Calc.graph(d.right, envAt(d.index), param.ifEmpty { null }) }.getOrNull() ?: continue
+            val param = graphParam(d.left)
+            val graph: Answer = when {
+                param != null -> runCatching { Calc.graph(d.right, envAt(d.index), param.ifEmpty { null }) }.getOrNull()
+                // z = x² + y²: a surface.
+                (d.left as? Expr.Sym)?.name?.equals("z", ignoreCase = true) == true -> runCatching { Calc.surface(d.right, envAt(d.index)) }.getOrNull()
+                else -> null
+            } ?: continue
             val eq = ordered[d.index]
             val lineInk = side(eq, -1, eqs, rest, limit = null) + side(eq, 1, eqs, rest, limit = null)
             val lineLeft = lineInk.minOfOrNull { it.left } ?: eq.left
@@ -443,7 +457,9 @@ object MathPage {
                     Prefer.FIRST -> 0
                     // ∫ v dv rather than ∫ r dv: the integrand is about the variable of dv. Letters
                     // [favored] (a system's unknowns) count for, not against, a reading.
-                    Prefer.NUMBERS -> names.count { it !in favored } - names.count { it in favored } + 2 * oddIntegrals(e)
+                    // With units on, a reading with units (9,8 м/с²) beats one with digits for its letters.
+                    Prefer.NUMBERS -> names.count { it !in favored } - names.count { it in favored } + 2 * oddIntegrals(e) -
+                        (if (Parser.units && Algebra.freeVars(e).any { it.startsWith(Units.PREFIX) }) 1 else 0)
                     // About letters ("2z", not "22"), but not more than the system has unknowns
                     // (x⁶ rather than t^G); 9z rather than oz (o, l, I are digits misread far more often).
                     Prefer.LETTERS -> (if (unknowns > maxLetters) 20 + unknowns else -unknowns) + 2 * names.count { it in RARE_UNKNOWNS }
@@ -455,7 +471,7 @@ object MathPage {
                 }
                 break
             }
-            if (prefer != Prefer.LETTERS && favored.isEmpty() && found.count { it.second == 0 } >= MAX_READINGS) break
+            if (prefer != Prefer.LETTERS && favored.isEmpty() && found.count { it.second <= 0 } >= MAX_READINGS && (!Parser.units || found.any { it.second < 0 })) break
         }
         return found.sortedBy { it.second }.map { it.first }.take(MAX_READINGS)
     }
@@ -494,7 +510,8 @@ object MathPage {
     }
 
     /** Letters of [e] standing for numbers: the T of a transposed matrix is not one. */
-    private fun letters(e: Expr): Set<String> = if (transposes(e)) Algebra.freeVars(e) - "T" else Algebra.freeVars(e)
+    private fun letters(e: Expr): Set<String> =
+        (if (transposes(e)) Algebra.freeVars(e) - "T" else Algebra.freeVars(e)).filterTo(LinkedHashSet()) { !it.startsWith(Units.PREFIX) }
 
     private fun transposes(e: Expr): Boolean = when (e) {
         is Expr.Pow -> (e.exp == Expr.Sym("T") && e.base is Expr.Mat) || transposes(e.base)
@@ -854,6 +871,11 @@ object MathPage {
             if (c.top <= bandBottom && c.bottom >= bandTop && c.height < 8 * h && c !in otherLine) {
                 chain += c
                 frontier = if (dir < 0) min(frontier, c.left) else max(frontier, c.right)
+            } else if (bridge(c, cand, bandTop, bandBottom, h) && c !in otherLine) {
+                // The bar of a root (or an overline) reaching far past its content: the
+                // content under it is near too.
+                chain += c
+                frontier = if (dir < 0) min(frontier, c.left) else max(frontier, c.right)
             }
         }
         if (chain.isEmpty()) return chain
@@ -891,6 +913,14 @@ object MathPage {
         return members
     }
 
+    /** A long bar just above the line with symbols of the line under it (√ over 2 + √2). */
+    private fun bridge(c: Ink, cand: List<Ink>, bandTop: Float, bandBottom: Float, h: Float): Boolean =
+        c.isDash && c.width > 1.2f * h && c.bottom < bandTop && c.bottom > bandTop - 1.2f * h &&
+            cand.any { o -> o !== c && o.top <= bandBottom && o.bottom >= bandTop && o.cx in c.left..c.right && o.top > c.cy }
+
+    /** Letters a graph or surface is defined by (y = …, z = …). */
+    private val GRAPH_LETTERS = setOf("y", "z")
+
     private const val MAX_STROKE = 600f
     private const val MIN_EQ_WIDTH = 3.5f
     private const val MAX_EQ_WIDTH = 160f
@@ -898,7 +928,7 @@ object MathPage {
 
     /** An inequality sign is the size of a letter, not of a drawing. */
     private const val MAX_SIGN = 120f
-    private const val GAP = 1.8f
+    private val GAP get() = Tune.sideGap
     private const val MAX_CANDIDATES = 6
     private const val MAX_COMBINATIONS = 40
     private const val MAX_READINGS = 6

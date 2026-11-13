@@ -131,6 +131,11 @@ class AppPrefs(context: Context) {
         get() = prefs.getBoolean(FRACTIONS, true)
         set(value) = prefs.edit().putBoolean(FRACTIONS, value).apply()
 
+    /** Units of measurement and physical constants in formulas (9,8 м/с² · 3 с). */
+    var mathUnits: Boolean
+        get() = prefs.getBoolean(UNITS, false)
+        set(value) = prefs.edit().putBoolean(UNITS, value).apply()
+
     /** The folder (a document tree the user granted) for automatic backups, or null. */
     var backupFolder: String?
         get() = prefs.getString(BACKUP_FOLDER, null)
@@ -178,6 +183,7 @@ class AppPrefs(context: Context) {
         const val BACKUP_FOLDER = "backupFolder"
         const val BACKUP_AT = "backupAt"
         const val FRACTIONS = "fractionAnswers"
+        const val UNITS = "mathUnits"
         const val STRAIGHT_HIGHLIGHTER = "straightHighlighter"
         const val MATH = "math"
         const val THEME = "theme"

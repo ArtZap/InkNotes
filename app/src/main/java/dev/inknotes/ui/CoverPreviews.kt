@@ -99,7 +99,7 @@ class CoverPreviews(private val repo: NotebookRepository) {
                 this.pageHeight = pageHeight
                 this.pageWidth = pageWidth
                 drawBackground(canvas, edgeWidth = 0f)
-                drawContent(canvas, content.strokes, content.fills, scale, content.images) { file -> repo.loadImage(nb, file, IMAGE_SIDE) }
+                drawContent(canvas, content.strokes, content.fills, scale, content.images, loadImage = { file -> repo.loadImage(nb, file, IMAGE_SIDE) })
             }
         } finally {
             renderer.photo?.recycle()

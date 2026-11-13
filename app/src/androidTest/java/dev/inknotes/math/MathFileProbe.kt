@@ -45,6 +45,7 @@ class MathFileProbe {
     private fun describe(a: Answer): String = when (a) {
         is Answer.Text -> a.lines.joinToString(" | ")
         is Answer.Graph -> "graph ${a.variable} x=${a.x0}..${a.x1}"
+        is Answer.Surface -> "surface ${a.xv},${a.yv}"
         is Answer.Grid -> a.rows.joinToString(" ; ") { it.joinToString(",") }
     }
 }

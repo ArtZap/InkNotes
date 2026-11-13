@@ -60,6 +60,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -111,6 +113,9 @@ fun EditorScreen(
     themeMode: ThemeMode,
     onThemeModeChange: (ThemeMode) -> Unit,
     onClose: () -> Unit,
+    tabs: List<EditorController> = emptyList(),
+    onTab: (EditorController) -> Unit = {},
+    onCloseTab: (EditorController) -> Unit = {},
 ) {
     BackHandler(onBack = onClose)
     DisposableEffect(controller) {
@@ -126,10 +131,25 @@ fun EditorScreen(
     var showSelectionSize by remember { mutableStateOf(false) }
     var showHelp by remember { mutableStateOf(false) }
     var showShift by remember { mutableStateOf(false) }
+    var showToc by remember { mutableStateOf(false) }
+    var showLayers by remember { mutableStateOf(false) }
+    var showRecordings by remember { mutableStateOf(false) }
+    var textEdit by remember { mutableStateOf<String?>(null) }
+    var textNew by remember { mutableStateOf(false) }
     var pageSizeOf by remember { mutableStateOf<Int?>(null) }
     var pageText by remember { mutableStateOf<List<dev.inknotes.search.TextLine>?>(null) }
     val context = LocalContext.current
     val resolver = context.contentResolver
+    val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) controller.startRecording(context) else controller.showStatus("Без доступа к микрофону записать звук нельзя")
+    }
+    val record = {
+        if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            controller.startRecording(context)
+        } else {
+            micPermission.launch(android.Manifest.permission.RECORD_AUDIO)
+        }
+    }
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) controller.insertImage(uri, resolver)
     }
@@ -155,6 +175,7 @@ fun EditorScreen(
             .background(MaterialTheme.colorScheme.surface)
             .safeDrawingPadding()
     ) {
+        if (tabs.size > 1) TabStrip(controller, tabs, onTab, onCloseTab, onLibrary = onClose)
         TopRow(
             c = controller,
             pagesShown = showPages,
@@ -166,17 +187,34 @@ fun EditorScreen(
             onInsertStamp = { showStamps = true },
             onClose = onClose,
             menu = {
-                MenuItem("Фон") { showBackground = true }
-                MenuItem("Размер и ориентация страницы…", InkIcons.PageSize) { pageSizeOf = controller.pageIndex }
-                MenuItem("Отступ страницы слева или справа…") { showShift = true }
+                // Groups, without icons: a few items with icons and most without look untidy.
+                MenuItem("Вставить печатный текст…") { textNew = true }
+                MenuItem(if (controller.insertingSpace) "Вставить место: отменить" else "Вставить место (раздвинуть строки)") { controller.toggleInsertSpace() }
                 MenuItem("Распознанный текст страницы") { controller.currentPageText { pageText = it } }
-                MenuItem("Поделиться файлом тетради", InkIcons.Share) { share() }
-                MenuItem("Сохранить файл тетради…") { saveLauncher.launch("${controller.fileName(controller.notebook.title)}.inknote") }
-                MenuItem("Экспорт в PDF…") { exportLauncher.launch("${controller.fileName(controller.notebook.title)}.pdf") }
+                Divider()
+                MenuItem("Оглавление…") { showToc = true }
+                MenuItem("Слои (сейчас: ${controller.notebook.layerList().getOrNull(controller.notebook.activeLayer)?.name ?: "Основной"})…") { showLayers = true }
+                MenuItem("Повторение: карточки из маркера подсказок") { controller.openCards() }
+                Divider()
+                if (controller.recordingSince == null) MenuItem("Записать звук") { record() } else MenuItem("Остановить запись") { controller.stopRecording() }
+                MenuItem("Записи звука…") { showRecordings = true }
+                Divider()
+                MenuItem("Фон") { showBackground = true }
+                MenuItem("Размер и ориентация страницы…") { pageSizeOf = controller.pageIndex }
+                MenuItem("Отступ страницы слева или справа…") { showShift = true }
+                Divider()
                 MenuItem(if (controller.fractionAnswers) "Ответы: обыкновенные дроби (1/3)" else "Ответы: десятичные дроби (0,333…)") {
                     controller.toggleFractionAnswers()
                 }
-                MenuItem("Тема: ${themeMode.title.lowercase()}", themeIcon(themeMode)) {
+                MenuItem(if (controller.mathUnits) "Единицы и константы в формулах: вкл." else "Единицы и константы в формулах: выкл.") {
+                    controller.toggleMathUnits()
+                }
+                Divider()
+                MenuItem("Поделиться файлом тетради") { share() }
+                MenuItem("Сохранить файл тетради…") { saveLauncher.launch("${controller.fileName(controller.notebook.title)}.inknote") }
+                MenuItem("Экспорт в PDF…") { exportLauncher.launch("${controller.fileName(controller.notebook.title)}.pdf") }
+                Divider()
+                MenuItem("Тема: ${themeMode.title.lowercase()}") {
                     onThemeModeChange(ThemeMode.entries[(themeMode.ordinal + 1) % ThemeMode.entries.size])
                 }
                 MenuItem("Кнопка пера: ${controller.penButtonLabel}") { controller.learningPenButton = true }
@@ -184,6 +222,7 @@ fun EditorScreen(
                 MenuItem("Справка: все инструменты") { showHelp = true }
             },
         )
+        SoundBar(controller)
         ToolRow(controller, onPickColor = { showPicker = true }, onHatchSettings = { showHatch = true }, onSelectionSize = { showSelectionSize = true })
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         Row(Modifier.fillMaxSize()) {
@@ -213,6 +252,16 @@ fun EditorScreen(
 
     controller.recognizedText?.let { RecognizedTextDialog(it, controller, onDismiss = { controller.recognizedText = null }) }
     controller.tappedAnswer?.let { AnswerDialog(controller, it, onDismiss = { controller.tappedAnswer = null }) }
+    controller.studyCards?.let { CardsDialog(controller, it, onDismiss = { controller.closeCards() }) }
+    if (showToc) TocDialog(controller, onDismiss = { showToc = false })
+    if (showRecordings) RecordingsDialog(controller, onRecord = { record() }, onDismiss = { showRecordings = false })
+    if (showLayers || controller.showLayersDialog) LayersDialog(controller, onDismiss = { showLayers = false; controller.showLayersDialog = false })
+    if (textNew) TypeTextDialog("Печатный текст", "", onDismiss = { textNew = false }) { controller.insertText(it) }
+    if (controller.editingText) {
+        TypeTextDialog("Изменить текст", controller.selectedText.orEmpty(), onDismiss = { controller.editingText = false }) { controller.editSelectedText(it) }
+    }
+    if (controller.showLinkDialog) LinkDialog(controller, onDismiss = { controller.showLinkDialog = false })
+    if (controller.showAddBookmark) AddBookmarkDialog(controller, onDismiss = { controller.showAddBookmark = false })
     if (showHelp) HelpDialog(onDismiss = { showHelp = false })
     if (showShift) PageShiftDialog(controller, onDismiss = { showShift = false })
     if (showBackground) BackgroundDialog(controller, onDismiss = { showBackground = false })
@@ -262,6 +311,12 @@ class MenuScope(private val close: () -> Unit) {
             close()
             onClick()
         }
+    }
+
+    /** A line between groups of items. */
+    @Suppress("FunctionName")
+    fun Divider() {
+        if (items.isNotEmpty() && items.last().label.isNotEmpty()) items += Item("", null) {}
     }
 }
 
@@ -372,7 +427,6 @@ private fun TopRow(
                             menuOpen = false
                             action()
                         },
-                        leadingIcon = { InkIcon(icon, contentDescription = null) },
                     )
                     item("Вставить картинку", InkIcons.Picture, enabled = !c.importingImage, action = onInsertImage)
                     item("Вставить таблицу", InkIcons.Table, action = onInsertTable)
@@ -382,11 +436,11 @@ private fun TopRow(
                 }
                 val scope = MenuScope { menuOpen = false }.apply(menu)
                 for (item in scope.items) {
-                    DropdownMenuItem(
-                        text = { Text(item.label) },
-                        onClick = item.action,
-                        leadingIcon = item.icon?.let { icon -> { InkIcon(icon, contentDescription = null) } },
-                    )
+                    if (item.label.isEmpty()) {
+                        HorizontalDivider()
+                        continue
+                    }
+                    DropdownMenuItem(text = { Text(item.label) }, onClick = item.action)
                 }
             }
         }
@@ -821,6 +875,7 @@ private fun ToolOptions(c: EditorController, onPickColor: () -> Unit, onHatchSet
                 onClick = { c.selectEraserMode(EraserMode.PARTIAL) },
                 label = { Text("Частично") },
             )
+            EraserTargetButton(c)
         }
         Tool.LASSO -> Text(
             "Обведите пером то, что нужно выделить, или коснитесь объекта пальцем",
@@ -853,6 +908,114 @@ private fun ToolOptions(c: EditorController, onPickColor: () -> Unit, onHatchSet
     }
 }
 
+/** Open notebooks as tabs: tap to switch, ✕ to close; the library is one tap away. */
+@Composable
+private fun TabStrip(
+    current: EditorController,
+    tabs: List<EditorController>,
+    onTab: (EditorController) -> Unit,
+    onCloseTab: (EditorController) -> Unit,
+    onLibrary: () -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp, vertical = 2.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        for (t in tabs) {
+            val selected = t === current
+            Row(
+                Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant)
+                    .clickable { onTab(t) }
+                    .padding(start = 12.dp, end = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    t.notebook.title,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                    fontSize = 14.sp,
+                    modifier = Modifier.widthIn(max = 200.dp),
+                )
+                TextButton(onClick = { onCloseTab(t) }, contentPadding = PaddingValues(horizontal = 6.dp)) { Text("✕", fontSize = 13.sp) }
+            }
+        }
+        TextButton(onClick = onLibrary) { Text("+ Тетрадь") }
+    }
+}
+
+/** Typing text for the page (new, or editing a text box). */
+@Composable
+private fun TypeTextDialog(title: String, initial: String, onDismiss: () -> Unit, onDone: (String) -> Unit) {
+    var text by remember { mutableStateOf(initial) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            OutlinedTextField(
+                text,
+                { text = it },
+                modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp, max = 360.dp),
+                placeholder = { Text("Текст") },
+            )
+        },
+        confirmButton = {
+            Button(onClick = {
+                onDone(text)
+                onDismiss()
+            }) { Text("Готово") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } },
+    )
+}
+
+/** Less frequent things to do with the selection: contents, link. */
+@Composable
+private fun SelectionMoreButton(c: EditorController) {
+    Box {
+        var open by remember { mutableStateOf(false) }
+        TextButton(onClick = { open = true }) { Text("Ещё ▾") }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            DropdownMenuItem(text = { Text("В оглавление…") }, onClick = {
+                open = false
+                c.showAddBookmark = true
+            })
+            DropdownMenuItem(text = { Text("Ссылка на страницу…") }, onClick = {
+                open = false
+                c.showLinkDialog = true
+            })
+            DropdownMenuItem(text = { Text("На слой…") }, onClick = {
+                open = false
+                c.showLayersDialog = true
+            })
+        }
+    }
+}
+
+/** What the eraser takes: everything, or only the pen, the marker or hatching. */
+@Composable
+private fun EraserTargetButton(c: EditorController) {
+    Box {
+        var open by remember { mutableStateOf(false) }
+        TextButton(onClick = { open = true }) { Text("Стирает: ${c.eraserTarget.title.lowercase().removePrefix("только ")} ▾") }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            for (t in dev.inknotes.editor.EraserTarget.entries) {
+                DropdownMenuItem(
+                    text = { Text(t.title) },
+                    leadingIcon = { if (t == c.eraserTarget) Text("✓") },
+                    onClick = {
+                        open = false
+                        c.selectEraserTarget(t)
+                    },
+                )
+            }
+        }
+    }
+}
+
 /** What can be done with the selection: colour, mirror, size, text, copy, delete. */
 @Composable
 private fun SelectionOptions(c: EditorController, onPickColor: () -> Unit, onHatchSettings: () -> Unit, onSelectionSize: () -> Unit) {
@@ -872,7 +1035,14 @@ private fun SelectionOptions(c: EditorController, onPickColor: () -> Unit, onHat
     IconAction(InkIcons.FlipHorizontal, "Отразить слева направо", { c.flipSelection(horizontal = true) })
     IconAction(InkIcons.FlipVertical, "Отразить сверху вниз", { c.flipSelection(horizontal = false) })
     IconAction(InkIcons.Ruler, "Размер в миллиметрах", onSelectionSize)
-    TextButton(onClick = { c.recognizeSelection() }) { Text("Текст") }
+    if (c.selectedText != null) {
+        TextButton(onClick = { c.editingText = true }) { Text("Изменить текст") }
+        TextButton(onClick = { c.scaleSelectedText(1f / 1.2f) }) { Text("А−") }
+        TextButton(onClick = { c.scaleSelectedText(1.2f) }) { Text("А+") }
+    } else {
+        TextButton(onClick = { c.recognizeSelection() }) { Text("Текст") }
+    }
+    SelectionMoreButton(c)
     IconAction(InkIcons.Duplicate, "Дублировать", { c.duplicateSelection() })
     IconAction(InkIcons.Delete, "Удалить выделенное", { c.deleteSelection() })
 }

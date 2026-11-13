@@ -59,6 +59,24 @@ enum class Tool { PEN, FOUNTAIN, HIGHLIGHTER, ERASER, LASSO, AREA, NEON, LASER, 
 
 enum class EraserMode { WHOLE, PARTIAL }
 
+/** What the eraser takes: everything, or only one kind (the marker without the text under it). */
+enum class EraserTarget(val title: String) {
+    ALL("Всё"),
+    INK("Только ручка"),
+    MARKER("Только маркер"),
+    FILLS("Только штриховка"),
+    ;
+
+    fun strokes(kind: InkKind) = when (this) {
+        ALL -> true
+        INK -> kind.isInk
+        MARKER -> kind == InkKind.HIGHLIGHTER || kind == InkKind.SPOILER
+        FILLS -> false
+    }
+
+    val fills get() = this == ALL || this == FILLS
+}
+
 /** Which way a selection handle resizes: in proportion, or only wider or taller. */
 private enum class Axis { BOTH, X, Y }
 
@@ -104,6 +122,21 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
 
         /** Edits made by [block] (on several pages) undo as one step. */
         fun editsTogether(block: () -> Unit) = block()
+
+        /**
+         * A new page right after page [after] (for what no longer fits on it when space was
+         * inserted); returns its index, or null when it cannot be made.
+         */
+        fun addPageAfter(after: Int): Int? = null
+
+        /** Space was inserted (or not): the one-shot mode is over. */
+        fun onSpaceDone() {}
+
+        /** New writing on page [page] covering [bounds] (page units): sound being recorded is tied to it. */
+        fun onInkAdded(page: Int, bounds: RectF) {}
+
+        /** Plays the sound recorded while the writing at ([x], [y]) was made; false when there is none. */
+        fun listenAt(page: Int, x: Float, y: Float): Boolean = false
     }
 
     /** The notebook's pages; documents are loaded lazily as pages scroll into view. */
@@ -132,6 +165,15 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
 
         /** Answers computed after "=" on page [index]. */
         fun answers(index: Int): List<PageAnswer> = emptyList()
+
+        /** Rectangles of the links on page [index] (shown with a frame; a finger tap follows them). */
+        fun links(index: Int): List<RectF> = emptyList()
+
+        /** Writing on page [index] that has sound to it, shown while listening by touch is on. */
+        fun soundMarks(index: Int): List<RectF> = emptyList()
+
+        /** Follows the link at ([x], [y]) of page [index]; false when there is none. */
+        fun followLink(index: Int, x: Float, y: Float): Boolean = false
     }
 
     var listener: Listener? = null
@@ -179,6 +221,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         }
 
     var eraserMode = EraserMode.WHOLE
+    var eraserTarget = EraserTarget.ALL
 
     /**
      * Eyedropper: the next touch (pen or finger) picks the colour under it from what is on
@@ -214,6 +257,32 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
     /** A zigzag scribbled over writing erases it. */
     var scribbleErase = true
 
+    /** Layers not drawn; and those whose elements are not erased, selected or moved (hidden or locked). */
+    var hiddenLayers: Set<Int> = emptySet()
+        set(value) {
+            if (field == value) return
+            field = value
+            hiddenCache.clear()
+            pageLayer.invalidate()
+        }
+    var frozenLayers: Set<Int> = emptySet()
+
+    private fun editable(x: Any) = frozenLayers.isEmpty() || dev.inknotes.data.Layers.of(x) !in frozenLayers
+
+    /** Elements of hidden layers per page, made again when the page changes. */
+    private val hiddenCache = java.util.WeakHashMap<PageDocument, Pair<Int, Set<Any>>>()
+
+    private fun hiddenOf(doc: PageDocument): Set<Any> {
+        if (hiddenLayers.isEmpty()) return emptySet()
+        hiddenCache[doc]?.takeIf { it.first == doc.revision }?.let { return it.second }
+        val set: MutableSet<Any> = Collections.newSetFromMap(IdentityHashMap())
+        for (x in doc.strokes) if (x.layer in hiddenLayers) set += x
+        for (x in doc.fills) if (x.layer in hiddenLayers) set += x
+        for (x in doc.images) if (x.layer in hiddenLayers) set += x
+        hiddenCache[doc] = doc.revision to set
+        return set
+    }
+
     /** The ruler lying over the pages (world coordinates). */
     val ruler = Ruler()
     var highlighterColor = 0x80FFEB3B.toInt()
@@ -248,7 +317,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
     private val density = resources.displayMetrics.density
     private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop.toFloat()
 
-    private enum class Mode { NONE, DRAW, SNAPPED, ERASE, GESTURE, PATH, MOVE, LASER, RULER, RULER_DRAW }
+    private enum class Mode { NONE, DRAW, SNAPPED, ERASE, GESTURE, PATH, MOVE, LASER, RULER, RULER_DRAW, SPACE }
 
     private var mode = Mode.NONE
 
@@ -374,6 +443,20 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         pageLayer.invalidate()
     }
     private val flashPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x55FFB300 }
+    private val spacePaint = Paint()
+    private val soundPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        color = 0xAAFF6D00.toInt()
+        strokeCap = Paint.Cap.ROUND
+    }
+    private val linkPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        color = 0xAA2979FF.toInt()
+    }
+    private val guidePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        color = GUIDE_COLOR
+    }
 
     init {
         setBackgroundColor(PaperStyle.LIGHT.desk)
@@ -431,11 +514,13 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         applyViewport()
     }
 
-    fun scrollToPage(index: Int) {
+    /** Page [index] at the top of the view, or the place [y] units down it (a bit below the top edge). */
+    fun scrollToPage(index: Int, y: Float = 0f) {
         if (index !in tops.indices) return
         stopFling()
         val v = FloatArray(9).also(worldToView::getValues)
-        v[Matrix.MTRANS_Y] = PAGE_MARGIN * density - tops[index] * v[Matrix.MSCALE_X]
+        val margin = if (y > 0f) 3 * PAGE_MARGIN * density else PAGE_MARGIN * density
+        v[Matrix.MTRANS_Y] = margin - (tops[index] + y) * v[Matrix.MSCALE_X]
         worldToView.setValues(v)
         applyViewport()
     }
@@ -657,7 +742,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             else -> sizeOf(kind)
         }
         val dash = if (kind == InkKind.DASHED) s.dash ?: dashStyle else null
-        return PageStroke(kind, Stroke(InkBrushes.create(kind, s.stroke.brush.colorIntArgb, size), s.stroke.inputs), dash)
+        return PageStroke(kind, Stroke(InkBrushes.create(kind, s.stroke.brush.colorIntArgb, size), s.stroke.inputs), dash, s.layer)
     }
 
     /** Width a line shows (page units): a fountain pen's size is its nib, twice its usual line. */
@@ -707,7 +792,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             when {
                 s !in selected -> s
                 s.kind != InkKind.DASHED -> s.also(newSelection::add)
-                else -> PageStroke(s.kind, s.stroke, style).also(newSelection::add)
+                else -> PageStroke(s.kind, s.stroke, style, s.layer).also(newSelection::add)
             }
         }
         doc.edit(strokes = strokes)
@@ -721,6 +806,44 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
     val selectionPageIndex get() = selectionPage
 
     /** Width and height of the selection in page units, or null with nothing selected. */
+    /** Moves the selection onto [layer]; it stays selected unless that layer is hidden or locked. */
+    fun moveSelectionToLayer(layer: Int) {
+        val doc = doc(selectionPage) ?: return
+        if (selected.isEmpty()) return
+        val moved = ArrayList<Any>()
+        doc.edit(
+            doc.strokes.map { if (it in selected) it.onLayer(layer).also(moved::add) else it },
+            doc.fills.map { if (it in selected) it.copy(layer = layer).also(moved::add) else it },
+            doc.images.map { if (it in selected) it.onLayer(layer).also(moved::add) else it },
+        )
+        if (layer in frozenLayers) reselect(emptyList()) else reselect(moved)
+        changed()
+    }
+
+    /** The one text box selected, or null. */
+    fun selectedTextBox(): PageImage? = selected.singleOrNull()?.let { it as? PageImage }?.takeIf { it.isText }
+
+    /** Puts [img] in place of the selected text box (same page), keeping it selected. */
+    fun replaceTextBox(img: PageImage) {
+        val old = selectedTextBox() ?: return
+        val doc = doc(selectionPage) ?: return
+        doc.edit(images = doc.images.map { if (it === old) img else it })
+        reselect(listOf(img))
+        changed()
+    }
+
+    /** The selection gives way to [img] (handwriting turned into typed text), in one step. */
+    fun replaceSelection(img: PageImage) {
+        val doc = doc(selectionPage) ?: return
+        if (selected.isEmpty()) return
+        doc.edit(doc.strokes.filterNot { it in selected }, doc.fills.filterNot { it in selected }, doc.images.filterNot { it in selected } + img)
+        reselect(listOf(img))
+        changed()
+    }
+
+    /** Bounds of the selection on its page (before any drag in progress). */
+    fun selectionRect(): RectF? = rawSelectionBounds()?.let(::RectF)
+
     fun selectionSize(): Pair<Float, Float>? = rawSelectionBounds()?.let { it.width() to it.height() }
 
     /**
@@ -1027,6 +1150,10 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                 }
                 Mode.RULER -> moveRuler(e)
                 Mode.RULER_DRAW -> forEachSample(e) { x, y, _ -> rulerDrawTo(x, y) }
+                Mode.SPACE -> {
+                    val i = e.findPointerIndex(activePointerId)
+                    if (i >= 0) spaceTo(toPage(spacePage, e.getX(i), e.getY(i))[1])
+                }
                 Mode.NONE, Mode.SNAPPED -> Unit
             }
 
@@ -1048,6 +1175,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                     Mode.LASER -> laser.end()
                     Mode.RULER -> endRulerMove()
                     Mode.RULER_DRAW -> endRulerDraw()
+                    Mode.SPACE -> endSpace()
                     Mode.NONE, Mode.SNAPPED -> Unit
                 }
                 mode = Mode.NONE
@@ -1077,12 +1205,17 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                         moveAngle = 0f
                         vertexPoints = null
                         vertexIndex = -1
+                        connectors = emptyList()
                         clearSnap()
                         pageLayer.invalidate()
                     }
                     Mode.RULER -> endRulerMove()
                     Mode.RULER_DRAW -> {
                         rulerEdge = 0
+                        pageLayer.invalidate()
+                    }
+                    Mode.SPACE -> {
+                        spaceY0 = Float.NaN
                         pageLayer.invalidate()
                     }
                     else -> Unit
@@ -1127,6 +1260,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             }
             Mode.RULER -> startRulerMove(e)
             Mode.RULER_DRAW -> startRulerDraw(e, index)
+            Mode.SPACE -> startSpace(e, index)
             Mode.NONE, Mode.SNAPPED -> Unit
         }
     }
@@ -1148,6 +1282,10 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             (MotionEvent.BUTTON_STYLUS_PRIMARY or MotionEvent.BUTTON_STYLUS_SECONDARY) != 0
         if (tops.isEmpty()) return Mode.GESTURE
         val world = floatArrayOf(e.getX(index), e.getY(index)).also(viewToWorld::mapPoints)
+        if (insertingSpace && (pen || toolType == MotionEvent.TOOL_TYPE_FINGER)) {
+            activePage = pageAt(e.getX(index), e.getY(index))
+            return Mode.SPACE
+        }
 
         // Fingers on the ruler move it.
         if (!pen && !eraserEnd && ruler.hit(world[0], world[1])) return Mode.RULER
@@ -1344,7 +1482,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             }
             val doc = doc(wet.page) ?: continue
             if (scribbleErase && (wet.kind == InkKind.PEN || wet.kind == InkKind.PENCIL || wet.kind == InkKind.FOUNTAIN)) {
-                val gone = runCatching { Scribble.covered(stored, doc.strokes) }.getOrNull()
+                val gone = runCatching { Scribble.covered(stored, doc.strokes.filter(::editable)) }.getOrNull()
                 if (gone != null) {
                     val drop: MutableSet<PageStroke> = Collections.newSetFromMap(IdentityHashMap())
                     drop.addAll(gone)
@@ -1358,7 +1496,9 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             } else {
                 null
             }
-            doc.add(PageStroke(wet.kind, aligned ?: stored, wet.dash))
+            val added = PageStroke(wet.kind, aligned ?: stored, wet.dash)
+            doc.add(added)
+            PageEdits.bounds(added)?.let { listener?.onInkAdded(wet.page, it) }
         }
         inProgressView.removeFinishedStrokes(strokes.keys)
         pageLayer.invalidate()
@@ -1449,6 +1589,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         }
         val shapeStrokes = paths.map { path -> PageStroke(kind, Stroke(brush, shapeInputs(path, pressure)), if (kind == InkKind.DASHED) wet.dash else null) }
         doc?.let { it.edit(strokes = it.strokes + shapeStrokes, fills = it.fills + shapeFills) }
+        shapeStrokes.mapNotNull { PageEdits.bounds(it) }.reduceOrNull { a, b -> RectF(a).apply { union(b) } }?.let { listener?.onInkAdded(wet.page, it) }
         performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
         changed()
     }
@@ -1519,13 +1660,15 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         val strokes: List<PageStroke>
         val fills: List<PageFill>
         // Far strokes are ruled out by their remembered bounds: a full page has thousands.
+        val target = eraserTarget
         fun near(s: PageStroke): Boolean {
+            if (!target.strokes(s.kind) || !editable(s)) return false
             val b = PageCache.strokeBounds(s) ?: return false
             return PageEdits.segmentNear(b, ax, ay, bx, by, r + s.stroke.brush.size)
         }
         if (eraserMode == EraserMode.WHOLE) {
             strokes = doc.strokes.filterNot { near(it) && PageEdits.strokeTouched(it, ax, ay, bx, by, r) }
-            fills = doc.fills.filterNot { PageEdits.fillTouched(it, bx, by, r) }
+            fills = if (target.fills) doc.fills.filterNot { editable(it) && PageEdits.fillTouched(it, bx, by, r) } else doc.fills
             changed = strokes.size != doc.strokes.size || fills.size != doc.fills.size
         } else {
             val kept = ArrayList<PageStroke>(doc.strokes.size)
@@ -1540,7 +1683,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             }
             strokes = kept
             fills = doc.fills.map { f ->
-                if (PageEdits.segmentNear(f.bounds, ax, ay, bx, by, r)) {
+                if (target.fills && editable(f) && PageEdits.segmentNear(f.bounds, ax, ay, bx, by, r)) {
                     changed = true
                     PageEdits.cutFill(f, ax, ay, bx, by, r)
                 } else {
@@ -1657,9 +1800,9 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         val doc = doc(activePage) ?: return
         val bounds = PageFill(lasso, FillPattern.SOLID, 0).bounds
         val items = ArrayList<Any>()
-        doc.strokes.filterTo(items) { s -> PageCache.strokeBounds(s)?.let { RectF.intersects(it, bounds) } == true && PageEdits.strokeInLasso(s, lasso, bounds) }
-        doc.fills.filterTo(items) { PageEdits.fillInLasso(it, lasso) }
-        doc.images.filterTo(items) { PageEdits.imageInLasso(it, lasso) }
+        doc.strokes.filterTo(items) { s -> editable(s) && PageCache.strokeBounds(s)?.let { RectF.intersects(it, bounds) } == true && PageEdits.strokeInLasso(s, lasso, bounds) }
+        doc.fills.filterTo(items) { editable(it) && PageEdits.fillInLasso(it, lasso) }
+        doc.images.filterTo(items) { editable(it) && PageEdits.imageInLasso(it, lasso) }
         selectionPage = activePage
         reselect(items)
     }
@@ -1684,6 +1827,8 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             listener?.onAnswerTapped(it)
             return
         }
+        if (source?.followLink(page, p[0], p[1]) == true) return
+        if (listener?.listenAt(page, p[0], p[1]) == true) return
         if (tool == Tool.AREA) autoArea(page, p[0], p[1]) else selectAt(page, p[0], p[1])
     }
 
@@ -1700,17 +1845,17 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         }
         selectionPage = page
         // The whole figure first (a stamp, a table, a drawing); a second tap picks a part of it.
-        reselect(Objects.joined(doc, hit))
+        reselect(Objects.joined(doc, hit, ::editable))
     }
 
     /** The topmost stroke, fill or picture at the point (page coordinates), or null. */
     private fun hitAt(doc: PageDocument, x: Float, y: Float): Any? {
         val slop = TAP_SLOP_DP * density / currentScale()
         return doc.strokes.lastOrNull { s ->
-            PageCache.strokeBounds(s)?.let { b -> x >= b.left - slop && x <= b.right + slop && y >= b.top - slop && y <= b.bottom + slop } == true &&
+            editable(s) && PageCache.strokeBounds(s)?.let { b -> x >= b.left - slop && x <= b.right + slop && y >= b.top - slop && y <= b.bottom + slop } == true &&
                 PageEdits.strokeTouched(s, x, y, x, y, slop)
-        } ?: doc.fills.lastOrNull { PageEdits.fillTouched(it, x, y, slop) }
-            ?: doc.images.lastOrNull { PageEdits.bounds(it).contains(x, y) }
+        } ?: doc.fills.lastOrNull { editable(it) && PageEdits.fillTouched(it, x, y, slop) }
+            ?: doc.images.lastOrNull { editable(it) && PageEdits.bounds(it).contains(x, y) }
     }
 
     /** A quick touch inside the selection that did not move it (a finger, or the pen with the lasso). */
@@ -1740,10 +1885,10 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         val hit = doc?.let { hitAt(it, p[0], p[1]) }
         when {
             doc == null || hit == null -> pageLayer.invalidate()
-            hit !in selected -> reselect(Objects.joined(doc, hit))
+            hit !in selected -> reselect(Objects.joined(doc, hit, ::editable))
             selected.size > 1 -> reselect(listOf(hit))
             else -> {
-                val group = Objects.joined(doc, hit)
+                val group = Objects.joined(doc, hit, ::editable)
                 if (group.size > 1) reselect(group) else pageLayer.invalidate()
             }
         }
@@ -1782,6 +1927,172 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
     // One worker, ending when idle: nothing to shut down when the editor goes away.
     private val areaExec = java.util.concurrent.ThreadPoolExecutor(0, 1, 10, java.util.concurrent.TimeUnit.SECONDS, java.util.concurrent.LinkedBlockingQueue())
 
+    // --- inserting space
+
+    /**
+     * One-shot mode: the next stroke down the page (pen or finger) opens that much room at the
+     * place it began, moving everything below down; a stroke up closes empty room. What no
+     * longer fits goes to a new page after this one.
+     */
+    var insertingSpace = false
+        set(value) {
+            field = value
+            if (!value) spaceY0 = Float.NaN
+            pageLayer.invalidate()
+        }
+    private var spacePage = 0
+    private var spaceY0 = Float.NaN
+    private var spaceDy = 0f
+
+    private fun startSpace(e: MotionEvent, index: Int) {
+        activePointerId = e.getPointerId(index)
+        spacePage = activePage
+        spaceY0 = toPage(spacePage, e.getX(index), e.getY(index))[1].coerceIn(0f, source?.pageHeight(spacePage) ?: 0f)
+        spaceDy = 0f
+        pageLayer.invalidate()
+    }
+
+    private fun spaceTo(y: Float) {
+        val doc = doc(spacePage) ?: return
+        var dy = y - spaceY0
+        // Closing room: no further than the nearest writing below the line reaching what is above.
+        if (dy < 0f) dy = max(dy, -closableSpace(doc, spaceY0))
+        spaceDy = dy
+        pageLayer.invalidate()
+    }
+
+    /** Elements whose middle is below [y0]: they move. */
+    private fun below(doc: PageDocument, y0: Float): Triple<List<PageStroke>, List<PageFill>, List<PageImage>> = Triple(
+        doc.strokes.filter { (PageCache.strokeBounds(it)?.centerY() ?: -1f) >= y0 },
+        doc.fills.filter { it.bounds.centerY() >= y0 },
+        doc.images.filter { PageEdits.bounds(it).centerY() >= y0 },
+    )
+
+    /** Free paper between [y0] and the first element below it, and above it the last one reaching down. */
+    private fun closableSpace(doc: PageDocument, y0: Float): Float {
+        val (s, f, i) = below(doc, y0)
+        val moving: Set<Any> = Collections.newSetFromMap<Any>(IdentityHashMap()).apply { addAll(s); addAll(f); addAll(i) }
+        val topBelow = (s.mapNotNull { PageCache.strokeBounds(it)?.top } + f.map { it.bounds.top } + i.map { PageEdits.bounds(it).top }).minOrNull() ?: return 0f
+        val bottomAbove = (
+            doc.strokes.filter { it !in moving }.mapNotNull { PageCache.strokeBounds(it)?.bottom } +
+                doc.fills.filter { it !in moving }.map { it.bounds.bottom } + doc.images.filter { it !in moving }.map { PageEdits.bounds(it).bottom }
+            ).filter { it <= topBelow }.maxOrNull() ?: 0f
+        return max(0f, topBelow - max(bottomAbove, 0f) - SPACE_GAP)
+    }
+
+    private fun endSpace() {
+        val page = spacePage
+        val y0 = spaceY0
+        val dy = spaceDy
+        spaceY0 = Float.NaN
+        insertingSpace = false
+        listener?.onSpaceDone()
+        val doc = doc(page)
+        if (doc == null || y0.isNaN() || abs(dy) < 1f) {
+            pageLayer.invalidate()
+            return
+        }
+        val (s, f, i) = below(doc, y0)
+        val t = PageEdits.Transform.translation(0f, dy)
+        val height = source?.pageHeight(page) ?: PAGE_H
+        val bottomOf = { x: Any -> when (x) { is PageStroke -> PageCache.strokeBounds(x)?.bottom ?: 0f; is PageFill -> x.bounds.bottom; else -> PageEdits.bounds(x as PageImage).bottom } }
+        val over: Set<Any> = Collections.newSetFromMap<Any>(IdentityHashMap()).apply {
+            if (dy > 0f) for (x in s + f + i) if (bottomOf(x) + dy > height - SPACE_GAP) add(x)
+        }
+        val moved = Collections.newSetFromMap<Any>(IdentityHashMap()).apply { addAll(s); addAll(f); addAll(i) }
+        val edit = {
+            if (over.isNotEmpty()) {
+                // What no longer fits keeps its layout at the top of a new page.
+                val next = listener?.addPageAfter(page)
+                val dst = next?.let(::doc)
+                if (next != null && dst != null) {
+                    val topOf = { x: Any -> when (x) { is PageStroke -> PageCache.strokeBounds(x)?.top ?: 0f; is PageFill -> x.bounds.top; else -> PageEdits.bounds(x as PageImage).top } }
+                    val top = over.minOf(topOf)
+                    val shift = PageEdits.Transform.translation(0f, SPACE_TOP - top)
+                    dst.edit(
+                        dst.strokes + s.filter { it in over }.map { PageEdits.transform(it, shift) },
+                        dst.fills + f.filter { it in over }.map { PageEdits.transform(it, shift) },
+                        dst.images + i.filter { it in over }.map { PageEdits.transform(it, shift) },
+                    )
+                }
+            }
+            doc.edit(
+                doc.strokes.filter { it !in over }.map { if (it in moved) PageEdits.transform(it, t) else it },
+                doc.fills.filter { it !in over }.map { if (it in moved) PageEdits.transform(it, t) else it },
+                doc.images.filter { it !in over }.map { if (it in moved) PageEdits.transform(it, t) else it },
+            )
+        }
+        listener?.editsTogether(edit) ?: edit()
+        changed()
+    }
+
+    // --- lines and arrows that follow what they connect
+
+    /**
+     * A straight line or arrow not selected with one or both ends on the selection: the ends
+     * on it move with it ([moveStart], [moveEnd]); [startHead], [endHead] are arrowheads there.
+     */
+    private class Connector(
+        val line: PageStroke,
+        val pts: FloatArray,
+        val moveStart: Boolean,
+        val moveEnd: Boolean,
+        val startHead: PageFill?,
+        val endHead: PageFill?,
+    )
+
+    private var connectors: List<Connector> = emptyList()
+    private val connectorSet: Set<Any> get() = connectors.flatMapTo(Collections.newSetFromMap(IdentityHashMap())) { listOfNotNull(it.line, it.startHead, it.endHead) }
+
+    private fun findConnectors(doc: PageDocument): List<Connector> {
+        val tol = CONNECT_DP * density / currentScale()
+        val targets = Magnet.targets(doc.strokes.filter { it in selected })
+        val boxes = doc.images.filter { it in selected }.map { PageEdits.bounds(it) } +
+            doc.fills.filter { it in selected && it.pattern != FillPattern.INK }.map { RectF(it.bounds) }
+        fun touches(x: Float, y: Float) = targets.snap(x, y, tol) != null ||
+            boxes.any { x in it.left - tol..it.right + tol && y in it.top - tol..it.bottom + tol }
+        val heads = doc.fills.filter { it !in selected && it.pattern == FillPattern.INK && it.outline.size == 6 && it.cuts.isEmpty() }
+        val out = ArrayList<Connector>()
+        for (st in doc.strokes) {
+            if (st in selected || (st.kind != InkKind.LINE && st.kind != InkKind.DASHED)) continue
+            val pl = Magnet.polyline(st) ?: continue
+            if (pl.size < 4) continue
+            val n = pl.size
+            fun headAt(x: Float, y: Float) = heads.firstOrNull { PageEdits.inside(x, y, it.outline) }
+            val sh = headAt(pl[0], pl[1])
+            val eh = headAt(pl[n - 2], pl[n - 1])
+            val ms = touches(pl[0], pl[1]) || (sh != null && touches(sh.outline[0], sh.outline[1]))
+            val me = touches(pl[n - 2], pl[n - 1]) || (eh != null && touches(eh.outline[0], eh.outline[1]))
+            if (ms || me) out += Connector(st, pl, ms, me, sh, eh)
+            if (out.size >= MAX_CONNECTORS) break
+        }
+        return out
+    }
+
+    /** The connector's line and heads with its attached ends moved by ([dx], [dy]). */
+    private fun follow(c: Connector, dx: Float, dy: Float): Pair<FloatArray, List<PageFill>> {
+        val p = c.pts.copyOf()
+        val n = p.size
+        if (c.moveStart) { p[0] += dx; p[1] += dy }
+        if (c.moveEnd) { p[n - 2] += dx; p[n - 1] += dy }
+        // Both ends on the selection: the whole line moves, bends included.
+        if (c.moveStart && c.moveEnd) for (k in 2 until n - 2 step 2) { p[k] += dx; p[k + 1] += dy }
+        val heads = ArrayList<PageFill>()
+        fun head(h: PageFill?, ex: Float, ey: Float, px: Float, py: Float, oldEx: Float, oldEy: Float) {
+            h ?: return
+            val o = h.outline
+            val len = hypot(o[0] - (o[2] + o[4]) / 2, o[1] - (o[3] + o[5]) / 2)
+            val reach = hypot(o[0] - oldEx, o[1] - oldEy)
+            val d = hypot(ex - px, ey - py).coerceAtLeast(1e-3f)
+            val tx = ex + (ex - px) / d * reach
+            val ty = ey + (ey - py) / d * reach
+            heads += h.copy(outline = arrowHead(px, py, tx, ty, len))
+        }
+        head(c.startHead, p[0], p[1], p[2], p[3], c.pts[0], c.pts[1])
+        head(c.endHead, p[n - 2], p[n - 1], p[n - 4], p[n - 3], c.pts[n - 2], c.pts[n - 1])
+        return p to heads
+    }
+
     // --- dragging the selection
 
     private fun startMove(e: MotionEvent, index: Int) {
@@ -1802,6 +2113,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         turnX = raw.centerX()
         turnY = raw.centerY()
         clearSnap()
+        connectors = emptyList()
         val doc = doc(selectionPage)
         moveTargets = null
         moveAnchors = FloatArray(0)
@@ -1824,6 +2136,9 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             return
         }
         if (rotating || resizing) return
+        connectors = findConnectors(doc)
+        moveBounds = RectF(raw)
+        guideBoxes = guideTargets(doc)
         // What the selection can stick to, and its own points that stick.
         val anchors = ArrayList<Float>()
         for (s in doc.strokes) if (s in selected) Magnet.points(s)?.let { for (v in it) anchors += v }
@@ -1843,6 +2158,72 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
     private fun clearSnap() {
         snapX = Float.NaN
         snapY = Float.NaN
+        guideLines = FloatArray(0)
+    }
+
+    /** Selection bounds when the drag began, and what its edges and middle may line up with. */
+    private var moveBounds = RectF()
+    private var guideBoxes: List<RectF> = emptyList()
+
+    /** Guides shown while dragging: x0, y0, x1, y1 of each line, in page units. */
+    private var guideLines = FloatArray(0)
+
+    /**
+     * Boxes of what a moved selection lines up with: pictures, hatching and even lines (shapes,
+     * stamps, tables) that are not selected, and the page itself (its edges and middle).
+     */
+    private fun guideTargets(doc: PageDocument): List<RectF> {
+        val out = ArrayList<RectF>()
+        out += RectF(0f, 0f, source?.pageWidth(selectionPage) ?: PAGE_W, source?.pageHeight(selectionPage) ?: PAGE_W)
+        for (img in doc.images) if (img !in selected) out += PageEdits.bounds(img)
+        for (f in doc.fills) if (f !in selected && f.pattern != FillPattern.INK) out += RectF(f.bounds)
+        for (st in doc.strokes) {
+            if (st in selected || st.kind != InkKind.LINE) continue
+            PageCache.strokeBounds(st)?.let { b -> if (b.width() > 4f || b.height() > 4f) out += RectF(b) }
+            if (out.size > MAX_GUIDE_TARGETS) break
+        }
+        return out
+    }
+
+    /**
+     * Lines the dragged selection up with another object: its left edge, middle or right edge
+     * with one of theirs, likewise top, middle and bottom. Returns the shift that does it and
+     * records the guides to draw.
+     */
+    private fun guideMove(dx: Float, dy: Float, reach: Float): FloatArray {
+        val b = moveBounds
+        if (b.isEmpty && b.width() <= 0f && b.height() <= 0f) return floatArrayOf(0f, 0f)
+        val mine = floatArrayOf(b.left + dx, b.centerX() + dx, b.right + dx)
+        val mineY = floatArrayOf(b.top + dy, b.centerY() + dy, b.bottom + dy)
+        var bestX = reach
+        var shiftX = 0f
+        var lineX: RectF? = null
+        var atX = 0f
+        var bestY = reach
+        var shiftY = 0f
+        var lineY: RectF? = null
+        var atY = 0f
+        for (t in guideBoxes) {
+            val theirs = floatArrayOf(t.left, t.centerX(), t.right)
+            val theirsY = floatArrayOf(t.top, t.centerY(), t.bottom)
+            for (m in mine) for (v in theirs) {
+                val d = abs(v - m)
+                if (d < bestX) { bestX = d; shiftX = v - m; lineX = t; atX = v }
+            }
+            for (m in mineY) for (v in theirsY) {
+                val d = abs(v - m)
+                if (d < bestY) { bestY = d; shiftY = v - m; lineY = t; atY = v }
+            }
+        }
+        val lines = ArrayList<Float>()
+        val top = b.top + dy + shiftY
+        val bottom = b.bottom + dy + shiftY
+        val left = b.left + dx + shiftX
+        val right = b.right + dx + shiftX
+        lineX?.let { t -> lines += listOf(atX, min(t.top, top), atX, max(t.bottom, bottom)) }
+        lineY?.let { t -> lines += listOf(min(t.left, left), atY, max(t.right, right), atY) }
+        guideLines = lines.toFloatArray()
+        return floatArrayOf(shiftX, shiftY)
     }
 
     /** Distance of the rotate handle above the selection frame, in page units. */
@@ -1928,8 +2309,12 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
     /** Pulls the moved selection so its nearest point sticks to a line end, corner or line. */
     private fun magnetMove() {
         clearSnap()
-        val targets = moveTargets ?: return
         val reach = MAGNET_DP * density / currentScale()
+        val targets = moveTargets
+        if (targets == null) {
+            snapToGuides(reach)
+            return
+        }
         var best = Float.MAX_VALUE
         var cx = 0f
         var cy = 0f
@@ -1948,10 +2333,22 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                 snapY = snap.y
             }
         }
-        if (best == Float.MAX_VALUE) return
+        if (best == Float.MAX_VALUE) {
+            // Nothing to connect to: line up with other objects instead.
+            snapToGuides(reach)
+            return
+        }
         snapPage = selectionPage
         moveDx += cx
         moveDy += cy
+    }
+
+    private fun snapToGuides(reach: Float) {
+        if (guideBoxes.isEmpty()) return
+        val shift = guideMove(moveDx, moveDy, GUIDE_REACH * reach)
+        moveDx += shift[0]
+        moveDy += shift[1]
+        snapPage = selectionPage
     }
 
     private fun endMove() {
@@ -2010,11 +2407,22 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             return
         }
         val moved = ArrayList<Any>()
+        // Lines and arrows with an end on the selection follow a plain move.
+        val follows = IdentityHashMap<Any, Any>()
+        if (kx == 1f && ky == 1f && angle == 0f) {
+            for (c in connectors) {
+                val (pts, heads) = follow(c, dx, dy)
+                follows[c.line] = Magnet.restroke(c.line, pts)
+                var k = 0
+                for (h in listOfNotNull(c.startHead, c.endHead)) follows[h] = heads[k++]
+            }
+        }
+        connectors = emptyList()
         val strokes = doc.strokes.map { s ->
-            if (s in selected) PageEdits.transform(s, t).also(moved::add) else s
+            if (s in selected) PageEdits.transform(s, t).also(moved::add) else (follows[s] as? PageStroke) ?: s
         }
         val fills = doc.fills.map { f ->
-            if (f in selected) PageEdits.transform(f, t).also(moved::add) else f
+            if (f in selected) PageEdits.transform(f, t).also(moved::add) else (follows[f] as? PageFill) ?: f
         }
         val images = doc.images.map { img ->
             if (img in selected) PageEdits.transform(img, t).also(moved::add) else img
@@ -2599,20 +3007,27 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                     canvas.restore()
                     continue
                 }
-                val sel: Set<Any> = if (i == selectionPage && selected.isNotEmpty()) selected else emptySet()
+                val sel: Set<Any> = when {
+                    i != selectionPage || selected.isEmpty() -> emptySet()
+                    // Lines that follow the dragged selection are drawn with it, as they will be.
+                    dragging && connectors.isNotEmpty() && moveKx == 1f && moveKy == 1f && moveAngle == 0f -> Collections.newSetFromMap<Any>(IdentityHashMap()).apply { addAll(selected); addAll(connectorSet) }
+                    else -> selected
+                }
+                val hidden = hiddenOf(doc)
+                val out: Set<Any> = if (hidden.isEmpty()) sel else Collections.newSetFromMap<Any>(IdentityHashMap()).apply { addAll(sel); addAll(hidden) }
                 val look = PageCache.Look(widths[i], heights[i], pageRenderer.paper, pageRenderer.dark, pageRenderer.photo, pdf, doc.images.map { src.image(it.file) })
                 // The cached picture holds the paper too: the background is drawn only without it.
-                when (cache.draw(canvas, doc, look, scale, sel, visibleRect(i), if (pdf != null) src.pdfRegion(i) else null) { src.image(it) }) {
+                when (cache.draw(canvas, doc, look, scale, out, visibleRect(i), if (pdf != null) src.pdfRegion(i) else null) { src.image(it) }) {
                     PageCache.Result.DRAWN -> {
                         pageRenderer.drawEdge(canvas, edgeWidth = 1f / scale)
                         canvas.clipRect(0f, 0f, widths[i], heights[i])
-                        drawSpoilers(canvas, doc, toScreen, null, sel)
+                        drawSpoilers(canvas, doc, toScreen, null, out)
                     }
                     // Zoomed in: only what is on screen, a small part of the page.
                     PageCache.Result.ZOOMED -> {
                         pageRenderer.drawBackground(canvas, edgeWidth = 1f / scale)
-                        drawElements(canvas, src, doc, toScreen, visibleRect(i), exclude = sel)
-                        drawSpoilers(canvas, doc, toScreen, visibleRect(i), sel)
+                        drawElements(canvas, src, doc, toScreen, visibleRect(i), exclude = out)
+                        drawSpoilers(canvas, doc, toScreen, visibleRect(i), out)
                     }
                     // A page appearing while scrolling: its thumbnail until the picture is rendered.
                     PageCache.Result.NOT_READY -> {
@@ -2689,6 +3104,19 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                     is Answer.Graph -> {
                         drawGraph(canvas, a, ans, color)
                         graphShapes[a]?.box?.let { bounds(a).set(it) }
+                    }
+                    is Answer.Surface -> {
+                        val box = RectF(a.x, a.y, a.x + a.size * Plot.WIDTH, a.y + a.size * Plot.HEIGHT)
+                        graphFill.color = if (dark) 0x1882AAFF else 0x0D1A56DB
+                        canvas.drawRoundRect(box, a.size * 0.25f, a.size * 0.25f, graphFill)
+                        // Drawn once into a picture: hundreds of patches every frame would slow scrolling.
+                        if (dark != surfaceDark) {
+                            surfaceDark = dark
+                            surfaceBitmaps.clear()
+                        }
+                        val bmp = surfaceBitmaps.getOrPut(a) { SurfaceArt.bitmap(ans, SURFACE_PX, color, dark) }
+                        canvas.drawBitmap(bmp, null, box, surfacePaint)
+                        bounds(a).set(box)
                     }
                     is Answer.Grid -> {
                         val rows = ans.rows
@@ -2773,6 +3201,9 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         }
 
         private val graphShapes = java.util.WeakHashMap<PageAnswer, GraphShape>()
+        private val surfaceBitmaps = java.util.WeakHashMap<PageAnswer, Bitmap>()
+        private var surfaceDark = false
+        private val surfacePaint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
 
         /** Where each answer was last drawn (page units), to find the one a finger taps. */
         private val answerBounds = java.util.WeakHashMap<PageAnswer, RectF>()
@@ -2820,6 +3251,27 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
 
         /** Area preview, lasso/outline being traced and selection frame of page [i]. */
         private fun drawOverlays(canvas: Canvas, i: Int) {
+            if (!spaceY0.isNaN() && spacePage == i) {
+                val w = source?.pageWidth(i) ?: PAGE_W
+                val y1 = spaceY0 + spaceDy
+                spacePaint.color = if (spaceDy >= 0f) 0x302979FF else 0x30E53935
+                canvas.drawRect(0f, min(spaceY0, y1), w, max(spaceY0, y1), spacePaint)
+                guidePaint.strokeWidth = 1.5f * density / currentScale()
+                guidePaint.pathEffect = null
+                canvas.drawLine(0f, spaceY0, w, spaceY0, guidePaint)
+            }
+            source?.links(i)?.takeIf { it.isNotEmpty() }?.let { links ->
+                val scale = currentScale()
+                linkPaint.strokeWidth = 1.2f * density / scale
+                linkPaint.pathEffect = android.graphics.DashPathEffect(floatArrayOf(3f * density / scale, 3f * density / scale), 0f)
+                val pad = 2f * density / scale
+                for (r in links) canvas.drawRoundRect(r.left - pad, r.top - pad, r.right + pad, r.bottom + pad, 3 * pad, 3 * pad, linkPaint)
+            }
+            source?.soundMarks(i)?.takeIf { it.isNotEmpty() }?.let { marks ->
+                val scale = currentScale()
+                soundPaint.strokeWidth = 2f * density / scale
+                for (r in marks) canvas.drawLine(r.left, r.bottom + 2f * density / scale, r.right, r.bottom + 2f * density / scale, soundPaint)
+            }
             val flash = flashRect
             if (flash != null && flashPage == i) canvas.drawRoundRect(flash, FLASH_PAD, FLASH_PAD, flashPaint)
             val area = pendingArea
@@ -2978,15 +3430,34 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             pageRenderer.drawInk(canvas, doc.strokes.filter { it in selected && it.kind.isInk }, toScreen)
             for (s in doc.strokes) if (s in selected && s.kind == InkKind.SPOILER) pageRenderer.drawSpoiler(canvas, s, toScreen, s in revealed)
             canvas.restore()
+            if (moveKx == 1f && moveKy == 1f && moveAngle == 0f) {
+                for (c in connectors) {
+                    val (pts, heads) = follow(c, moveDx, moveDy)
+                    previewPaint.color = InkColors.forPaper(c.line.stroke.brush.colorIntArgb, dark)
+                    previewPaint.strokeWidth = c.line.stroke.brush.size
+                    tracePath.rewind()
+                    tracePath.moveTo(pts[0], pts[1])
+                    for (k in 2 until pts.size step 2) tracePath.lineTo(pts[k], pts[k + 1])
+                    canvas.drawPath(tracePath, previewPaint)
+                    pageRenderer.drawFills(canvas, heads)
+                }
+            }
             drawOverlays(canvas, page)
             drawSnap(canvas, page)
             canvas.restore()
         }
 
-        /** Ring where the moved line or corner snapped. */
+        /** Ring where the moved line or corner snapped; guides the selection lines up along. */
         private fun drawSnap(canvas: Canvas, page: Int) {
-            if (snapX.isNaN() || snapPage != page) return
+            if (snapPage != page) return
             val scale = currentScale()
+            val g = guideLines
+            if (g.isNotEmpty()) {
+                guidePaint.strokeWidth = 1.5f * density / scale
+                guidePaint.pathEffect = android.graphics.DashPathEffect(floatArrayOf(6f * density / scale, 4f * density / scale), 0f)
+                for (i in g.indices step 4) canvas.drawLine(g[i], g[i + 1], g[i + 2], g[i + 3], guidePaint)
+            }
+            if (snapX.isNaN()) return
             handlePaint.style = Paint.Style.STROKE
             handlePaint.strokeWidth = 2f * density / scale
             handlePaint.color = SNAP_COLOR
@@ -3095,6 +3566,24 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         /** How far (on screen) line ends, corners and moved things are pulled to stick. */
         private const val MAGNET_DP = 16f
         private const val MAX_ANCHORS = 64
+
+        /** An end of a line this close (dp) to the selection is attached to it; at most so many lines follow. */
+        private const val CONNECT_DP = 6f
+        private const val MAX_CONNECTORS = 100
+
+        /** Space kept between writing and a closed gap or the page's bottom edge, and where moved-over writing starts on a new page. */
+        private const val SPACE_GAP = 6f
+        private const val SPACE_TOP = 40f
+
+        /** Width of the picture a surface answer is drawn into. */
+        private const val SURFACE_PX = 900
+
+        /** Objects a dragged selection is lined up with (beyond that, the first ones). */
+        private const val MAX_GUIDE_TARGETS = 400
+
+        /** Guides catch the selection from a little closer than line ends do. */
+        private const val GUIDE_REACH = 0.6f
+        private const val GUIDE_COLOR = 0xFFE040FB.toInt()
         private const val SNAP_RING_DP = 9f
         private const val SNAP_COLOR = 0xFFE65100.toInt()
         private const val CORNER_DP = 6f

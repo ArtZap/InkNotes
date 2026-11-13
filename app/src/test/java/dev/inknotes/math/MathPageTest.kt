@@ -408,4 +408,35 @@ class MathPageTest {
         assertEquals("cos60", MathText.normalize("c0s60"))
         assertEquals("25in", MathText.normalize("25in"))
     }
+
+    @Test
+    fun surfaceWhenZIsReadAsTwo() {
+        val s = Sheet()
+        // z = x² + y², the reader taking the z for a 2 first.
+        s.glyph("z", 100f, 100f)
+        s.equals(122f, 112f)
+        s.glyph("x", 150f, 106f, 14f, 16f)
+        s.glyph("2", 166f, 94f, 9f, 12f)
+        s.glyph("+", 182f, 106f, 12f, 12f)
+        s.glyph("y", 200f, 106f, 14f, 16f)
+        s.glyph("2", 216f, 94f, 9f, 12f)
+        val answers = s.answers(mapOf("z" to listOf("2", "z")))
+        assertTrue(answers.any { it.answer is Answer.Surface })
+    }
+
+    @Test
+    fun unitsBeatDigitsForLetters() {
+        // 9,8 м/с² · 3 с with units on: the reader's first guess has digits for the letters.
+        val s = Sheet()
+        s.glyph("9,8m/c^2*3c", 100f, 100f, 160f, 24f)
+        s.equals(280f, 112f)
+        Parser.units = true
+        try {
+            val answers = s.answers(mapOf("9,8m/c^2*3c" to listOf("9,84/2^2*32", "9,8m/c^2*3c")))
+            val text = (answers.single().answer as Answer.Text).lines.single()
+            assertEquals("29,4 м/с", text)
+        } finally {
+            Parser.units = false
+        }
+    }
 }

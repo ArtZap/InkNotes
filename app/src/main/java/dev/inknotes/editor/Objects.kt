@@ -16,9 +16,9 @@ import kotlin.math.max
  */
 object Objects {
 
-    fun joined(doc: PageDocument, seed: Any): List<Any> {
+    fun joined(doc: PageDocument, seed: Any, allowed: (Any) -> Boolean = { true }): List<Any> {
         if (seed !is PageStroke && seed !is PageFill) return listOf(seed)
-        val items: List<Any> = doc.strokes.filter { it.kind != InkKind.HIGHLIGHTER } + doc.fills
+        val items: List<Any> = (doc.strokes.filter { it.kind != InkKind.HIGHLIGHTER } + doc.fills).filter(allowed)
         val samples = IdentityHashMap<Any, FloatArray>()
         fun pts(x: Any): FloatArray = samples.getOrPut(x) { if (x is PageStroke) sample(x) else (x as PageFill).outline }
         fun box(x: Any): RectF? = if (x is PageStroke) PageCache.strokeBounds(x) else (x as PageFill).bounds

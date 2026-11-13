@@ -86,6 +86,10 @@ class Parser private constructor(private val toks: List<Tok>) {
         /** Functions of an angle. */
         val TRIG = setOf("sin", "cos", "tan", "cot")
 
+        /** Units of measurement after numbers (`9,8 м/с² · 3 с`), and physical constants; a setting. */
+        @Volatile
+        var units = false
+
         fun parse(text: String): Expr {
             val p = Parser(lex(text))
             if (p.toks.isEmpty()) throw MathError("пусто")
@@ -139,7 +143,11 @@ class Parser private constructor(private val toks: List<Tok>) {
                             out += Tok.Id("pi")
                             i++
                         } else {
-                            splitLetters(text.substring(start, i), out)
+                            val word = text.substring(start, i)
+                            // After "·" a constant is the constant: 2 кг · g.
+                            val afterTimes = (out.lastOrNull() as? Tok.Op)?.s == "*"
+                            val units = if (Parser.units && unitPlace(out) && !(afterTimes && Units.isConstant(word))) Units.words(word) else null
+                            if (units != null) for (u in units) out += Tok.Id(Units.PREFIX + u) else splitLetters(word, out)
                         }
                     }
                     c == 'π' -> { out += Tok.Id("pi"); i++ }
@@ -163,6 +171,41 @@ class Parser private constructor(private val toks: List<Tok>) {
                 }
             }
             return out
+        }
+
+        /**
+         * Units are read where they are written: right after a number (9,8 m, 3 c), after
+         * another unit (kg m), or after "/" or "·" that follows a number or unit (m/s², Н·м).
+         */
+        private fun unitPlace(out: List<Tok>): Boolean {
+            fun unit(t: Tok?) = t is Tok.Id && t.name.startsWith(Units.PREFIX)
+            val last = out.lastOrNull()
+            val before = out.getOrNull(out.size - 2)
+            return when {
+                last is Tok.N || unit(last) -> true
+                last is Tok.Op && last.s == "/" -> before is Tok.N || unit(before)
+                last is Tok.Op && last.s == "*" -> unit(before)
+                // 9,8 м/с² written as a fraction: its numerator right after the number…
+                last is Tok.Op && last.s == "{" && before is Tok.Cmd && before.name == "frac" -> out.getOrNull(out.size - 3) is Tok.N
+                // …and its denominator after a numerator of units.
+                last is Tok.Op && last.s == "{" && before is Tok.Op && before.s == "}" -> numeratorHasUnits(out)
+                else -> false
+            }
+        }
+
+        /** [out] ends with `\frac{…}{`: the part between the braces holds a unit. */
+        private fun numeratorHasUnits(out: List<Tok>): Boolean {
+            var depth = 0
+            for (k in out.size - 2 downTo 0) {
+                val t = out[k]
+                if (t is Tok.Op && t.s == "}") depth++
+                if (t is Tok.Op && t.s == "{") {
+                    depth--
+                    if (depth == 0) return (out.getOrNull(k - 1) as? Tok.Cmd)?.name == "frac" &&
+                        out.subList(k, out.size - 2).any { it is Tok.Id && it.name.startsWith(Units.PREFIX) }
+                }
+            }
+            return false
         }
 
         /** `xsinx` → x, sin, x; unknown letters are one-letter variables. */
@@ -208,12 +251,20 @@ class Parser private constructor(private val toks: List<Tok>) {
         while (true) {
             when {
                 isOp("*") -> { pos++; factors += unary() }
-                isOp("/") -> { pos++; factors += Expr.Pow(unary(), Expr.MINUS_ONE) }
+                isOp("/") -> { pos++; factors += Expr.Pow(divisor(), Expr.MINUS_ONE) }
                 startsFactor() -> factors += power()
                 else -> break
             }
         }
         return if (factors.size == 1) factors[0] else Expr.Mul(factors)
+    }
+
+    /** What follows "/": a quantity is divided by whole (100 Дж / 2 с is per two seconds). */
+    private fun divisor(): Expr {
+        val d = unary()
+        val units = ArrayList<Expr>()
+        while ((peek() as? Tok.Id)?.name?.startsWith(Units.PREFIX) == true) units += power()
+        return if (units.isEmpty()) d else Expr.Mul(listOf(d) + units)
     }
 
     private fun unary(): Expr = when {
@@ -421,6 +472,7 @@ class Parser private constructor(private val toks: List<Tok>) {
     private fun limit(): Expr = if (isOp("-")) { pos++; Expr.neg(group()) } else group()
 
     private fun identifier(name: String): Expr {
+        if (name.startsWith(Units.PREFIX)) return Expr.Sym(name)
         when (name) {
             "pi" -> return Expr.Sym("pi")
             "inf" -> return Expr.Num(Double.POSITIVE_INFINITY)
