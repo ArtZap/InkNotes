@@ -58,6 +58,12 @@ class MainActivity : ComponentActivity() {
      * among the tabs while it is there. [focused] gets the keyboard and the pen button.
      */
     private var side by mutableStateOf<EditorController?>(null)
+
+    /**
+     * Tabs of the half beside (0.39), [side] the one shown there; empty when there is no half
+     * beside. A notebook is open in one place only: never in both [tabs] and these.
+     */
+    private var sideTabs by mutableStateOf<List<EditorController>>(emptyList())
     private var focused: EditorController? = null
     private var sideShare by mutableStateOf(0.5f)
     private var pickingSide by mutableStateOf(false)
@@ -153,6 +159,8 @@ class MainActivity : ComponentActivity() {
                             sideOpen = side != null,
                             compact = side != null,
                             tabDrag = tabDragging,
+                            // Beside another half its strip shows even with one tab: a tab can be dragged across.
+                            alwaysTabs = side != null,
                         ) }
                     }
                     val other = side
@@ -177,10 +185,16 @@ class MainActivity : ComponentActivity() {
                                     themeMode = themeMode,
                                     onThemeModeChange = changeTheme,
                                     onClose = ::closeSide,
+                                    tabs = sideTabs,
+                                    onTab = ::switchSide,
+                                    onCloseTab = ::closeSideTab,
                                     onSide = ::closeSide,
                                     sideOpen = true,
                                     onSwap = ::swapSides,
                                     compact = true,
+                                    tabDrag = tabDragging,
+                                    rightPane = true,
+                                    onAddTab = { pickingSide = true },
                                 ) }
                             },
                         )
@@ -241,12 +255,11 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun showNotebook(nb: dev.inknotes.data.Notebook, hit: SearchHit? = null) {
-        // Shown beside: it becomes the main one (one notebook is never open twice).
-        side?.takeIf { it.notebook.id == nb.id }?.let { s ->
-            side = null
+        // Open in the half beside: shown there (one notebook is never open twice).
+        sideTabs.firstOrNull { it.notebook.id == nb.id }?.let { s ->
             s.pendingHit = hit
-            tabs = tabs + s
-            editor = s
+            side = s
+            focused = s
             return
         }
         tabs.firstOrNull { it.notebook.id == nb.id }?.let { open ->
@@ -274,30 +287,66 @@ class MainActivity : ComponentActivity() {
     private fun openSide(nb: dev.inknotes.data.Notebook) {
         val main = editor ?: return
         if (nb.id == main.notebook.id) return
-        side?.let { closeSide() }
+        sideTabs.firstOrNull { it.notebook.id == nb.id }?.let { side = it; return }
         val tab = tabs.firstOrNull { it.notebook.id == nb.id }
         if (tab != null) {
             tab.flush()
             tabs = tabs - tab
         }
-        side = tab ?: EditorController(repo, nb, penButton, prefs, darkNow, handwriting, AppServices.get(this).math)
+        val c = tab ?: EditorController(repo, nb, penButton, prefs, darkNow, handwriting, AppServices.get(this).math)
+        // The oldest tab of that half gives way past the limit.
+        val kept = if (sideTabs.size >= MAX_TABS) sideTabs.drop(1).also { sideTabs.first().close() } else sideTabs
+        sideTabs = kept + c
+        side = c
     }
 
+    /** The half beside closes: its tabs are saved and closed. */
     private fun closeSide() {
-        val s = side ?: return
-        s.flush()
+        val all = sideTabs
+        if (all.isEmpty()) return
+        sideTabs = emptyList()
         side = null
         focused = editor
-        s.close()
+        editor?.activateLayer()
+        for (t in all) {
+            t.flush()
+            t.close()
+        }
     }
 
-    /** The two notebooks change places. */
+    /** A tab of the half beside shown there. */
+    private fun switchSide(c: EditorController) {
+        if (c === side || c !in sideTabs) return
+        side?.flush()
+        side = c
+        focused = c
+        c.activateLayer()
+    }
+
+    /** Closes a tab of the half beside; with its last one the half goes. */
+    private fun closeSideTab(c: EditorController) {
+        val i = sideTabs.indexOf(c)
+        if (i < 0) return
+        val rest = sideTabs - c
+        c.flush()
+        if (rest.isEmpty()) {
+            closeSide()
+            return
+        }
+        if (side === c) side = rest.getOrNull(i) ?: rest.last()
+        sideTabs = rest
+        c.close()
+    }
+
+    /** The two halves change places, with their tabs. */
     private fun swapSides() {
         val s = side ?: return
         val m = editor ?: return
         m.flush()
         s.flush()
-        tabs = tabs.map { if (it === m) s else it }
+        val left = tabs
+        tabs = sideTabs
+        sideTabs = left
         editor = s
         side = m
         focused = s
@@ -311,20 +360,30 @@ class MainActivity : ComponentActivity() {
         if (editor === c) editor = rest.getOrNull(i) ?: rest.lastOrNull()
         tabs = rest
         c.close()
+        // The last tab on the left closed while a half beside is open: that half takes its place.
+        if (rest.isEmpty() && sideTabs.isNotEmpty()) {
+            tabs = sideTabs
+            editor = side
+            sideTabs = emptyList()
+            side = null
+            focused = editor
+        }
     }
 
     private suspend fun dropStaleTabs() {
-        if (tabs.isEmpty()) return
+        if (tabs.isEmpty() && sideTabs.isEmpty()) return
         val live = repo.io { list() }.associateBy { it.id }
-        for (t in tabs) {
+        fun stale(t: EditorController): Boolean {
             val now = live[t.notebook.id]
             // Gone, or replaced by an imported version: the tab would write over it.
-            if (now == null || now.pageIds != t.notebook.pageIds && now.updatedAt > t.notebook.updatedAt) {
-                tabs = tabs - t
-                if (editor === t) editor = null
-                t.close()
-            }
+            return now == null || now.pageIds != t.notebook.pageIds && now.updatedAt > t.notebook.updatedAt
         }
+        for (t in tabs.filter(::stale)) {
+            tabs = tabs - t
+            if (editor === t) editor = null
+            t.close()
+        }
+        for (t in sideTabs.filter(::stale)) closeSideTab(t)
     }
 
     /** `.inknote` and `.inknotes` files picked in the library, added under library folder [into]. */
@@ -361,7 +420,7 @@ class MainActivity : ComponentActivity() {
         // They are saved and closed (with the notebook beside them); new ones and copies touch nothing open.
         val replaced = if (replace) set.items.mapNotNull { it.ready.existing?.id }.toSet() else emptySet()
         if (replaced.isNotEmpty()) {
-            side?.takeIf { it.notebook.id in replaced }?.let { closeSide() }
+            for (t in sideTabs.filter { it.notebook.id in replaced }) closeSideTab(t)
             for (t in tabs.filter { it.notebook.id in replaced }) closeTab(t)
         }
         repo.commitImportsAsync(set, replace, into) { added ->
@@ -439,15 +498,18 @@ class MainActivity : ComponentActivity() {
             if (tabs.isNotEmpty()) return@launch
             tabs = plan.ids.mapNotNull(all::get).map { nb -> EditorController(repo, nb, penButton, prefs, darkNow, handwriting, AppServices.get(this@MainActivity).math) }
             editor = tabs.firstOrNull { it.notebook.id == plan.active }
-            // The notebook that was beside it, if it still exists.
-            plan.side?.let(all::get)?.takeIf { editor != null && it.id != editor?.notebook?.id }?.let(::openSide)
+            // The half beside with its tabs, if they still exist.
+            if (editor != null) {
+                sideTabs = plan.sideIds.mapNotNull(all::get).map { nb -> EditorController(repo, nb, penButton, prefs, darkNow, handwriting, AppServices.get(this@MainActivity).math) }
+                side = sideTabs.firstOrNull { it.notebook.id == plan.side } ?: sideTabs.lastOrNull()
+            }
         }
     }
 
     /** What is open now, kept for the next start. */
     private fun rememberTabs() {
         if (pendingTabs != null) return
-        prefs.openTabs = TabsMemory.encode(tabs.map { it.notebook.id }, editor?.notebook?.id, side?.notebook?.id)
+        prefs.openTabs = TabsMemory.encode(tabs.map { it.notebook.id }, editor?.notebook?.id, side?.notebook?.id, sideTabs.map { it.notebook.id })
     }
 
     /** When a quick note was last written, as this activity knows it. */
@@ -465,7 +527,7 @@ class MainActivity : ComponentActivity() {
             tabDragAt = at
         },
         move = { tabDragAt = it },
-        drop = { t, at, index -> dropTab(t, at, index) },
+        drop = { t, at -> dropTab(t, at) },
         cancel = ::endTabDrag,
     )
 
@@ -478,49 +540,79 @@ class MainActivity : ComponentActivity() {
         tabDragAt = null
     }
 
-    /** Where a tab let go at [at] goes: beside, into the other half, or nowhere. */
-    private enum class TabDrop { BESIDE, INTO_SIDE, NONE }
-
-    private fun tabDropAt(at: androidx.compose.ui.geometry.Offset): TabDrop {
+    /** The half a tab let go at [at] goes to: true the right one, false the left, null neither. */
+    private fun tabDropHalf(at: androidx.compose.ui.geometry.Offset): Boolean? {
         val w = rootSize.width.toFloat()
-        if (w <= 0f) return TabDrop.NONE
+        if (w <= 0f) return null
         return when {
-            side != null && at.x > w * sideShare -> TabDrop.INTO_SIDE
-            side == null && at.x > w * (1f - BESIDE_EDGE) -> TabDrop.BESIDE
-            else -> TabDrop.NONE
+            side != null -> at.x > w * sideShare
+            at.x > w * (1f - BESIDE_EDGE) -> true
+            else -> null
         }
     }
 
     /**
-     * A tab let go: over the strip it takes place [index] among the tabs; at the right edge it
-     * opens beside the notebook shown; over the other half it takes that half's place (the
-     * notebook there goes back among the tabs).
+     * A tab let go. Over a strip of tabs (either half) it takes its place among them there;
+     * elsewhere over the other half it goes to the end of that half's tabs; at the right edge,
+     * with one half only, it opens a half beside.
      */
-    private fun dropTab(t: EditorController, at: androidx.compose.ui.geometry.Offset, index: Int?) {
+    private fun dropTab(t: EditorController, at: androidx.compose.ui.geometry.Offset) {
         endTabDrag()
-        if (t !in tabs) return
-        if (index != null) {
-            val rest = tabs - t
-            tabs = rest.toMutableList().apply { add(index.coerceIn(0, rest.size), t) }
+        val fromRight = t in sideTabs
+        if (!fromRight && t !in tabs) return
+        val band = 24 * resources.displayMetrics.density
+        for ((right, strip) in tabDragging.strips) {
+            val r = strip.rect
+            if (at.x in r.left..r.right && at.y in r.top - band..r.bottom + band) {
+                val index = strip.tabs.filterKeys { it !== t }.values.count { it.center.x < at.x }
+                moveTab(t, right, index)
+                return
+            }
+        }
+        val right = tabDropHalf(at) ?: return
+        if (right != fromRight) moveTab(t, right, null)
+    }
+
+    /**
+     * Tab [t] to place [index] (null: the end) among the tabs of the right half ([right]) or the
+     * left one, shown there. A half left without tabs goes: the left one takes the right one's.
+     */
+    private fun moveTab(t: EditorController, right: Boolean, index: Int?) {
+        val fromRight = t in sideTabs
+        val target = if (right) sideTabs else tabs
+        if (fromRight == right) {
+            // Only a new place in its own strip.
+            val rest = target - t
+            val moved = rest.toMutableList().apply { add((index ?: rest.size).coerceIn(0, rest.size), t) }
+            if (right) sideTabs = moved else tabs = moved
             rememberTabs()
             return
         }
-        if (tabDropAt(at) != TabDrop.NONE) tabToSide(t)
-    }
-
-    /** Tab [t] goes into the half beside; the one there (if any) back among the tabs. */
-    private fun tabToSide(t: EditorController) {
-        if (t === editor) {
-            // The notebook shown goes beside: another tab takes its place on the left.
-            editor = tabs.firstOrNull { it !== t } ?: return
-        }
+        if (target.size >= MAX_TABS) return
         t.flush()
-        val old = side
-        tabs = tabs - t
-        side = t
-        if (old != null) {
-            old.flush()
-            if (tabs.size < MAX_TABS) tabs = tabs + old else old.close()
+        if (fromRight) {
+            val rest = sideTabs - t
+            sideTabs = rest
+            if (side === t) side = rest.lastOrNull()
+        } else {
+            val rest = tabs - t
+            tabs = rest
+            if (editor === t) editor = rest.lastOrNull()
+        }
+        val into = (if (right) sideTabs else tabs).toMutableList().apply { add((index ?: size).coerceIn(0, size), t) }
+        if (right) {
+            sideTabs = into
+            side = t
+        } else {
+            tabs = into
+            editor = t
+        }
+        // The left half emptied: the right one becomes the only one.
+        if (tabs.isEmpty()) {
+            tabs = sideTabs
+            editor = side
+            sideTabs = emptyList()
+            side = null
         }
         focused = t
         t.activateLayer()
@@ -537,12 +629,15 @@ class MainActivity : ComponentActivity() {
         ) {
             val t = tabDragging.tab ?: return@Box
             val at = tabDragAt ?: return@Box
-            val drop = tabDropAt(at)
+            val fromRight = t in sideTabs
+            // The other half lights up (or the edge where one opens); not the half it came from.
+            val lit = tabDropHalf(at)?.let { it != fromRight } == true
             val density = androidx.compose.ui.platform.LocalDensity.current
             val w = rootSize.width.toFloat()
             val zone = when {
-                side != null -> sideShare to 1f
-                else -> (1f - BESIDE_EDGE) to 1f
+                side == null -> (1f - BESIDE_EDGE) to 1f
+                fromRight -> 0f to sideShare
+                else -> sideShare to 1f
             }
             val accent = androidx.compose.material3.MaterialTheme.colorScheme.primary
             with(density) {
@@ -551,11 +646,11 @@ class MainActivity : ComponentActivity() {
                         .offset(x = (w * zone.first).toDp())
                         .width((w * (zone.second - zone.first)).toDp())
                         .fillMaxHeight()
-                        .background(accent.copy(alpha = if (drop == TabDrop.NONE) 0.06f else 0.18f)),
+                        .background(accent.copy(alpha = if (lit) 0.18f else 0.06f)),
                     contentAlignment = androidx.compose.ui.Alignment.Center,
                 ) {
                     Text(
-                        if (side != null) "Отпустите — тетрадь переедет сюда" else "Отпустите — тетрадь откроется рядом",
+                        if (side != null) "Отпустите — вкладка переедет сюда" else "Отпустите — тетрадь откроется рядом",
                         color = accent,
                         modifier = androidx.compose.ui.Modifier.padding(16.dp),
                     )
@@ -578,7 +673,7 @@ class MainActivity : ComponentActivity() {
     }
 
     /** Notebooks open here: the sync does not replace them under the editor. */
-    private fun openIds() = (tabs + listOfNotNull(side)).map { it.notebook.id }.toSet()
+    private fun openIds() = (tabs + sideTabs).map { it.notebook.id }.toSet()
 
     /** Kept by this activity: the sync holds it only weakly. */
     private val openForSync: () -> Set<String> = { openIds() }
@@ -597,8 +692,8 @@ class MainActivity : ComponentActivity() {
         if (at > quickNoteSeen) {
             quickNoteSeen = at
             val id = prefs.quickNoteId
-            (tabs + listOfNotNull(side)).filter { it.notebook.id == id }.forEach { t ->
-                if (t === side) closeSide() else closeTab(t)
+            (tabs + sideTabs).filter { it.notebook.id == id }.forEach { t ->
+                if (t in sideTabs) closeSideTab(t) else closeTab(t)
             }
         }
     }
@@ -606,7 +701,7 @@ class MainActivity : ComponentActivity() {
     override fun onPause() {
         rememberTabs()
         for (t in tabs) t.flush()
-        side?.flush()
+        for (t in sideTabs) t.flush()
         QuickWidget.update(this)
         // What was written goes to the Drive (open notebooks are saved just above).
         AppServices.get(this).cloud.autoSync(openIds())

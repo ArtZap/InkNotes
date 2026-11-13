@@ -135,6 +135,12 @@ fun EditorScreen(
     compact: Boolean = false,
     /** Tabs dragged out of the strip (to another place, beside, into the other half). */
     tabDrag: TabDragging? = null,
+    /** This is the right half: its strip of tabs is told apart from the left one's. */
+    rightPane: Boolean = false,
+    /** Show the strip of tabs even with one tab (two halves: a tab can be dragged across). */
+    alwaysTabs: Boolean = false,
+    /** "+" in the strip: another notebook in this half (null: the library). */
+    onAddTab: (() -> Unit)? = null,
 ) {
     BackHandler(onBack = onClose)
     // The view this screen made: only it is let go of when the screen goes.
@@ -296,7 +302,9 @@ fun EditorScreen(
             .background(MaterialTheme.colorScheme.surface)
             .safeDrawingPadding()
     ) {
-        if (tabs.size > 1) TabStrip(controller, tabs, onTab, onCloseTab, onLibrary = onClose, drag = tabDrag)
+        if (tabs.size > 1 || (alwaysTabs || rightPane) && tabs.isNotEmpty()) {
+            TabStrip(controller, tabs, onTab, onCloseTab, onAdd = onAddTab ?: onClose, drag = tabDrag, right = rightPane)
+        }
         val layout = controller.toolbar
         TopRow(
             c = controller,
@@ -1226,17 +1234,25 @@ private fun TabStrip(
     tabs: List<EditorController>,
     onTab: (EditorController) -> Unit,
     onCloseTab: (EditorController) -> Unit,
-    onLibrary: () -> Unit,
+    onAdd: () -> Unit,
     drag: TabDragging?,
+    right: Boolean,
 ) {
-    // Where each tab is (in the window's root), to tell where a dragged one is dropped.
-    val bounds = remember { HashMap<EditorController, androidx.compose.ui.geometry.Rect>() }
-    var strip by remember { mutableStateOf(androidx.compose.ui.geometry.Rect.Zero) }
-    val band = with(androidx.compose.ui.platform.LocalDensity.current) { 24.dp.toPx() }
+    // Where the strip and each tab are (in the window's root): a dragged tab is placed by them,
+    // in this strip or in the other half's.
+    val info = remember { TabDragging.Strip() }
+    if (drag != null) {
+        androidx.compose.runtime.DisposableEffect(drag, right) {
+            drag.strips[right] = info
+            onDispose { if (drag.strips[right] === info) drag.strips.remove(right) }
+        }
+    }
+    val bounds = info.tabs
+    info.tabs.keys.retainAll(tabs.toSet())
     Row(
         Modifier
             .fillMaxWidth()
-            .onGloballyPositioned { strip = it.boundsInRoot() }
+            .onGloballyPositioned { info.rect = it.boundsInRoot() }
             .horizontalScroll(rememberScrollState())
             .padding(horizontal = 6.dp, vertical = 1.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -1264,12 +1280,7 @@ private fun TabStrip(
                                         at = (bounds[t]?.topLeft ?: Offset.Zero) + local
                                         drag.start(t, at)
                                     },
-                                    onDragEnd = {
-                                        // Dropped on the strip: a new place among the tabs.
-                                        val onStrip = at.y in strip.top - band..strip.bottom + band
-                                        val index = if (onStrip) tabs.filter { it !== t }.count { o -> (bounds[o]?.center?.x ?: 0f) < at.x } else null
-                                        drag.drop(t, at, index)
-                                    },
+                                    onDragEnd = { drag.drop(t, at) },
                                     onDragCancel = { drag.cancel() },
                                 ) { change, amount ->
                                     change.consume()
@@ -1298,9 +1309,9 @@ private fun TabStrip(
             }
         }
         Box(
-            Modifier.height(TAB_HEIGHT).clip(RoundedCornerShape(6.dp)).clickable(onClick = onLibrary).padding(horizontal = 10.dp),
+            Modifier.height(TAB_HEIGHT).clip(RoundedCornerShape(6.dp)).clickable(onClick = onAdd).padding(horizontal = 10.dp),
             contentAlignment = Alignment.Center,
-        ) { Text("+ Тетрадь", fontSize = 13.sp, color = MaterialTheme.colorScheme.primary) }
+        ) { Text(if (right) "+" else "+ Тетрадь", fontSize = 13.sp, color = MaterialTheme.colorScheme.primary) }
     }
 }
 
@@ -1346,17 +1357,25 @@ private fun ArrowRow(content: @Composable () -> Unit) {
 private val TAB_HEIGHT = 28.dp
 
 /**
- * A tab being dragged, told to whoever shows the tabs: [move] with the point in the window's
- * root, [drop] with the place among the tabs when it is let go over the strip (else null).
+ * A tab being dragged, told to whoever shows the tabs: [move] and [drop] with the point in the
+ * window's root. [strips]: the strips of tabs on screen (true: the right half's), where they
+ * and their tabs are, so a tab can be dropped among the tabs of either.
  */
 class TabDragging(
     val start: (EditorController, Offset) -> Unit,
     val move: (Offset) -> Unit,
-    val drop: (EditorController, Offset, Int?) -> Unit,
+    val drop: (EditorController, Offset) -> Unit,
     val cancel: () -> Unit,
 ) {
     /** The tab being dragged now (null: none). */
     var tab by mutableStateOf<EditorController?>(null)
+
+    class Strip {
+        var rect = androidx.compose.ui.geometry.Rect.Zero
+        val tabs = HashMap<EditorController, androidx.compose.ui.geometry.Rect>()
+    }
+
+    val strips = HashMap<Boolean, Strip>()
 }
 
 /** Typing text for the page (new, or editing a text box). */
