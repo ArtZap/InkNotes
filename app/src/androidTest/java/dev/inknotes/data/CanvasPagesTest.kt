@@ -22,6 +22,8 @@ class CanvasPagesTest {
         assertTrue(nb.pageSize(id).isCanvas)
         assertEquals(PageSize.CANVAS.canvasW / Notebook.MM_PER_UNIT, nb.pageWidthUnits(id), 0.01f)
         nb = repo.setPageSize(nb, listOf(id), nb.pageSize(id).copy(canvasW = 870f, canvasH = 640f))
+        // Writes are queued: a read through the same repository waits for them.
+        repo.list()
 
         val again = NotebookRepository(root).list().single()
         assertEquals(PageSize(canvasW = 870f, canvasH = 640f), again.pageSize(id))
