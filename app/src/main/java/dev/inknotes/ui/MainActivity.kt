@@ -268,9 +268,10 @@ class MainActivity : ComponentActivity() {
         if (!isChangingConfigurations) AppServices.get(this).backup.run()
     }
 
-    // Pen buttons on some tablets (Huawei M-Pencil) arrive as key events.
+    // Pen buttons on some tablets (Huawei M-Pencil) arrive as key events. Keyboard shortcuts
+    // come after the screen: a text field being typed in keeps its letters.
     override fun dispatchKeyEvent(event: KeyEvent): Boolean =
-        editor?.handleKey(event) == true || super.dispatchKeyEvent(event)
+        editor?.handleKey(event) == true || super.dispatchKeyEvent(event) || editor?.handleShortcut(event) == true
 
     private companion object {
         const val MAX_TABS = 5

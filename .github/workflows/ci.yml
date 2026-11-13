@@ -58,7 +58,7 @@ jobs:
           script: |
             adb install -r app/build/outputs/apk/debug/app-debug.apk
             adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
-            adb shell am instrument -w -e class dev.inknotes.ui.BarsScreenshots,dev.inknotes.ui.V032Screenshots dev.inknotes.test/androidx.test.runner.AndroidJUnitRunner || true
+            adb shell am instrument -w -e shots 1 -e class dev.inknotes.ui.V032Screenshots,dev.inknotes.ui.V033Screenshots dev.inknotes.test/androidx.test.runner.AndroidJUnitRunner || true
             adb logcat -d -b crash | tail -120 || true
             mkdir -p shots && adb pull /sdcard/Android/data/dev.inknotes/files/shots shots || true
       - name: Screenshots into the log

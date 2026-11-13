@@ -159,6 +159,20 @@ fun EditorScreen(
     // Export: what was chosen in the dialog waits for the system "save as" or folder dialog.
     var exportPending by remember { mutableStateOf<List<Int>>(emptyList()) }
     var showExport by remember { mutableStateOf(false) }
+    var showTimer by remember { mutableStateOf(false) }
+    // Shortcut keys that open something on the screen.
+    androidx.compose.runtime.LaunchedEffect(controller.uiRequest) {
+        when (controller.uiRequest) {
+            "search" -> showSearch = true
+            "export" -> showExport = true
+            "print" -> controller.print(context, controller.exportIndices(EditorController.ExportPages.All))
+            "timer" -> showTimer = true
+        }
+        controller.uiRequest = null
+    }
+    androidx.compose.runtime.LaunchedEffect(StudyTimer.messageId) {
+        if (StudyTimer.messageId > 0) StudyTimer.message?.let(controller::showStatus)
+    }
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/pdf")) { uri ->
         if (uri != null) controller.exportTo(uri, resolver, exportPending, EditorController.ExportFormat.PDF)
     }
@@ -235,6 +249,7 @@ fun EditorScreen(
         onPdfShare = { shareExport(EditorController.ExportFormat.PDF, controller.exportIndices(EditorController.ExportPages.All)) },
         onPrint = { controller.print(context, controller.exportIndices(EditorController.ExportPages.All)) },
         onScan = scan,
+        onTimer = { showTimer = true },
         onHelp = { showHelp = true },
     )
     Column(
@@ -253,6 +268,7 @@ fun EditorScreen(
             placing = placing,
             onClose = onClose,
             onAllFunctions = { showAllFunctions = true },
+            onTimer = { showTimer = true },
         )
         SoundBar(controller)
         ToolRow(
@@ -323,6 +339,18 @@ fun EditorScreen(
     if (controller.showLinkDialog) LinkDialog(controller, onDismiss = { controller.showLinkDialog = false })
     if (controller.showAddBookmark) AddBookmarkDialog(controller, onDismiss = { controller.showAddBookmark = false })
     if (showHelp) HelpDialog(onDismiss = { showHelp = false })
+    if (showTimer) StudyTimerDialog(onDismiss = { showTimer = false })
+    controller.formula?.let { f ->
+        FormulaDialog(
+            initial = f.latex,
+            readFailed = f.failed,
+            onDismiss = controller::closeFormula,
+            onCopyLatex = { controller.copyFormulaLatex(context, it) },
+            onCopyPicture = { controller.copyFormulaPicture(context, it) },
+            onReplace = { controller.placeFormula(it, replace = true) },
+            onBelow = { controller.placeFormula(it, replace = false) },
+        )
+    }
     if (showExport) {
         ExportDialog(
             pageCount = controller.notebook.pageIds.size,
@@ -430,6 +458,7 @@ private fun barActions(
     onPdfShare: () -> Unit,
     onPrint: () -> Unit,
     onScan: () -> Unit,
+    onTimer: () -> Unit,
     onHelp: () -> Unit,
 ): Map<String, BarAction> {
     val math = c.math.state
@@ -513,6 +542,10 @@ private fun barActions(
         a("pdf-share", "Отправить тетрадь как PDF одним нажатием", onPdfShare, title = "Отправить как PDF"),
         a("print", "Печать тетради", onPrint, title = "Печать…"),
         a("zoom-window", "Окно увеличения: пишите крупно, на странице мелко", c::toggleZoomPad, selected = c.zoomPadOpen),
+        a("formula", "Формула печатной: выделите формулу лассо и нажмите", c::formulaFromSelection, title = "Формула печатной (выделенная)"),
+        a("protractor", "Транспортир: углы и дуги", c::toggleProtractor, selected = c.protractorShown),
+        a("compass", "Циркуль: окружности и дуги", c::toggleCompass, selected = c.compassOn),
+        a("timer", "Таймер учёбы: учёба и перерывы", onTimer, selected = StudyTimer.phase != null, title = "Таймер учёбы…"),
         a("scan", "Сканировать документ камерой", onScan, title = "Сканировать документ"),
         a(
             "pressure",
@@ -563,6 +596,7 @@ private fun TopRow(
     placing: Placing,
     onClose: () -> Unit,
     onAllFunctions: () -> Unit,
+    onTimer: () -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth()) {
@@ -609,6 +643,7 @@ private fun TopRow(
                     )
                 }
             }
+            StudyTimerChip(onClick = onTimer)
             Row(verticalAlignment = Alignment.CenterVertically) { BarButtons(c, shown, placing, BarCatalog.GROUP_GAP) }
             Box {
                 IconAction(InkIcons.More, "Ещё", { menuOpen = true })
@@ -1216,6 +1251,7 @@ private fun SelectionOptions(c: EditorController, onPickColor: () -> Unit, onHat
         TextButton(onClick = { c.scaleSelectedText(1.2f) }) { Text("А+") }
     } else {
         TextButton(onClick = { c.recognizeSelection() }) { Text("Текст") }
+        if (c.selectionLineKinds.isNotEmpty()) TextButton(onClick = { c.formulaFromSelection() }) { Text("Формула") }
     }
     SelectionMoreButton(c)
     IconAction(InkIcons.Duplicate, "Дублировать", { c.duplicateSelection() })

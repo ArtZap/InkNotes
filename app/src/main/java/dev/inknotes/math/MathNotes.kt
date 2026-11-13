@@ -114,6 +114,17 @@ class MathNotes(private val enabledPref: () -> Boolean, private val setEnabledPr
         }
     }
 
+    /** The text of the formula written in [strokes] (null: not read), on the main thread. */
+    fun readFormula(strokes: List<PageStroke>, onResult: (String?) -> Unit) {
+        if (state != State.Ready) return onResult(null)
+        runCatching {
+            exec.execute {
+                val text = runCatching { MathPage.formulaSource(toInk(strokes), reader) }.getOrNull()
+                main.post { onResult(text) }
+            }
+        }.onFailure { onResult(null) }
+    }
+
     /**
      * A wrong answer as a test case: the page's ink, every run the reader was asked about with
      * what it read, the answer at ([x], [y]) and the one [expected]. JSON, read back by

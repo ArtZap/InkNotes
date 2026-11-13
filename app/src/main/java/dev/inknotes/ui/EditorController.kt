@@ -170,7 +170,104 @@ class EditorController(
         private set
 
     fun toggleRuler() {
-        rulerShown = view?.toggleRuler() ?: false
+        rulerShown = view?.toggleRuler(protractor = false) ?: false
+        protractorShown = false
+    }
+
+    /** The protractor is lying on the page (in place of the ruler). */
+    var protractorShown by mutableStateOf(false)
+        private set
+
+    fun toggleProtractor() {
+        protractorShown = view?.toggleRuler(protractor = true) ?: false
+        rulerShown = false
+        if (protractorShown) showStatus("Транспортир: пальцами двигать и поворачивать, пером — линия по низу или дуга по краю, наведите перо — угол")
+    }
+
+    /** The pen draws circles with the compass. */
+    var compassOn by mutableStateOf(false)
+        private set
+
+    fun toggleCompass() {
+        compassOn = !compassOn
+        view?.compassOn = compassOn
+        if (compassOn) showStatus("Циркуль: перо в центр, тяните до радиуса и отпустите — окружность; обведите часть круга — дуга")
+    }
+
+    /** A request to the screen from a key (open search, export, print, the timer); the screen clears it. */
+    var uiRequest by mutableStateOf<String?>(null)
+
+    private var clip: dev.inknotes.editor.PageEditorView.Clip? = null
+    private var clipPage = -1
+
+    fun copySelection(cut: Boolean = false) {
+        val v = view ?: return
+        val c = v.copySelection() ?: return
+        clip = c
+        clipPage = v.selectionPageIndex
+        if (cut) v.deleteSelection()
+        showStatus(if (cut) "Вырезано" else "Скопировано")
+    }
+
+    fun pasteClip() {
+        val c = clip ?: return showStatus("Сначала скопируйте выделенное (Ctrl+C)")
+        val v = view ?: return
+        selectTool(Tool.LASSO)
+        v.paste(pageIndex, c, samePlace = pageIndex == clipPage)
+    }
+
+    /** A tool chosen by holding its key: back to the one before when the key is let go. */
+    private var heldKey = -1
+    private var heldSince = 0L
+    private var toolBeforeKey: Tool? = null
+
+    /**
+     * Keyboard shortcuts, for keys nothing else on the screen took (a text field gets its letters).
+     * Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y, Ctrl+C / X / V / D, Delete, Ctrl+F, Ctrl+P, Ctrl+E,
+     * PageUp / PageDown; P, H, E, L, N without Ctrl choose a tool (held: only while held).
+     */
+    fun handleShortcut(e: KeyEvent): Boolean {
+        val ctrl = e.isCtrlPressed || e.isMetaPressed
+        val toolKeys = mapOf(
+            KeyEvent.KEYCODE_P to Tool.PEN,
+            KeyEvent.KEYCODE_H to Tool.HIGHLIGHTER,
+            KeyEvent.KEYCODE_E to Tool.ERASER,
+            KeyEvent.KEYCODE_L to Tool.LASSO,
+            KeyEvent.KEYCODE_N to Tool.NEON,
+        )
+        if (!ctrl && !e.isAltPressed && e.keyCode in toolKeys) {
+            val t = toolKeys.getValue(e.keyCode)
+            if (e.action == KeyEvent.ACTION_DOWN && e.repeatCount == 0) {
+                heldKey = e.keyCode
+                heldSince = e.eventTime
+                toolBeforeKey = tool
+                selectTool(t)
+            } else if (e.action == KeyEvent.ACTION_UP && heldKey == e.keyCode) {
+                // Held longer than a tap: the tool was for that moment only.
+                if (e.eventTime - heldSince > HOLD_KEY_MS) toolBeforeKey?.let(::selectTool)
+                heldKey = -1
+            }
+            return true
+        }
+        if (e.action != KeyEvent.ACTION_DOWN) return false
+        when {
+            ctrl && e.keyCode == KeyEvent.KEYCODE_Z && e.isShiftPressed -> redo()
+            ctrl && e.keyCode == KeyEvent.KEYCODE_Z -> undo()
+            ctrl && e.keyCode == KeyEvent.KEYCODE_Y -> redo()
+            ctrl && e.keyCode == KeyEvent.KEYCODE_C -> copySelection()
+            ctrl && e.keyCode == KeyEvent.KEYCODE_X -> copySelection(cut = true)
+            ctrl && e.keyCode == KeyEvent.KEYCODE_V -> pasteClip()
+            ctrl && e.keyCode == KeyEvent.KEYCODE_D -> duplicateSelection()
+            ctrl && e.keyCode == KeyEvent.KEYCODE_F -> uiRequest = "search"
+            ctrl && e.keyCode == KeyEvent.KEYCODE_P -> uiRequest = "print"
+            ctrl && e.keyCode == KeyEvent.KEYCODE_E -> uiRequest = "export"
+            ctrl && e.keyCode == KeyEvent.KEYCODE_T -> uiRequest = "timer"
+            !ctrl && (e.keyCode == KeyEvent.KEYCODE_DEL || e.keyCode == KeyEvent.KEYCODE_FORWARD_DEL) && selectionCount > 0 -> deleteSelection()
+            e.keyCode == KeyEvent.KEYCODE_PAGE_DOWN -> goToPage(pageIndex + 1)
+            e.keyCode == KeyEvent.KEYCODE_PAGE_UP -> goToPage(pageIndex - 1)
+            else -> return false
+        }
+        return true
     }
 
     fun flipSelection(horizontal: Boolean) = view?.flipSelection(horizontal)
@@ -1832,6 +1929,12 @@ class EditorController(
         selectedPicture = if (count == 1) view?.selectedPicture() else null
     }
 
+    /** Size of a letter of a formula picture put on the page, and the least height of one (page units). */
+    private val HOLD_KEY_MS = 400L
+    private val FORMULA_PX = 72f
+    private val MIN_FORMULA_HEIGHT = 30f
+    private val FORMULA_GAP = 12f
+
     /** The one selected picture: it can be cropped, straightened… */
     var selectedPicture by mutableStateOf<PageImage?>(null)
         private set
@@ -1957,6 +2060,77 @@ class EditorController(
         }
     }
 
+    // ---------------------------------------------------------------- formulas
+
+    /** A handwritten formula read for the formula window: its LaTeX, or null text when it could not be read. */
+    class FormulaRead(val latex: String, val failed: Boolean)
+
+    var formula by mutableStateOf<FormulaRead?>(null)
+        private set
+
+    /** Reads the selected handwriting as a formula and opens the formula window. */
+    fun formulaFromSelection() {
+        val v = view ?: return
+        val ink = v.selectedInk()
+        if (ink.isEmpty()) return showStatus("Выделите формулу лассо, затем нажмите «Формула»")
+        when (math.state) {
+            MathNotes.State.Ready -> Unit
+            MathNotes.State.Downloading -> return showStatus("Скачивается распознавание формул, подождите немного")
+            else -> {
+                math.enable()
+                return showStatus("Скачиваю распознавание формул (один раз) — нажмите «Формула» ещё раз через минуту")
+            }
+        }
+        status = "Читаю формулу…"
+        math.readFormula(ink) { source ->
+            status = null
+            formula = if (source.isNullOrBlank()) FormulaRead("", failed = true) else FormulaRead(dev.inknotes.math.Typeset.latex(source), failed = false)
+        }
+    }
+
+    fun closeFormula() {
+        formula = null
+    }
+
+    fun copyFormulaLatex(context: Context, latex: String) {
+        val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        cm.setPrimaryClip(android.content.ClipData.newPlainText("LaTeX", latex))
+        showStatus("LaTeX скопирован")
+    }
+
+    fun copyFormulaPicture(context: Context, latex: String) {
+        val bmp = FormulaArt.bitmap(latex, FORMULA_PX, android.graphics.Color.BLACK) ?: return
+        val dir = File(context.cacheDir, "shared").apply { mkdirs() }
+        val file = File(dir, "formula.png")
+        runCatching { file.outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) } }
+        bmp.recycle()
+        val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", file)
+        val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        cm.setPrimaryClip(android.content.ClipData.newUri(context.contentResolver, "Формула", uri))
+        showStatus("Картинка формулы скопирована")
+    }
+
+    /** The formula set in print on the page: in place of the selected handwriting, or under it. */
+    fun placeFormula(latex: String, replace: Boolean) {
+        val v = view ?: return
+        val rect = v.selectionRect() ?: return
+        val page = v.selectionPageIndex
+        val bmp = FormulaArt.bitmap(latex, FORMULA_PX, penColor) ?: return
+        formula = null
+        // As tall as the handwriting was, but letters no smaller than a line of writing.
+        val h = max(rect.height(), MIN_FORMULA_HEIGHT) * bmp.height / (bmp.height - FORMULA_PX * 0.5f).coerceAtLeast(1f)
+        val w = h * bmp.width / bmp.height
+        repo.saveImageAsync(notebook, bmp) { saved ->
+            val (file, _, _) = saved ?: return@saveImageAsync showStatus("Не удалось вставить формулу")
+            val vv = view ?: return@saveImageAsync
+            if (replace) {
+                vv.replaceSelection(PageImage(file, rect.left, rect.centerY() - h / 2, w, h))
+            } else {
+                vv.insert(page, images = listOf(PageImage(file, rect.left, rect.bottom + FORMULA_GAP, w, h)))
+            }
+        }
+    }
+
     /** Answers as fractions (1/3) or decimals (0,333333); recomputed at once. */
     var fractionAnswers by mutableStateOf(prefs.fractionAnswers.also(::applyNumbers))
         private set
@@ -2007,6 +2181,7 @@ class EditorController(
         v.spoilerSize = spoilerSize
         v.scribbleErase = scribbleErase
         v.penPressure = penPressure
+        v.compassOn = compassOn
         v.straightHighlighter = straightHighlighter
         v.eraserRadiusDp = eraserSize
         v.eraserMode = eraserMode

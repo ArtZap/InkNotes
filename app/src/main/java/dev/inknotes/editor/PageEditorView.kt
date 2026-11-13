@@ -321,7 +321,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
     private val density = resources.displayMetrics.density
     private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop.toFloat()
 
-    private enum class Mode { NONE, DRAW, SNAPPED, ERASE, GESTURE, PATH, MOVE, LASER, RULER, RULER_DRAW, SPACE }
+    private enum class Mode { NONE, DRAW, SNAPPED, ERASE, GESTURE, PATH, MOVE, LASER, RULER, RULER_DRAW, SPACE, COMPASS }
 
     private var mode = Mode.NONE
 
@@ -677,6 +677,31 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         changed()
     }
 
+    /** What was copied with Ctrl+C: elements of a page (immutable, so kept as they are) and their box. */
+    class Clip(val strokes: List<PageStroke>, val fills: List<PageFill>, val images: List<PageImage>, val box: RectF)
+
+    fun copySelection(): Clip? {
+        val doc = doc(selectionPage) ?: return null
+        val box = rawSelectionBounds()?.let(::RectF) ?: return null
+        return Clip(doc.strokes.filter { it in selected }, doc.fills.filter { it in selected }, doc.images.filter { it in selected }, box)
+    }
+
+    /** [clip] put on [page], selected: where it was copied from, a little lower if that place is taken, else in the middle of the screen. */
+    fun paste(page: Int, clip: Clip, samePlace: Boolean) {
+        val (dx, dy) = if (samePlace) {
+            DUPLICATE_OFFSET to DUPLICATE_OFFSET
+        } else {
+            val c = visibleCenter(page)
+            (c[0] - clip.box.centerX()) to (c[1] - clip.box.centerY())
+        }
+        insert(
+            page,
+            strokes = clip.strokes.map { PageEdits.translate(it, dx, dy) },
+            images = clip.images.map { PageEdits.translate(it, dx, dy) },
+            fills = clip.fills.map { PageEdits.translate(it, dx, dy) },
+        )
+    }
+
     fun duplicateSelection() {
         val doc = doc(selectionPage) ?: return
         val strokes = doc.strokes.filter { it in selected }
@@ -997,14 +1022,16 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         return true
     }
 
-    /** Shows or hides the ruler; it appears level in the middle of the screen. */
-    fun toggleRuler(): Boolean {
-        if (ruler.shown) {
+    /** Shows or hides the ruler (or the [protractor]); it appears level in the middle of the screen. */
+    fun toggleRuler(protractor: Boolean = false): Boolean {
+        if (ruler.shown && ruler.protractor == protractor) {
             ruler.shown = false
         } else {
+            ruler.protractor = protractor
             val c = floatArrayOf(width / 2f, height / 2f).also(viewToWorld::mapPoints)
             ruler.cx = c[0]
-            ruler.cy = c[1]
+            // The half disc stands on its centre: lower, so all of it is in sight.
+            ruler.cy = c[1] + if (protractor) Ruler.RADIUS * 0.45f else 0f
             ruler.angle = 0f
             ruler.shown = true
         }
@@ -1167,6 +1194,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                 }
                 Mode.RULER -> moveRuler(e)
                 Mode.RULER_DRAW -> forEachSample(e) { x, y, _ -> rulerDrawTo(x, y) }
+                Mode.COMPASS -> forEachSample(e) { x, y, _ -> compassTo(x, y) }
                 Mode.SPACE -> {
                     val i = e.findPointerIndex(activePointerId)
                     if (i >= 0) spaceTo(toPage(spacePage, e.getX(i), e.getY(i))[1])
@@ -1192,6 +1220,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                     Mode.LASER -> laser.end()
                     Mode.RULER -> endRulerMove()
                     Mode.RULER_DRAW -> endRulerDraw()
+                    Mode.COMPASS -> endCompass()
                     Mode.SPACE -> endSpace()
                     Mode.NONE, Mode.SNAPPED -> Unit
                 }
@@ -1233,6 +1262,10 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                     }
                     Mode.SPACE -> {
                         spaceY0 = Float.NaN
+                        pageLayer.invalidate()
+                    }
+                    Mode.COMPASS -> {
+                        compassSamples.clear()
                         pageLayer.invalidate()
                     }
                     else -> Unit
@@ -1277,6 +1310,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             }
             Mode.RULER -> startRulerMove(e)
             Mode.RULER_DRAW -> startRulerDraw(e, index)
+            Mode.COMPASS -> startCompass(e, index)
             Mode.SPACE -> startSpace(e, index)
             Mode.NONE, Mode.SNAPPED -> Unit
         }
@@ -1299,6 +1333,10 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             (MotionEvent.BUTTON_STYLUS_PRIMARY or MotionEvent.BUTTON_STYLUS_SECONDARY) != 0
         if (tops.isEmpty()) return Mode.GESTURE
         val world = floatArrayOf(e.getX(index), e.getY(index)).also(viewToWorld::mapPoints)
+        if (compassOn && pen && !penButton) {
+            activePage = pageAt(e.getX(index), e.getY(index))
+            return Mode.COMPASS
+        }
         if (insertingSpace && (pen || toolType == MotionEvent.TOOL_TYPE_FINGER)) {
             activePage = pageAt(e.getX(index), e.getY(index))
             return Mode.SPACE
@@ -2631,7 +2669,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         rulerEdge = ruler.edgeNear(w[0], w[1], RULER_REACH_DP * density / currentScale())
         val (kind, _, size) = rulerInk()
         rulerOffset = size / 2
-        rulerFrom = ruler.along(w[0], w[1])
+        rulerFrom = if (rulerEdge == Ruler.ARC) ruler.arcAngle(w[0], w[1]) else ruler.along(w[0], w[1])
         rulerTo = rulerFrom
         hideCursor()
         pageLayer.invalidate()
@@ -2640,7 +2678,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
     /** Page point of the active page to world, onto the ruler's line. */
     private fun rulerDrawTo(x: Float, y: Float) {
         if (rulerEdge == 0) return
-        val a = ruler.along(x + lefts[activePage], y + tops[activePage])
+        val a = if (rulerEdge == Ruler.ARC) ruler.arcAngle(x + lefts[activePage], y + tops[activePage]) else ruler.along(x + lefts[activePage], y + tops[activePage])
         rulerFrom = kotlin.math.min(rulerFrom, a)
         rulerTo = max(rulerTo, a)
         pageLayer.invalidate()
@@ -2650,6 +2688,14 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         val edge = rulerEdge
         rulerEdge = 0
         pageLayer.invalidate()
+        if (edge == Ruler.ARC) {
+            if (rulerTo - rulerFrom < 1f) return
+            val doc = doc(activePage) ?: return
+            val (kind, color, size) = rulerInk()
+            doc.add(PageStroke(kind, Stroke(InkBrushes.create(kind, color, size), shapeInputs(arcPath(activePage), 0.6f)), if (kind == InkKind.DASHED) dashStyle else null))
+            changed()
+            return
+        }
         if (edge == 0 || rulerTo - rulerFrom < MIN_RULER_LINE) return
         val doc = doc(activePage) ?: return
         val (kind, color, size) = rulerInk()
@@ -2657,12 +2703,12 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         val targets = Magnet.targets(doc.strokes)
         val reach = MAGNET_DP * density / currentScale()
         fun end(along: Float): FloatArray {
-            val w = ruler.world(along, edge * (ruler.width / 2 + rulerOffset))
+            val w = ruler.world(along, ruler.edgeLine(edge, rulerOffset))
             val px = w[0] - lefts[activePage]
             val py = w[1] - tops[activePage]
             val snap = targets.snap(px, py, reach) ?: return floatArrayOf(px, py)
             val a = ruler.along(snap.x + lefts[activePage], snap.y + tops[activePage])
-            val q = ruler.world(a, edge * (ruler.width / 2 + rulerOffset))
+            val q = ruler.world(a, ruler.edgeLine(edge, rulerOffset))
             return floatArrayOf(q[0] - lefts[activePage], q[1] - tops[activePage])
         }
         val a = end(rulerFrom)
@@ -2670,6 +2716,93 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         val path = listOf(ShapeRecognizer.P(a[0], a[1]), ShapeRecognizer.P(b[0], b[1]))
         doc.add(PageStroke(kind, Stroke(InkBrushes.create(kind, color, size), shapeInputs(path, 0.6f)), if (kind == InkKind.DASHED) dashStyle else null))
         changed()
+    }
+
+    // --- compass
+
+    /** The pen draws circles: down at the centre, out to the radius; going round draws only an arc. */
+    var compassOn = false
+        set(value) {
+            field = value
+            compassSamples.clear()
+            pageLayer.invalidate()
+        }
+    private var compassX = 0f
+    private var compassY = 0f
+    private val compassSamples = ArrayList<FloatArray>()
+
+    private fun startCompass(e: MotionEvent, index: Int) {
+        activePointerId = e.getPointerId(index)
+        val p = toPage(activePage, e.getX(index), e.getY(index))
+        compassX = p[0]
+        compassY = p[1]
+        compassSamples.clear()
+        hideCursor()
+        pageLayer.invalidate()
+    }
+
+    private fun compassTo(x: Float, y: Float) {
+        compassSamples += floatArrayOf(x, y)
+        pageLayer.invalidate()
+    }
+
+    /** Radius and the arc (from, sweep, degrees; sweep 360 = the whole circle) of the compass line now. */
+    private fun compassShape(): Triple<Float, Float, Float>? {
+        val last = compassSamples.lastOrNull() ?: return null
+        val r = hypot(last[0] - compassX, last[1] - compassY)
+        if (r < MIN_COMPASS_RADIUS) return null
+        // Where the pen went round at about the final radius: the arc it covered.
+        var start = Float.NaN
+        var prev = 0f
+        var sweep = 0f
+        var lo = 0f
+        var hi = 0f
+        for (s in compassSamples) {
+            if (hypot(s[0] - compassX, s[1] - compassY) < 0.8f * r) continue
+            val a = Math.toDegrees(kotlin.math.atan2((s[1] - compassY).toDouble(), (s[0] - compassX).toDouble())).toFloat()
+            if (start.isNaN()) {
+                start = a
+                prev = a
+                continue
+            }
+            var d = a - prev
+            if (d > 180f) d -= 360f
+            if (d < -180f) d += 360f
+            sweep += d
+            lo = kotlin.math.min(lo, sweep)
+            hi = max(hi, sweep)
+            prev = a
+        }
+        val span = hi - lo
+        return if (start.isNaN() || span < MIN_ARC_DEGREES || span > 330f) Triple(r, 0f, 360f) else Triple(r, start + lo, span)
+    }
+
+    private fun compassPoints(r: Float, from: Float, sweep: Float): List<ShapeRecognizer.P> {
+        val steps = max(8, (sweep / 4f).toInt())
+        return (0..steps).map { k ->
+            val t = Math.toRadians((from + sweep * k / steps).toDouble())
+            ShapeRecognizer.P(compassX + r * kotlin.math.cos(t).toFloat(), compassY + r * kotlin.math.sin(t).toFloat())
+        }
+    }
+
+    private fun endCompass() {
+        val shape = compassShape()
+        compassSamples.clear()
+        pageLayer.invalidate()
+        val (r, from, sweep) = shape ?: return
+        val doc = doc(activePage) ?: return
+        val (kind, color, size) = rulerInk()
+        doc.add(PageStroke(kind, Stroke(InkBrushes.create(kind, color, size), shapeInputs(compassPoints(r, from, sweep), 0.6f)), if (kind == InkKind.DASHED) dashStyle else null))
+        changed()
+    }
+
+    /** Points of the arc drawn along the protractor (page units of [page]), outside its edge by half the line. */
+    private fun arcPath(page: Int): List<ShapeRecognizer.P> {
+        val steps = max(2, ((rulerTo - rulerFrom) / 1.5f).toInt())
+        return (0..steps).map { k ->
+            val w = ruler.arcPoint(rulerFrom + (rulerTo - rulerFrom) * k / steps, rulerOffset)
+            ShapeRecognizer.P(w[0] - lefts[page], w[1] - tops[page])
+        }
     }
 
     // --- eyedropper
@@ -3196,6 +3329,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             cache.endFrame()
             drawDragged(canvas, src)
             drawRuler(canvas, scale)
+            drawCompass(canvas, scale)
             // The pointer's trail fades on its own: frames keep coming while it is lit.
             if (laser.active && laser.draw(canvas, worldToView)) postInvalidateOnAnimation()
 
@@ -3529,14 +3663,51 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             if (!ruler.shown) return
             canvas.save()
             canvas.concat(worldToView)
-            ruler.draw(canvas, dark, 1f / scale, showAngle = mode == Mode.RULER)
-            if (mode == Mode.RULER_DRAW && rulerEdge != 0 && rulerTo > rulerFrom) {
-                val (kind, color, size) = rulerInk()
-                val a = ruler.world(rulerFrom, rulerEdge * (ruler.width / 2 + rulerOffset))
-                val b = ruler.world(rulerTo, rulerEdge * (ruler.width / 2 + rulerOffset))
+            val pointer = if (!cursorX.isNaN() && cursorPage in tops.indices) floatArrayOf(cursorX + lefts[cursorPage], cursorY + tops[cursorPage]) else null
+            ruler.draw(canvas, dark, 1f / scale, showAngle = mode == Mode.RULER, pointer = pointer)
+            if (mode == Mode.RULER_DRAW && rulerEdge == Ruler.ARC && rulerTo > rulerFrom) {
+                val (_, color, size) = rulerInk()
+                previewPaint.color = InkColors.forPaper(color, dark)
+                previewPaint.strokeWidth = size
+                tracePath.rewind()
+                val pts = arcPath(activePage)
+                tracePath.moveTo(pts[0].x + lefts[activePage], pts[0].y + tops[activePage])
+                for (p in pts.drop(1)) tracePath.lineTo(p.x + lefts[activePage], p.y + tops[activePage])
+                canvas.drawPath(tracePath, previewPaint)
+            } else if (mode == Mode.RULER_DRAW && rulerEdge != 0 && rulerTo > rulerFrom) {
+                val (_, color, size) = rulerInk()
+                val a = ruler.world(rulerFrom, ruler.edgeLine(rulerEdge, rulerOffset))
+                val b = ruler.world(rulerTo, ruler.edgeLine(rulerEdge, rulerOffset))
                 previewPaint.color = InkColors.forPaper(color, dark)
                 previewPaint.strokeWidth = size
                 canvas.drawLine(a[0], a[1], b[0], b[1], previewPaint)
+            }
+            canvas.restore()
+        }
+
+        private val compassText = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF2979FF.toInt() }
+
+        /** The circle being drawn with the compass, its centre and radius in millimetres. */
+        private fun drawCompass(canvas: Canvas, scale: Float) {
+            if (mode != Mode.COMPASS || activePage !in tops.indices) return
+            val last = compassSamples.lastOrNull() ?: return
+            canvas.save()
+            canvas.concat(pageMatrix(activePage))
+            val (_, color, size) = rulerInk()
+            previewPaint.color = 0xFF2979FF.toInt()
+            previewPaint.strokeWidth = 1.5f / scale
+            canvas.drawLine(compassX, compassY, last[0], last[1], previewPaint)
+            canvas.drawCircle(compassX, compassY, 3f / scale, previewPaint)
+            compassShape()?.let { (r, from, sweep) ->
+                previewPaint.color = InkColors.forPaper(color, dark)
+                previewPaint.strokeWidth = size
+                tracePath.rewind()
+                val pts = compassPoints(r, from, sweep)
+                tracePath.moveTo(pts[0].x, pts[0].y)
+                for (p in pts.drop(1)) tracePath.lineTo(p.x, p.y)
+                canvas.drawPath(tracePath, previewPaint)
+                compassText.textSize = 15f * density / scale
+                canvas.drawText("r = ${"%.1f".format(r * dev.inknotes.data.Notebook.MM_PER_UNIT).replace('.', ',')} мм", last[0] + 10f / scale, last[1] - 10f / scale, compassText)
             }
             canvas.restore()
         }
@@ -3748,6 +3919,10 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         private const val FOUNTAIN_TO_LINE = 0.5f
 
         /** Lines that can be turned into one another ([restyleSelection]); markers cannot. */
+        /** The compass draws nothing smaller; an arc shorter than this is taken for a whole circle. */
+        const val MIN_COMPASS_RADIUS = 4f
+        const val MIN_ARC_DEGREES = 25f
+
         val LINE_KINDS = setOf(InkKind.PEN, InkKind.LINE, InkKind.PENCIL, InkKind.DASHED, InkKind.FOUNTAIN, InkKind.NEON)
 
         /** Widths the selection's line width can be set to (page units, as the line shows). */

@@ -18,6 +18,8 @@ import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
 import dev.inknotes.data.NotebookRepository
 import dev.inknotes.data.PaperKind
+import org.junit.Assume.assumeTrue
+import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
@@ -62,6 +64,13 @@ class V032Screenshots {
         instr.uiAutomation.executeShellCommand("input stylus swipe $x1 $y1 $x2 $y2 $ms").close()
         Thread.sleep(ms + 300L)
     }
+
+    /**
+     * Only on the CI emulator (`-e shots 1`): the test makes its own notebooks and changes the
+     * tool bars, which must not happen to a real tablet's notebooks and settings.
+     */
+    @Before
+    fun onlyWhenAsked() = assumeTrue(InstrumentationRegistry.getArguments().getString("shots") == "1")
 
     @Test
     fun zoomWindowExportPhotoEditor() {
