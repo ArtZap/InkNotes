@@ -113,7 +113,7 @@ fun SyncDialog(cloud: CloudSync, prefs: AppPrefs, busy: () -> Set<String>, onDis
         dismissButton = {
             Row {
                 if (cloud.signedIn) OutlinedButton(onClick = cloud::signOut) { Text("Выйти") }
-                TextButton(onClick = onDismiss) { Text("Закрыть") }
+                if (cloud.configured) TextButton(onClick = onDismiss) { Text("Закрыть") }
             }
         },
     )
