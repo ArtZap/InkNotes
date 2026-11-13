@@ -379,6 +379,9 @@ class EditorController(
     private val loader = Executors.newSingleThreadExecutor { r -> Thread(r, "page-load") }
     private val loading = HashSet<String>()
 
+    /** Reads under way (see [loadedDocument]): a pen touch can wait for one ([awaitDocument]). */
+    private val loads = HashMap<String, java.util.concurrent.Future<dev.inknotes.data.PageContent?>>()
+
     // Pictures placed on pages, decoded off the main thread; LruCache is thread-safe, the
     // thumbnail thread reads it too.
     private val imageCache = object : LruCache<String, Bitmap>(IMAGE_CACHE_BYTES) {
@@ -567,7 +570,10 @@ class EditorController(
         val r = if (android.os.Build.VERSION.SDK_INT >= 31) android.media.MediaRecorder(context) else @Suppress("DEPRECATION") android.media.MediaRecorder()
         val ok = runCatching {
             r.setAudioSource(android.media.MediaRecorder.AudioSource.MIC)
-            r.setOutputFormat(android.media.MediaRecorder.OutputFormat.MPEG_4)
+            // AAC in ADTS frames, not an MP4 box: MP4 is readable only once the recorder has
+            // finished it, while ADTS plays up to wherever it was cut off (the app killed in the
+            // middle of a lecture). The name stays .m4a: players go by the contents.
+            r.setOutputFormat(android.media.MediaRecorder.OutputFormat.AAC_ADTS)
             r.setAudioEncoder(android.media.MediaRecorder.AudioEncoder.AAC)
             r.setAudioEncodingBitRate(64_000)
             r.setAudioSamplingRate(44_100)
@@ -584,8 +590,17 @@ class EditorController(
         recorder = r
         recordingFile = file
         pendingMarks.clear()
-        recordingSince = System.currentTimeMillis()
+        val since = System.currentTimeMillis()
+        recordingSince = since
+        repo.saveRecordingJournal(notebook, file.name, since, emptyList())
+        // Keeps the microphone with the app when the screen goes off or another app is opened.
+        appContext = context.applicationContext
+        RecordingService.onStopRequested = { stopRecording() }
+        RecordingService.start(context.applicationContext, notebook.title)
     }
+
+    /** For stopping the recording service from wherever the recording is stopped. */
+    private var appContext: Context? = null
 
     fun stopRecording() {
         val r = recorder ?: return
@@ -594,8 +609,11 @@ class EditorController(
         recorder = null
         recordingSince = null
         recordingFile = null
+        RecordingService.onStopRequested = null
+        appContext?.let(RecordingService::stop)
         val ok = runCatching { r.stop() }.isSuccess
         runCatching { r.release() }
+        repo.endRecordingJournal(notebook, file.name)
         if (!ok) {
             // Stopped right after starting: nothing was recorded.
             file.delete()
@@ -632,6 +650,8 @@ class EditorController(
         } else {
             pendingMarks += dev.inknotes.data.AudioMark(pageId, bounds.left, bounds.top, bounds.right, bounds.bottom, file.name, at)
         }
+        // What was written so far survives the app being stopped mid-recording.
+        repo.saveRecordingJournal(notebook, file.name, since, pendingMarks.toList())
     }
 
     /** Plays [rec] from [fromMs]. */
@@ -890,10 +910,11 @@ class EditorController(
         if (loading.add(pageId)) {
             val nb = notebook
             runCatching {
-                loader.execute {
+                loads[pageId] = loader.submit<dev.inknotes.data.PageContent?> {
                     val content = runCatching { repo.loadPage(nb, pageId) }.getOrNull()
                     handler.post {
                         loading.remove(pageId)
+                        loads.remove(pageId)
                         if (content != null && pageId in notebook.pageIds && pageId !in docs) {
                             install(pageId, content)
                             view?.refresh()
@@ -901,10 +922,23 @@ class EditorController(
                             handler.postDelayed(mathRunnable, MATH_DELAY_MS / 2)
                         }
                     }
+                    content
                 }
             }.onFailure { loading.remove(pageId) }
         }
         return null
+    }
+
+    override fun awaitDocument(index: Int, timeoutMs: Long): PageDocument? {
+        loadedDocument(index)?.let { return it }
+        val pageId = notebook.pageIds.getOrNull(index) ?: return null
+        val content = runCatching { loads[pageId]?.get(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS) }.getOrNull() ?: return null
+        // Installed now; the read's own post then finds it there and does nothing.
+        return docs[pageId] ?: install(pageId, content).also { view?.refresh() }
+    }
+
+    override fun onPageNotReady(page: Int) {
+        showStatus("Страница ${page + 1} ещё открывается — коснитесь пером ещё раз")
     }
 
     override fun thumbnail(index: Int): Bitmap? =
@@ -1257,16 +1291,17 @@ class EditorController(
         val nb = notebook
         status = if (format == ExportFormat.PDF) "Экспорт PDF…" else "Экспорт PNG…"
         Thread({
+            val missing = ArrayList<Int>()
             val result = runCatching {
                 if (format == ExportFormat.PDF) {
                     (outFor(-1, 0) ?: error("cannot open output")).use { out ->
-                        PdfExporter.export(repo, nb, out, pages) { k, total ->
+                        missing += PdfExporter.export(repo, nb, out, pages) { k, total ->
                             handler.post { status = "Экспорт PDF: $k / $total" }
                         }
                     }
                 } else {
                     pages.forEachIndexed { k, i ->
-                        (outFor(i, k) ?: error("cannot open output")).use { out -> PdfExporter.writePng(repo, nb, i, out) }
+                        (outFor(i, k) ?: error("cannot open output")).use { out -> if (!PdfExporter.writePng(repo, nb, i, out)) missing += i + 1 }
                         handler.post { status = "Экспорт PNG: ${k + 1} / ${pages.size}" }
                     }
                 }
@@ -1274,8 +1309,19 @@ class EditorController(
             handler.post {
                 status = null
                 done(result.isSuccess)
+                // Said after the caller's own message, so it is the one seen.
+                exportWarning(result.exceptionOrNull(), missing)?.let(::showStatus)
             }
         }, "export").start()
+    }
+
+    /** What went wrong with an export beyond "not saved": too little memory, pages that came out incomplete. */
+    private fun exportWarning(error: Throwable?, missing: List<Int>): String? = when {
+        error is OutOfMemoryError -> "Не хватило памяти: экспортируйте страницы частями (диапазоном)"
+        error != null -> null
+        missing.isEmpty() -> null
+        else -> "Сохранено, но " + (if (missing.size == 1) "страницу ${missing[0]}" else "страницы ${missing.take(10).joinToString(", ")}" + (if (missing.size > 10) " и другие" else "")) +
+            " не удалось прочитать — в файле они пустые или без PDF"
     }
 
     /** Writes the whole notebook as PDF to [uri] (from the system "save as" dialog). */
@@ -1355,6 +1401,7 @@ class EditorController(
                             result.isSuccess -> callback.onWriteFinished(arrayOf(android.print.PageRange.ALL_PAGES))
                             else -> callback.onWriteFailed(result.exceptionOrNull()?.message)
                         }
+                        exportWarning(result.exceptionOrNull(), result.getOrNull().orEmpty())?.let(::showStatus)
                     }
                 }, "print").start()
             }

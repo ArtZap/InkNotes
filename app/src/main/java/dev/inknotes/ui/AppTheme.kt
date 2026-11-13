@@ -197,6 +197,11 @@ class AppPrefs(context: Context) {
         get() = prefs.getString("quickNoteId", null)
         set(value) = prefs.edit().putString("quickNoteId", value).apply()
 
+    /** The notification permission was asked for once (with the first recording). */
+    var askedNotifications: Boolean
+        get() = prefs.getBoolean("askedNotifications", false)
+        set(value) = prefs.edit().putBoolean("askedNotifications", value).apply()
+
     /** When a quick note was last written: the app re-reads that notebook if it has it open. */
     var quickNoteUsedAt: Long
         get() = prefs.getLong("quickNoteUsedAt", 0L)

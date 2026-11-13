@@ -150,14 +150,24 @@ fun EditorScreen(
     var pageText by remember { mutableStateOf<List<dev.inknotes.search.TextLine>?>(null) }
     val context = LocalContext.current
     val resolver = context.contentResolver
-    val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) controller.startRecording(context) else controller.showStatus("Без доступа к микрофону записать звук нельзя")
+    // The microphone, and on Android 13+ the notification that a recording is on (it shows how
+    // long it has run and stops it; without it the recording still works).
+    val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { granted ->
+        if (granted[android.Manifest.permission.RECORD_AUDIO] == true) controller.startRecording(context) else controller.showStatus("Без доступа к микрофону записать звук нельзя")
     }
     val record = {
-        if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+        fun has(p: String) = androidx.core.content.ContextCompat.checkSelfPermission(context, p) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        val notify = if (android.os.Build.VERSION.SDK_INT >= 33) android.Manifest.permission.POST_NOTIFICATIONS else null
+        val missing = listOfNotNull(android.Manifest.permission.RECORD_AUDIO, notify).filter { !has(it) }
+        val prefs = AppServices.get(context).prefs
+        // Asked once: refused, it is not asked before every recording.
+        val askedNotify = notify != null && prefs.askedNotifications
+        val ask = missing.filter { it != notify || !askedNotify }
+        if (ask.isEmpty()) {
             controller.startRecording(context)
         } else {
-            micPermission.launch(android.Manifest.permission.RECORD_AUDIO)
+            if (notify in ask) prefs.askedNotifications = true
+            micPermission.launch(ask.toTypedArray())
         }
     }
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->

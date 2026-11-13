@@ -118,6 +118,9 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         /** The pen touched page [page], which could not be read and so can't be changed. */
         fun onPageLocked(page: Int) {}
 
+        /** The pen touched page [page] while it was still being read: that touch wrote nothing. */
+        fun onPageNotReady(page: Int) {}
+
         /** Words [from]…[to] of the PDF text of page [page] picked (from < 0: the pick is gone). */
         fun onPdfTextPicked(page: Int, from: Int, to: Int) {}
 
@@ -160,6 +163,12 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
 
         /** The page's document if it is in memory; null while it loads (the view is refreshed then). */
         fun loadedDocument(index: Int): PageDocument? = document(index)
+
+        /**
+         * Like [loadedDocument], but a page being read is waited for up to [timeoutMs] (the pen
+         * touched it: a short wait is better than a lost stroke). Null if it is still not there.
+         */
+        fun awaitDocument(index: Int, timeoutMs: Long): PageDocument? = loadedDocument(index)
 
         /** A small picture of the page, shown while it loads. */
         fun thumbnail(index: Int): Bitmap? = null
@@ -1380,10 +1389,14 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             if (source?.pdfWords(activePage) != null) return Mode.PDF_TEXT
         }
         if (pen || eraserEnd) {
-            // A page still being read is not waited for on the main thread: the pen does
-            // nothing until it is there (it is read as it comes into view, so this is rare).
+            // A page still being read (it is read as it comes into view, so this is rare) is
+            // waited for a moment; if it is still not there the pen writes nothing, and says so.
             val at = pageAt(e.getX(index), e.getY(index))
-            if (source?.loadedDocument(at) == null) return Mode.NONE
+            val src = source
+            if (src != null && src.loadedDocument(at) == null && src.awaitDocument(at, PEN_WAIT_MS) == null) {
+                listener?.onPageNotReady(at)
+                return Mode.NONE
+            }
         }
         if ((pen || eraserEnd) && !penButton) {
             val at = pageAt(e.getX(index), e.getY(index))
@@ -3957,6 +3970,9 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
     }
 
     companion object {
+        /** How long a pen touch waits for its page to be read before giving up (see classify). */
+        private const val PEN_WAIT_MS = 300L
+
         /** Page width in page units (1000 units = 210 mm for A4). */
         const val PAGE_W = 1000f
         private const val ANSWER_MARGIN = 8f

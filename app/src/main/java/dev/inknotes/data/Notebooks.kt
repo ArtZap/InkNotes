@@ -306,6 +306,7 @@ class NotebookRepository(filesDir: File) {
         // A notebook being replaced when the app was stopped goes back (or its old copy goes).
         background {
             SafeFiles.recoverAside(root)
+            runCatching { recoverRecordings() }.onFailure { Log.w(TAG, "recording recovery failed", it) }
             runCatching { sweepOrphans() }.onFailure { Log.w(TAG, "orphan sweep failed", it) }
         }
     }
@@ -314,6 +315,7 @@ class NotebookRepository(filesDir: File) {
     fun list(): List<Notebook> = onIo {
         root.listFiles().orEmpty()
             .filter { !it.name.startsWith(".") } // skip import staging folders
+            .filter { !File(it, LOCK_NOTE).exists() } // a note being written over the lock screen
             .mapNotNull { dir -> runCatching { readMeta(dir) }.getOrElse { e -> recoverMeta(dir, e) } }
             .sortedByDescending { it.updatedAt }
     }
@@ -366,6 +368,91 @@ class NotebookRepository(filesDir: File) {
         return nb
     }
 
+    // ------------------------------------------------- notes over the lock screen
+
+    /**
+     * A notebook of its own for one quick note written over the lock screen: it has only the
+     * new page, so nothing written before can be seen or reached without unlocking. It is not
+     * listed in the library; [mergeLockNote] moves what was written into the quick notes.
+     */
+    fun createLockNote(title: String, paper: PaperKind): Notebook {
+        val nb = create(title, paper)
+        val marker = File(dir(nb.id), LOCK_NOTE)
+        background { runCatching { marker.writeText(System.currentTimeMillis().toString()) } }
+        return nb
+    }
+
+    /**
+     * Lock screen notes not yet moved into the quick notes. [leftOnly]: only those of an earlier
+     * run of the app (stopped before it could move them), never one being written now.
+     */
+    fun lockNotes(leftOnly: Boolean = false): List<Notebook> = onIo {
+        root.listFiles().orEmpty()
+            .filter { d -> File(d, LOCK_NOTE).let { it.exists() && (!leftOnly || it.lastModified() < startedAt) } }
+            .mapNotNull { runCatching { readMeta(it) }.getOrNull() }
+    }
+
+    private val startedAt = System.currentTimeMillis()
+
+    /**
+     * Moves the pages written in lock screen note [note] (empty ones are dropped), with their
+     * pictures and recordings, to the end of notebook [intoId], and removes the note. With no
+     * such notebook (never made, or deleted) the note itself becomes it, under [title].
+     * Returns the notebook that has the pages now (null: nothing was written).
+     */
+    fun mergeLockNote(note: Notebook, intoId: String?, title: String): Notebook? = onIo {
+        val from = dir(note.id)
+        val nb = runCatching { readMeta(from) }.getOrNull()
+        if (nb == null) {
+            deleteQuietly(from)
+            return@onIo null
+        }
+        val written = nb.pageIds.filter { id ->
+            val f = File(from, "pages/$id.ink")
+            f.isFile && runCatching { PageCodec.read(f, PageCodec.Limits.OWN) }.getOrNull()
+                ?.let { it.strokes.isNotEmpty() || it.fills.isNotEmpty() || it.images.isNotEmpty() } != false
+        }
+        if (written.isEmpty() && nb.recordings.isEmpty()) {
+            deleteQuietly(from)
+            return@onIo null
+        }
+        val target = intoId?.takeIf { UUID_RE.matches(it) && it != note.id }?.let { id ->
+            dir(id).takeIf { File(it, META).isFile && !File(it, LOCK_NOTE).exists() }?.let { runCatching { readMeta(it) }.getOrNull() }
+        }
+        if (target == null) {
+            // Becomes the quick notes notebook itself.
+            val own = nb.copy(title = title, pageIds = written.ifEmpty { nb.pageIds.take(1) }, updatedAt = System.currentTimeMillis())
+            writeMetaNow(own)
+            File(from, LOCK_NOTE).delete()
+            return@onIo own
+        }
+        val into = dir(target.id)
+        val intoPages = File(into, "pages").apply { mkdirs() }
+        for (id in written) File(from, "pages/$id.ink").renameTo(File(intoPages, "$id.ink"))
+        for (f in from.listFiles().orEmpty()) {
+            if (PageImage.NAME.matches(f.name) || REC_NAME.matches(f.name) || PHOTO_NAME.matches(f.name)) f.renameTo(File(into, f.name))
+        }
+        val pages = written.toSet()
+        val merged = target.copy(
+            pageIds = target.pageIds + written,
+            pageSizes = target.pageSizes + nb.pageSizes.filterKeys { it in pages },
+            recordings = target.recordings + nb.recordings,
+            audioMarks = (target.audioMarks + nb.audioMarks.filter { it.pageId in pages }).takeLast(MAX_MARKS),
+            updatedAt = System.currentTimeMillis(),
+        )
+        writeMetaNow(merged)
+        deleteQuietly(from)
+        merged
+    }
+
+    /** [mergeLockNote] off the main thread; [onDone] on the main thread. */
+    fun mergeLockNoteAsync(note: Notebook, intoId: String?, title: String, onDone: (Notebook?) -> Unit) {
+        background {
+            val nb = runCatching { mergeLockNote(note, intoId, title) }.onFailure { Log.e(TAG, "lock note not merged", it) }.getOrNull()
+            main.post { onDone(nb) }
+        }
+    }
+
     fun rename(nb: Notebook, title: String): Notebook =
         nb.copy(title = title, updatedAt = System.currentTimeMillis()).also(::writeMeta)
 
@@ -408,6 +495,81 @@ class NotebookRepository(filesDir: File) {
             audioMarks = (nb.audioMarks + marks.filter { it.pageId in nb.pageIds }).takeLast(MAX_MARKS),
             updatedAt = System.currentTimeMillis(),
         ).also(::writeMeta)
+
+    /**
+     * A recording under way, written down beside its file (`rec-….m4a.live`): when it began and
+     * the writing made so far. If the app is stopped before the recording is (killed by the
+     * system, out of battery), the next start adds it to its notebook from this (see
+     * [recoverRecordings]); a finished recording removes it ([endRecordingJournal]).
+     */
+    fun saveRecordingJournal(nb: Notebook, file: String, since: Long, marks: List<AudioMark>) {
+        if (!REC_NAME.matches(file)) return
+        val json = JSONObject().put("at", since).put(
+            "marks",
+            JSONArray(marks.takeLast(MAX_MARKS).map { JSONObject().put("page", it.pageId).put("l", it.left.toDouble()).put("t", it.top.toDouble()).put("r", it.right.toDouble()).put("b", it.bottom.toDouble()).put("ms", it.atMs) }),
+        ).toString().toByteArray()
+        val target = File(dir(nb.id), "$file$LIVE")
+        background { if (target.parentFile?.isDirectory == true) atomicWrite(target) { it.write(json) } }
+    }
+
+    fun endRecordingJournal(nb: Notebook, file: String) {
+        if (!REC_NAME.matches(file)) return
+        val target = File(dir(nb.id), "$file$LIVE")
+        background { target.delete() }
+    }
+
+    /**
+     * Recordings left unfinished by an app that was stopped: each one whose file has sound goes
+     * into its notebook with the writing made during it (the format, AAC in ADTS frames, plays
+     * up to where it was cut off). Run at start, before any recording can be under way.
+     */
+    private fun recoverRecordings() {
+        for (d in root.listFiles().orEmpty()) {
+            if (d.name.startsWith(".") || !d.isDirectory) continue
+            val journals = d.listFiles().orEmpty().filter { it.name.endsWith(LIVE) }
+            if (journals.isEmpty()) continue
+            var nb = runCatching { readMeta(d) }.getOrNull() ?: continue
+            for (j in journals) {
+                val name = j.name.removeSuffix(LIVE)
+                val audio = File(d, name)
+                runCatching {
+                    if (!REC_NAME.matches(name) || !audio.isFile || audio.length() < MIN_RECORDING_BYTES) {
+                        audio.takeIf { REC_NAME.matches(name) }?.delete()
+                        return@runCatching
+                    }
+                    if (nb.recordings.any { it.file == name }) return@runCatching
+                    val o = JSONObject(j.readText())
+                    val since = o.getLong("at")
+                    val pages = nb.pageIds.toSet()
+                    val a = o.optJSONArray("marks") ?: JSONArray()
+                    val marks = (0 until minOf(a.length(), MAX_MARKS)).mapNotNull { i ->
+                        val m = a.optJSONObject(i) ?: return@mapNotNull null
+                        val page = m.optString("page").takeIf { it in pages } ?: return@mapNotNull null
+                        AudioMark(page, m.optDouble("l").toFloat(), m.optDouble("t").toFloat(), m.optDouble("r").toFloat(), m.optDouble("b").toFloat(), name, m.optLong("ms"))
+                    }
+                    val duration = durationOf(audio) ?: (audio.lastModified() - since).coerceAtLeast(0L)
+                    nb = nb.copy(
+                        recordings = nb.recordings + Recording(name, since, duration),
+                        audioMarks = (nb.audioMarks + marks).takeLast(MAX_MARKS),
+                        updatedAt = System.currentTimeMillis(),
+                    )
+                    writeMetaNow(nb)
+                    Log.w(TAG, "recording $name of ${nb.id} recovered")
+                }.onFailure { Log.e(TAG, "recording ${j.name} not recovered", it) }
+                j.delete()
+            }
+        }
+    }
+
+    private fun durationOf(file: File): Long? = runCatching {
+        val r = android.media.MediaMetadataRetriever()
+        try {
+            r.setDataSource(file.path)
+            r.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()?.takeIf { it > 0 }
+        } finally {
+            r.release()
+        }
+    }.getOrNull()
 
     fun setAudioMarks(nb: Notebook, marks: List<AudioMark>): Notebook =
         nb.copy(audioMarks = marks.filter { it.pageId in nb.pageIds }.takeLast(MAX_MARKS)).also(::writeMeta)
@@ -1471,6 +1633,17 @@ class NotebookRepository(filesDir: File) {
         }
     }
 
+    /**
+     * Like [loadPage], but null when the page has a file that could not be read (it is shown
+     * empty in the editor): for exports, which must not pass such a page off as blank.
+     */
+    fun readPage(nb: Notebook, pageId: String): PageContent? = onIo {
+        val file = pageFile(nb.id, pageId)
+        if (!file.exists()) return@onIo PageContent.EMPTY
+        val content = loadPage(nb, pageId)
+        if (file.path in unreadable || !file.exists()) null else content
+    }
+
     /** Size and time of a page's file: changes whenever the page is saved ("-" when there is none). */
     fun pageStamp(nb: Notebook, pageId: String): String =
         pageFile(nb.id, pageId).let { if (it.isFile) "${it.length()}:${it.lastModified()}" else "-" }
@@ -1820,6 +1993,15 @@ class NotebookRepository(filesDir: File) {
         const val TAG = "NotebookRepository"
         const val META = "notebook.json"
         private const val TOUCHED = "touched"
+
+        /** Marks a notebook for one note over the lock screen ([createLockNote]). */
+        private const val LOCK_NOTE = "lockscreen"
+
+        /** Beside a recording under way ([saveRecordingJournal]). */
+        private const val LIVE = ".live"
+
+        /** Less than this is a header with no sound in it. */
+        private const val MIN_RECORDING_BYTES = 2048L
 
         /** Marks a notebook rebuilt from its pages ([recoverMeta]): its files are never swept. */
         private const val RECOVERED = "recovered"
