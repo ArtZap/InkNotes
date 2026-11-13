@@ -10,7 +10,17 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedButton
@@ -142,6 +152,7 @@ class MainActivity : ComponentActivity() {
                             onSide = { if (side == null) pickingSide = true else closeSide() },
                             sideOpen = side != null,
                             compact = side != null,
+                            tabDrag = tabDragging,
                         ) }
                     }
                     val other = side
@@ -187,6 +198,7 @@ class MainActivity : ComponentActivity() {
                     }
                 }
                 pendingImport?.let { (set, into) -> ImportConflictDialog(set, into) }
+                TabDropOverlay()
                 if (splash) Splash(onDone = { splash = false })
             }
         }
@@ -441,6 +453,130 @@ class MainActivity : ComponentActivity() {
     /** When a quick note was last written, as this activity knows it. */
     private var quickNoteSeen = 0L
 
+    // ------------------------------------------------------------ dragging tabs
+
+    /** Where a dragged tab is now (in the root of the window), and the size of the window. */
+    private var tabDragAt by mutableStateOf<androidx.compose.ui.geometry.Offset?>(null)
+    private var rootSize = androidx.compose.ui.unit.IntSize.Zero
+
+    private val tabDragging = TabDragging(
+        start = { t, at ->
+            startTabDrag(t)
+            tabDragAt = at
+        },
+        move = { tabDragAt = it },
+        drop = { t, at, index -> dropTab(t, at, index) },
+        cancel = ::endTabDrag,
+    )
+
+    private fun startTabDrag(t: EditorController) {
+        tabDragging.tab = t
+    }
+
+    private fun endTabDrag() {
+        tabDragging.tab = null
+        tabDragAt = null
+    }
+
+    /** Where a tab let go at [at] goes: beside, into the other half, or nowhere. */
+    private enum class TabDrop { BESIDE, INTO_SIDE, NONE }
+
+    private fun tabDropAt(at: androidx.compose.ui.geometry.Offset): TabDrop {
+        val w = rootSize.width.toFloat()
+        if (w <= 0f) return TabDrop.NONE
+        return when {
+            side != null && at.x > w * sideShare -> TabDrop.INTO_SIDE
+            side == null && at.x > w * (1f - BESIDE_EDGE) -> TabDrop.BESIDE
+            else -> TabDrop.NONE
+        }
+    }
+
+    /**
+     * A tab let go: over the strip it takes place [index] among the tabs; at the right edge it
+     * opens beside the notebook shown; over the other half it takes that half's place (the
+     * notebook there goes back among the tabs).
+     */
+    private fun dropTab(t: EditorController, at: androidx.compose.ui.geometry.Offset, index: Int?) {
+        endTabDrag()
+        if (t !in tabs) return
+        if (index != null) {
+            val rest = tabs - t
+            tabs = rest.toMutableList().apply { add(index.coerceIn(0, rest.size), t) }
+            rememberTabs()
+            return
+        }
+        if (tabDropAt(at) != TabDrop.NONE) tabToSide(t)
+    }
+
+    /** Tab [t] goes into the half beside; the one there (if any) back among the tabs. */
+    private fun tabToSide(t: EditorController) {
+        if (t === editor) {
+            // The notebook shown goes beside: another tab takes its place on the left.
+            editor = tabs.firstOrNull { it !== t } ?: return
+        }
+        t.flush()
+        val old = side
+        tabs = tabs - t
+        side = t
+        if (old != null) {
+            old.flush()
+            if (tabs.size < MAX_TABS) tabs = tabs + old else old.close()
+        }
+        focused = t
+        t.activateLayer()
+        rememberTabs()
+    }
+
+    /** The places a dragged tab can go, lit under it, and the tab itself following the pen. */
+    @androidx.compose.runtime.Composable
+    private fun TabDropOverlay() {
+        androidx.compose.foundation.layout.Box(
+            androidx.compose.ui.Modifier
+                .fillMaxSize()
+                .onSizeChanged { rootSize = it },
+        ) {
+            val t = tabDragging.tab ?: return@Box
+            val at = tabDragAt ?: return@Box
+            val drop = tabDropAt(at)
+            val density = androidx.compose.ui.platform.LocalDensity.current
+            val w = rootSize.width.toFloat()
+            val zone = when {
+                side != null -> sideShare to 1f
+                else -> (1f - BESIDE_EDGE) to 1f
+            }
+            val accent = androidx.compose.material3.MaterialTheme.colorScheme.primary
+            with(density) {
+                androidx.compose.foundation.layout.Box(
+                    androidx.compose.ui.Modifier
+                        .offset(x = (w * zone.first).toDp())
+                        .width((w * (zone.second - zone.first)).toDp())
+                        .fillMaxHeight()
+                        .background(accent.copy(alpha = if (drop == TabDrop.NONE) 0.06f else 0.18f)),
+                    contentAlignment = androidx.compose.ui.Alignment.Center,
+                ) {
+                    Text(
+                        if (side != null) "Отпустите — тетрадь переедет сюда" else "Отпустите — тетрадь откроется рядом",
+                        color = accent,
+                        modifier = androidx.compose.ui.Modifier.padding(16.dp),
+                    )
+                }
+                androidx.compose.material3.Surface(
+                    modifier = androidx.compose.ui.Modifier.offset(x = (at.x - 60.dp.toPx()).toDp(), y = (at.y - 16.dp.toPx()).toDp()),
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(6.dp),
+                    color = androidx.compose.material3.MaterialTheme.colorScheme.secondaryContainer,
+                    shadowElevation = 6.dp,
+                ) {
+                    Text(
+                        t.notebook.title,
+                        maxLines = 1,
+                        fontSize = 13.sp,
+                        modifier = androidx.compose.ui.Modifier.padding(horizontal = 12.dp, vertical = 6.dp).widthIn(max = 200.dp),
+                    )
+                }
+            }
+        }
+    }
+
     /** Notebooks open here: the sync does not replace them under the editor. */
     private fun openIds() = (tabs + listOfNotNull(side)).map { it.notebook.id }.toSet()
 
@@ -490,6 +626,9 @@ class MainActivity : ComponentActivity() {
 
     private companion object {
         const val MAX_TABS = 5
+
+        /** Share of the width at the right edge where a dragged tab opens beside. */
+        const val BESIDE_EDGE = 0.25f
         const val SYNC_KEY = "main"
     }
 }

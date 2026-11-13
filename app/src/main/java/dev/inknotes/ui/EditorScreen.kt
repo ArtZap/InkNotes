@@ -79,6 +79,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
@@ -128,6 +133,8 @@ fun EditorScreen(
      * and a button that hides them altogether.
      */
     compact: Boolean = false,
+    /** Tabs dragged out of the strip (to another place, beside, into the other half). */
+    tabDrag: TabDragging? = null,
 ) {
     BackHandler(onBack = onClose)
     // The view this screen made: only it is let go of when the screen goes.
@@ -289,7 +296,7 @@ fun EditorScreen(
             .background(MaterialTheme.colorScheme.surface)
             .safeDrawingPadding()
     ) {
-        if (tabs.size > 1) TabStrip(controller, tabs, onTab, onCloseTab, onLibrary = onClose)
+        if (tabs.size > 1) TabStrip(controller, tabs, onTab, onCloseTab, onLibrary = onClose, drag = tabDrag)
         val layout = controller.toolbar
         TopRow(
             c = controller,
@@ -1089,7 +1096,7 @@ private fun ToolRow(
     if (compact) {
         // One line that scrolls sideways: the page keeps the height that wrapping would take.
         CompositionLocalProvider(LocalColorStrip provides COMPACT_COLOR_STRIP, LocalCompactBar provides true) {
-            BarRow(vertical = 0.dp) { line() }
+            ArrowRow { line() }
         }
         return
     }
@@ -1220,20 +1227,60 @@ private fun TabStrip(
     onTab: (EditorController) -> Unit,
     onCloseTab: (EditorController) -> Unit,
     onLibrary: () -> Unit,
+    drag: TabDragging?,
 ) {
+    // Where each tab is (in the window's root), to tell where a dragged one is dropped.
+    val bounds = remember { HashMap<EditorController, androidx.compose.ui.geometry.Rect>() }
+    var strip by remember { mutableStateOf(androidx.compose.ui.geometry.Rect.Zero) }
+    val band = with(androidx.compose.ui.platform.LocalDensity.current) { 24.dp.toPx() }
     Row(
-        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp, vertical = 2.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        Modifier
+            .fillMaxWidth()
+            .onGloballyPositioned { strip = it.boundsInRoot() }
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 6.dp, vertical = 1.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         for (t in tabs) {
             val selected = t === current
+            val dragged = drag?.tab === t
             Row(
                 Modifier
-                    .clip(RoundedCornerShape(8.dp))
+                    .height(TAB_HEIGHT)
+                    .onGloballyPositioned { bounds[t] = it.boundsInRoot() }
+                    .alpha(if (dragged) 0.4f else 1f)
+                    .clip(RoundedCornerShape(6.dp))
                     .background(if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant)
+                    .let { m ->
+                        if (drag == null) {
+                            m
+                        } else {
+                            // A long press picks the tab up; it follows the finger or pen.
+                            m.pointerInput(t) {
+                                var at = Offset.Zero
+                                detectDragGesturesAfterLongPress(
+                                    onDragStart = { local ->
+                                        at = (bounds[t]?.topLeft ?: Offset.Zero) + local
+                                        drag.start(t, at)
+                                    },
+                                    onDragEnd = {
+                                        // Dropped on the strip: a new place among the tabs.
+                                        val onStrip = at.y in strip.top - band..strip.bottom + band
+                                        val index = if (onStrip) tabs.filter { it !== t }.count { o -> (bounds[o]?.center?.x ?: 0f) < at.x } else null
+                                        drag.drop(t, at, index)
+                                    },
+                                    onDragCancel = { drag.cancel() },
+                                ) { change, amount ->
+                                    change.consume()
+                                    at += amount
+                                    drag.move(at)
+                                }
+                            }
+                        }
+                    }
                     .clickable { onTab(t) }
-                    .padding(start = 12.dp, end = 2.dp),
+                    .padding(start = 10.dp, end = 2.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
@@ -1241,14 +1288,75 @@ private fun TabStrip(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                    fontSize = 14.sp,
-                    modifier = Modifier.widthIn(max = 200.dp),
+                    fontSize = 13.sp,
+                    modifier = Modifier.widthIn(max = 180.dp),
                 )
-                TextButton(onClick = { onCloseTab(t) }, contentPadding = PaddingValues(horizontal = 6.dp)) { Text("✕", fontSize = 13.sp) }
+                Box(
+                    Modifier.size(TAB_HEIGHT).clip(CircleShape).clickable { onCloseTab(t) }.semantics { contentDescription = "Закрыть вкладку" },
+                    contentAlignment = Alignment.Center,
+                ) { Text("✕", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             }
         }
-        TextButton(onClick = onLibrary) { Text("+ Тетрадь") }
+        Box(
+            Modifier.height(TAB_HEIGHT).clip(RoundedCornerShape(6.dp)).clickable(onClick = onLibrary).padding(horizontal = 10.dp),
+            contentAlignment = Alignment.Center,
+        ) { Text("+ Тетрадь", fontSize = 13.sp, color = MaterialTheme.colorScheme.primary) }
     }
+}
+
+/**
+ * A line of buttons that scrolls sideways, with arrows at the ends while something is out of
+ * sight: a tap on one moves the line, by finger or pen, and shows that there is more.
+ */
+@Composable
+private fun ArrowRow(content: @Composable () -> Unit) {
+    val scroll = rememberScrollState()
+    val scope = rememberCoroutineScope()
+    var width by remember { mutableStateOf(0) }
+    Box(Modifier.fillMaxWidth().onSizeChanged { width = it.width }) {
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(scroll).padding(horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) { content() }
+        val bg = MaterialTheme.colorScheme.surface
+        @Composable
+        fun arrow(forward: Boolean, align: Alignment) {
+            Box(
+                Modifier
+                    .align(align)
+                    .width(44.dp)
+                    .height(48.dp)
+                    .background(
+                        androidx.compose.ui.graphics.Brush.horizontalGradient(
+                            if (forward) listOf(bg.copy(alpha = 0f), bg, bg) else listOf(bg, bg, bg.copy(alpha = 0f)),
+                        ),
+                    )
+                    .clickable { scope.launch { scroll.animateScrollBy((if (forward) 1 else -1) * width * 0.7f) } }
+                    .semantics { contentDescription = if (forward) "Дальше по панели" else "Назад по панели" },
+                contentAlignment = if (forward) Alignment.CenterEnd else Alignment.CenterStart,
+            ) { InkIcon(if (forward) InkIcons.Next else InkIcons.Previous, contentDescription = null, modifier = Modifier.size(20.dp)) }
+        }
+        if (scroll.canScrollBackward) arrow(forward = false, Alignment.CenterStart)
+        if (scroll.canScrollForward) arrow(forward = true, Alignment.CenterEnd)
+    }
+}
+
+/** Height of a tab: a thin strip, the page keeps the room. */
+private val TAB_HEIGHT = 28.dp
+
+/**
+ * A tab being dragged, told to whoever shows the tabs: [move] with the point in the window's
+ * root, [drop] with the place among the tabs when it is let go over the strip (else null).
+ */
+class TabDragging(
+    val start: (EditorController, Offset) -> Unit,
+    val move: (Offset) -> Unit,
+    val drop: (EditorController, Offset, Int?) -> Unit,
+    val cancel: () -> Unit,
+) {
+    /** The tab being dragged now (null: none). */
+    var tab by mutableStateOf<EditorController?>(null)
 }
 
 /** Typing text for the page (new, or editing a text box). */
