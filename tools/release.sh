@@ -6,6 +6,7 @@
 #   tools/release.sh --device         ещё и тесты на подключённом планшете (adb)
 #   tools/release.sh --install        после сборки поставить релиз на планшет
 #   tools/release.sh --skip-tests     только сборка (если тесты уже прогнаны)
+#   tools/release.sh --keep-daemon    не останавливать Gradle после сборки (быстрее следующая, но держит 2–3 ГБ памяти)
 #   tools/release.sh --allow-dirty    собирать с незакоммиченными изменениями
 #   tools/release.sh --new-key        создать ключ подписи, если его ещё нет (один раз!)
 #
@@ -23,6 +24,7 @@ while [ $# -gt 0 ]; do
     --device) DEVICE=1; shift ;;
     --install) INSTALL=1; shift ;;
     --skip-tests) SKIP_TESTS=1; shift ;;
+    --keep-daemon) KEEP_DAEMON=1; shift ;;
     --allow-dirty) ALLOW_DIRTY=1; shift ;;
     --new-key) NEW_KEY=1; shift ;;
     -h|--help) sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
@@ -160,7 +162,10 @@ mkdir -p release
 HISTORY=release/history.txt
 if [ -f "$HISTORY" ]; then
   LAST_CODE=$(awk '{print $2}' "$HISTORY" | sort -n | tail -1)
-  if [ -n "$LAST_CODE" ] && [ "$VERSION_CODE" -le "$LAST_CODE" ]; then
+  if [ -n "$LAST_CODE" ] && [ "$VERSION_CODE" -eq "$LAST_CODE" ]; then
+    # The same code installs over the last release (only a lower one is refused): a rebuild, e.g. with a key added.
+    warn "versionCode $VERSION_CODE уже собирался: этот APK встанет поверх него, но на других устройствах обновление с тем же номером могут не предложить."
+  elif [ -n "$LAST_CODE" ] && [ "$VERSION_CODE" -lt "$LAST_CODE" ]; then
     LAST_NAME=$(awk -v c="$LAST_CODE" '$2==c{print $1}' "$HISTORY" | tail -1)
     warn "уже был релиз с versionCode $LAST_CODE ($LAST_NAME): поверх него этот APK не установится как обновление."
     warn "Поднимите версию: tools/release.sh --version <новая>"
@@ -172,6 +177,14 @@ ok "версия годится"
 LOG="$ROOT/release/build-$VERSION_NAME.log"
 : > "$LOG"
 gradle() { ./gradlew --console=plain "$@" 2>&1 | tee -a "$LOG"; return "${PIPESTATUS[0]}"; }
+# Gradle and Kotlin keep their daemons for the next build (2–3 GB of memory for hours):
+# stopped when the script ends, however it ends. --keep-daemon keeps them for a quick rebuild.
+stop_daemons() {
+  [ "${KEEP_DAEMON:-0}" = 1 ] && return
+  ./gradlew --stop >/dev/null 2>&1 || true
+  pkill -f 'KotlinCompileDaemon' 2>/dev/null || true
+}
+trap stop_daemons EXIT
 
 # ---------- тесты ----------
 if [ "$SKIP_TESTS" = 0 ]; then

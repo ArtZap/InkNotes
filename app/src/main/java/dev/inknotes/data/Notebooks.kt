@@ -58,13 +58,27 @@ enum class PaperFormat(val title: String, val widthMm: Float, val heightMm: Floa
     SQUARE("Квадрат", 210f, 210f),
 }
 
-/** Size of a paper page: a format, upright or turned to landscape. */
-data class PageSize(val format: PaperFormat = PaperFormat.A4, val landscape: Boolean = false) {
-    val widthMm get() = if (landscape) format.heightMm else format.widthMm
-    val heightMm get() = if (landscape) format.widthMm else format.heightMm
+/**
+ * Size of a paper page: a format, upright or turned to landscape; or a canvas, [canvasW] by
+ * [canvasH] mm, that grows to the right and down as it is written on (see [CanvasGrowth]).
+ * A canvas is stored with format A4 too, so versions before 0.38 open it as an A4 page
+ * (what lies past it is kept, not shown).
+ */
+data class PageSize(
+    val format: PaperFormat = PaperFormat.A4,
+    val landscape: Boolean = false,
+    val canvasW: Float = 0f,
+    val canvasH: Float = 0f,
+) {
+    val isCanvas get() = canvasW > 0f && canvasH > 0f
+    val widthMm get() = if (isCanvas) canvasW else if (landscape) format.heightMm else format.widthMm
+    val heightMm get() = if (isCanvas) canvasH else if (landscape) format.widthMm else format.heightMm
 
     companion object {
         val DEFAULT = PageSize()
+
+        /** A new canvas: a landscape A3 to start with. */
+        val CANVAS = PageSize(canvasW = CanvasGrowth.START_W, canvasH = CanvasGrowth.START_H)
     }
 }
 
@@ -1608,7 +1622,9 @@ class NotebookRepository(filesDir: File) {
         json.keys().asSequence().mapNotNull { pageId ->
             val o = json.optJSONObject(pageId) ?: return@mapNotNull null
             val format = runCatching { PaperFormat.valueOf(o.getString("format")) }.getOrNull() ?: return@mapNotNull null
-            pageId to PageSize(format, o.optBoolean("landscape"))
+            val cw = o.optDouble("cw", 0.0).toFloat().takeIf { it.isFinite() && it > 0f }?.coerceIn(10f, CanvasGrowth.MAX) ?: 0f
+            val ch = o.optDouble("ch", 0.0).toFloat().takeIf { it.isFinite() && it > 0f }?.coerceIn(10f, CanvasGrowth.MAX) ?: 0f
+            pageId to PageSize(format, o.optBoolean("landscape"), cw, ch)
         }.toMap()
 
     private fun readPdfPages(json: JSONObject): Map<String, PdfPageRef> =
@@ -1700,7 +1716,11 @@ class NotebookRepository(filesDir: File) {
         val sizes = nb.pageSizes.filter { (id, size) -> id in nb.pageIds && size != PageSize.DEFAULT }
         if (sizes.isNotEmpty()) {
             val o = JSONObject()
-            for ((pageId, size) in sizes) o.put(pageId, JSONObject().put("format", size.format.name).put("landscape", size.landscape))
+            for ((pageId, size) in sizes) {
+                val j = JSONObject().put("format", size.format.name).put("landscape", size.landscape)
+                if (size.isCanvas) j.put("cw", size.canvasW.toDouble()).put("ch", size.canvasH.toDouble())
+                o.put(pageId, j)
+            }
             json.put("sizes", o)
         }
         if (nb.pdfPages.isNotEmpty()) {
