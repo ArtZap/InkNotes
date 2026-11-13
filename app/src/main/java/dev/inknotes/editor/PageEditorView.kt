@@ -24,6 +24,7 @@ import android.widget.FrameLayout
 import androidx.ink.authoring.InProgressStrokeId
 import androidx.ink.authoring.InProgressStrokesFinishedListener
 import androidx.ink.authoring.InProgressStrokesView
+import androidx.ink.brush.Brush
 import androidx.ink.brush.InputToolType
 import androidx.ink.strokes.MutableStrokeInputBatch
 import androidx.ink.strokes.Stroke
@@ -131,6 +132,9 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
 
         /** Space was inserted (or not): the one-shot mode is over. */
         fun onSpaceDone() {}
+
+        /** The zoom window opened or closed. */
+        fun onZoomPadChanged(open: Boolean) {}
 
         /** New writing on page [page] covering [bounds] (page units): sound being recorded is tied to it. */
         fun onInkAdded(page: Int, bounds: RectF) {}
@@ -311,7 +315,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
     private var totalHeight = 0f
 
     /** Page, kind and the colour the user chose (wet ink is shown recoloured for the paper). */
-    private class WetStroke(val page: Int, val kind: InkKind, val color: Int, val size: Float, val dash: DashStyle?)
+    private class WetStroke(val page: Int, val kind: InkKind, val color: Int, val size: Float, val dash: DashStyle?, val even: Boolean = false)
 
     private val wetStrokes = HashMap<InProgressStrokeId, WetStroke>()
     private val density = resources.displayMetrics.density
@@ -821,6 +825,9 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
     }
 
     /** The one text box selected, or null. */
+    /** The one selected picture (not a text box), or null. */
+    fun selectedPicture(): PageImage? = selected.singleOrNull()?.let { it as? PageImage }?.takeIf { !it.isText }
+
     fun selectedTextBox(): PageImage? = selected.singleOrNull()?.let { it as? PageImage }?.takeIf { it.isText }
 
     /** Puts [img] in place of the selected text box (same page), keeping it selected. */
@@ -1103,6 +1110,16 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
 
     @SuppressLint("ClickableViewAccessibility")
     override fun dispatchTouchEvent(e: MotionEvent): Boolean {
+        zoomPad?.let { pad ->
+            if (e.actionMasked == MotionEvent.ACTION_DOWN) padTouch = e.y >= pad.top
+            if (padTouch) {
+                val ev = MotionEvent.obtain(e)
+                ev.offsetLocation(0f, -pad.top.toFloat())
+                pad.handleTouch(ev)
+                ev.recycle()
+                return true
+            }
+        }
         if (pickingColor && mode == Mode.NONE) return pick(e)
         val index = e.actionIndex
         when (e.actionMasked) {
@@ -1368,28 +1385,97 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         }
     }
 
+    // --- zoom window
+
+    /**
+     * The zoom window at the bottom, while it is open. Made once and then only hidden: taking
+     * the ink view out of the window while its frame is drawn crashes the render thread.
+     */
+    private var padView: ZoomPad? = null
+    internal val zoomPad: ZoomPad? get() = padView?.takeIf { it.visibility == VISIBLE }
+    private var padTouch = false
+    private var zoomRegionPage = -1
+    private val zoomRegion = RectF()
+
+    val zoomPadOpen get() = zoomPad != null
+
+    /** Opens the zoom window on the page in view, the part a little above the middle of the screen. */
+    fun openZoomPad() {
+        if (zoomPad != null || tops.isEmpty()) return
+        val h = max(height * ZoomPad.HEIGHT_SHARE, ZoomPad.MIN_HEIGHT_DP * density).toInt()
+        val pad = padView ?: ZoomPad(context, this).also {
+            addView(it, LayoutParams(LayoutParams.MATCH_PARENT, h, android.view.Gravity.BOTTOM))
+            it.ink.addFinishedStrokesListener(this)
+            padView = it
+        }
+        if (pad.layoutParams.height != h) pad.layoutParams = pad.layoutParams.apply { height = h }
+        pad.visibility = VISIBLE
+        val page = currentPage
+        val p = toPage(page, width / 2f, (height - h) / 2f)
+        val top = max(p[1] - pageWidthOf(page) / ZoomPad.DEFAULT_MAGNIFICATION * 0.3f, pageHeightOf(page) * 0.1f)
+        pad.post { pad.place(page, pageWidthOf(page) * ZoomPad.LEFT_MARGIN, top) }
+        listener?.onZoomPadChanged(true)
+    }
+
+    fun closeZoomPad() {
+        val pad = zoomPad ?: return
+        pad.cancelWriting()
+        pad.visibility = GONE
+        padTouch = false
+        zoomRegionPage = -1
+        pageLayer.invalidate()
+        listener?.onZoomPadChanged(false)
+    }
+
+    internal val pageCount get() = tops.size
+    internal fun pageWidthOf(page: Int) = widths.getOrElse(page) { PAGE_W }
+    internal fun pageHeightOf(page: Int) = heights.getOrElse(page) { PAGE_H }
+    internal fun deskColor() = (background as? android.graphics.drawable.ColorDrawable)?.color ?: PaperStyle.of(dark).desk
+    internal fun isPenTool(e: MotionEvent, index: Int) = isPen(e, index)
+    internal fun canWriteInPad() = tool == Tool.PEN || tool == Tool.FOUNTAIN || tool == Tool.HIGHLIGHTER || tool == Tool.NEON || tool == Tool.SPOILER
+
+    /** A line begun in the zoom window: its live brush, stored on [page] when it ends. */
+    internal fun startPadStroke(ink: InProgressStrokesView, e: MotionEvent, pointerId: Int, page: Int, padToPage: Matrix): InProgressStrokeId? {
+        if (doc(page) == null) return null
+        clearSelection()
+        val (brush, wet) = newWet(page)
+        val id = ink.startStroke(e, pointerId, brush, padToPage, Matrix())
+        wetStrokes[id] = wet
+        return id
+    }
+
+    internal fun drawPageRegion(canvas: Canvas, page: Int, pageToCanvas: Matrix, region: RectF) = pageLayer.drawRegion(canvas, page, pageToCanvas, region)
+
+    /** The part shown in the zoom window, framed on its page and kept in sight above the window. */
+    internal fun showZoomRegion(page: Int, region: RectF, padHeight: Int) {
+        zoomRegionPage = page
+        zoomRegion.set(region)
+        if (page in tops.indices && width > 0) {
+            val r = RectF(region).also { pageMatrix(page).mapRect(it) }
+            val room = (height - padHeight).toFloat()
+            var dx = 0f
+            var dy = 0f
+            if (r.top < 0f || r.bottom > room) dy = room / 2f - r.centerY()
+            if (r.left < 0f || r.right > width) dx = width / 2f - r.centerX()
+            if (dx != 0f || dy != 0f) {
+                stopFling()
+                worldToView.postTranslate(dx, dy)
+                applyViewport()
+            }
+        }
+        pageLayer.invalidate()
+    }
+
     // --- ink
 
     private fun startDraw(e: MotionEvent, index: Int) {
         if (doc(activePage) == null) return
         requestUnbufferedDispatch(e)
         predictor.record(e)
-        val kind = when (tool) {
-            Tool.HIGHLIGHTER -> InkKind.HIGHLIGHTER
-            Tool.FOUNTAIN -> InkKind.FOUNTAIN
-            Tool.NEON -> InkKind.NEON
-            Tool.SPOILER -> InkKind.SPOILER
-            else -> penKind
-        }
-        val color = colorOf(kind)
-        val size = sizeOf(kind)
-        val shownDark = (paper.color?.let(PaperStyle::isDark) ?: dark) && source?.pdfBitmap(activePage) == null
-        // A neon line is drawn as its tube and light core while the pen is down; the glow comes when it is stored.
-        val shown = InkColors.forPaper(color, shownDark)
-        val brush = if (kind == InkKind.NEON) InkBrushes.neonLive(shown, Neon.core(shown), Neon.CORE, size) else InkBrushes.create(kind, shown, size)
+        val (brush, wet) = newWet(activePage)
         activePointerId = e.getPointerId(index)
         val id = inProgressView.startStroke(e, activePointerId, brush, viewToPageMatrix(activePage), Matrix())
-        wetStrokes[id] = WetStroke(activePage, kind, color, size, if (kind == InkKind.DASHED) dashStyle else null)
+        wetStrokes[id] = wet
         drawStrokeId = id
         hideCursor()
 
@@ -1403,6 +1489,33 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         holdHandler.removeCallbacks(holdRunnable)
         holdHandler.postDelayed(holdRunnable, HOLD_MS)
     }
+
+    /** The live brush of a new line with the current tool on [page], and what to store it as. */
+    private fun newWet(page: Int): Pair<Brush, WetStroke> {
+        val kind = when (tool) {
+            Tool.HIGHLIGHTER -> InkKind.HIGHLIGHTER
+            Tool.FOUNTAIN -> InkKind.FOUNTAIN
+            Tool.NEON -> InkKind.NEON
+            Tool.SPOILER -> InkKind.SPOILER
+            else -> penKind
+        }
+        val color = colorOf(kind)
+        val size = sizeOf(kind)
+        val shownDark = (paper.color?.let(PaperStyle::isDark) ?: dark) && source?.pdfBitmap(page) == null
+        val shown = InkColors.forPaper(color, shownDark)
+        // Without pressure the pen line is as wide all along as a medium press makes it.
+        val even = kind == InkKind.PEN && !penPressure
+        val brush = when {
+            // A neon line is drawn as its tube and light core while the pen is down; the glow comes when it is stored.
+            kind == InkKind.NEON -> InkBrushes.neonLive(shown, Neon.core(shown), Neon.CORE, size)
+            even -> InkBrushes.create(InkKind.LINE, shown, InkBrushes.lineWidth(size))
+            else -> InkBrushes.create(kind, shown, size)
+        }
+        return brush to WetStroke(page, kind, color, size, if (kind == InkKind.DASHED) dashStyle else null, even)
+    }
+
+    /** The pen line's width follows the pressure; off, every line is as wide as a medium press. */
+    var penPressure = true
 
     private fun colorOf(kind: InkKind) = when (kind) {
         InkKind.PEN, InkKind.PENCIL, InkKind.DASHED, InkKind.LINE -> penColor
@@ -1472,7 +1585,9 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         for ((id, stroke) in strokes) {
             val wet = wetStrokes.remove(id) ?: continue
             // Store the chosen colour so the page looks right in either theme.
-            val stored = if (wet.kind == InkKind.NEON) {
+            val stored = if (wet.even) {
+                Stroke(InkBrushes.create(InkKind.PEN, wet.color, wet.size), PageEdits.steadyPressure(stroke.inputs))
+            } else if (wet.kind == InkKind.NEON) {
                 // The live brush has its light core as a second coat; the page draws that itself.
                 Stroke(InkBrushes.create(InkKind.NEON, wet.color, wet.size), stroke.inputs)
             } else if (stroke.brush.colorIntArgb == wet.color && stroke.brush.size == wet.size) {
@@ -1501,7 +1616,9 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             PageEdits.bounds(added)?.let { listener?.onInkAdded(wet.page, it) }
         }
         inProgressView.removeFinishedStrokes(strokes.keys)
+        padView?.ink?.removeFinishedStrokes(strokes.keys)
         pageLayer.invalidate()
+        zoomPad?.redraw()
         listener?.onDocumentChanged()
     }
 
@@ -2651,6 +2768,12 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
 
     private fun onHover(e: MotionEvent): Boolean {
         if (!isPen(e.getToolType(0)) || tops.isEmpty()) return false
+        zoomPad?.let { pad ->
+            if (e.y >= pad.top) {
+                hideCursor()
+                return true
+            }
+        }
         when (e.actionMasked) {
             MotionEvent.ACTION_HOVER_ENTER, MotionEvent.ACTION_HOVER_MOVE -> {
                 val page = pageAt(e.x, e.y)
@@ -2981,6 +3104,31 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             strokeJoin = Paint.Join.ROUND
         }
         private val graphFill = Paint().apply { style = Paint.Style.FILL }
+        private val zoomFramePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            color = ZoomPad.ZOOM_COLOR
+        }
+
+        /** [region] of [page] drawn through [pageToCanvas]: what the zoom window shows. */
+        fun drawRegion(canvas: Canvas, page: Int, pageToCanvas: Matrix, region: RectF) {
+            val src = source ?: return
+            if (page !in tops.indices) return
+            canvas.save()
+            canvas.concat(pageToCanvas)
+            canvas.clipRect(region)
+            pageRenderer.pageHeight = heights[page]
+            pageRenderer.pageWidth = widths[page]
+            pageRenderer.pdf = src.pdfBitmap(page)
+            pageRenderer.drawBackground(canvas, edgeWidth = 0f)
+            val doc = src.loadedDocument(page)
+            if (doc != null) {
+                val hidden = hiddenOf(doc)
+                drawElements(canvas, src, doc, pageToCanvas, region, exclude = hidden)
+                drawSpoilers(canvas, doc, pageToCanvas, region, hidden)
+                drawAnswers(canvas, src.answers(page), widths[page])
+            }
+            canvas.restore()
+        }
 
         override fun onDraw(canvas: Canvas) {
             val src = source ?: return
@@ -3039,6 +3187,10 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                 if (sel.isNotEmpty() && !dragging) drawElements(canvas, src, doc, toScreen, null, only = sel)
                 drawAnswers(canvas, src.answers(i), widths[i])
                 if (!(dragging && i == selectionPage)) drawOverlays(canvas, i)
+                if (i == zoomRegionPage && zoomPad != null) {
+                    zoomFramePaint.strokeWidth = 2f * density / scale
+                    canvas.drawRect(zoomRegion, zoomFramePaint)
+                }
                 canvas.restore()
             }
             cache.endFrame()

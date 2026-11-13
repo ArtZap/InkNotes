@@ -245,6 +245,13 @@ object InkIcons {
     val Scribble by lazy { icon("scribble", "M4,8l3,8l3,-8l3,8l3,-8l3,8") }
     val Help by lazy { icon("help", "M12,3a9,9 0,1 0,0 18a9,9 0,1 0,0 -18z", accent = "M9.5,9.5a2.5,2.5 0,1 1,3.5 2.3c-0.7,0.3 -1,0.9 -1,1.7M12,16.5v0.5") }
     val AllFunctions by lazy { icon("all-functions", "M4,4h7v7h-7zM13,4h7v7h-7zM4,13h7v7h-7zM13,13h7v7h-7z") }
+    val ZoomWindow by lazy { icon("zoom-window", "M3,4h18v16h-18zM3,13h18", accent = "M8,7.5h4v3h-4zM6,16.5c1.5,-1.5 3,1.5 4.5,0s3,1.5 4.5,0s2,1 3,0") }
+    val PdfShare by lazy { icon("pdf-share", "M6,3h8l4,4v5M14,3v4h4M6,3v18h6", accent = "M14,18h7M18,15l3,3l-3,3") }
+    val Export by lazy { icon("export", "M6,3h8l4,4v14h-12zM14,3v4h4", accent = "M9,12h6M9,15h6M9,18h4") }
+    val Print by lazy { icon("print", "M7,9V3h10v6M5,9h14a2,2 0,0 1,2,2v6h-4M7,17h-4v-6a2,2 0,0 1,2,-2M7,14h10v7h-10z") }
+    val Scan by lazy { icon("scan", "M4,8V4h4M16,4h4v4M20,16v4h-4M8,20h-4v-4", accent = "M8,8h8v8h-8zM10,11h4M10,13.5h3") }
+    val PhotoEdit by lazy { icon("photo-edit", "M7,3v14h14M3,7h14v14", accent = "M10,14l2.5,-3l2,2.5l1.5,-1.5l1,2") }
+    val Pressure by lazy { icon("pressure", "M9,3h6l-1,8h-4zM10,11l2,5l2,-5", accent = "M4,20h16") }
     val PageNav by lazy { icon("page-nav", "M9,6L4,12l5,6M15,6l5,6l-5,6") }
     val Add by lazy { icon("add", "M12,5v14M5,12h14") }
     val Minus by lazy { icon("minus", "M5,12h14") }

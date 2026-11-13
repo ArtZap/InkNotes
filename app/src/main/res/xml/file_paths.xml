@@ -2,4 +2,6 @@
 <paths>
     <!-- Only the folder with the notebook file being shared is exposed. -->
     <cache-path name="shared" path="shared/" />
+    <!-- Photos taken for the document scanner. -->
+    <cache-path name="camera" path="camera/" />
 </paths>

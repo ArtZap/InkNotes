@@ -68,4 +68,15 @@ class ToolbarLayoutTest {
         val l = ToolbarLayout.decode("tools=pen;top=;menu=help;seen=" + Toolbars.ALL.joinToString(","))
         assertEquals(Zone.TOP, l.zoneOf("undo"))
     }
+
+    @Test
+    fun layoutOf031GetsTheButtonsOf032() {
+        val old = Toolbars.ALL - setOf("zoom-window", "scan", "pdf-share", "print", "pressure")
+        val l = ToolbarLayout.decode("tools=pen,eraser;top=undo;menu=help;seen=" + old.joinToString(","))
+        assertEquals(Zone.TOP, l.zoneOf("zoom-window"))
+        assertEquals(Zone.MENU, l.zoneOf("pdf-share"))
+        assertEquals(Zone.MENU, l.zoneOf("print"))
+        // What the user had hidden stays hidden.
+        assertEquals(Zone.HIDDEN, l.zoneOf("cards"))
+    }
 }

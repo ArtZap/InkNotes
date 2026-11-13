@@ -20,6 +20,28 @@ import kotlin.math.sqrt
 
 /** Pure geometry and element transforms used by the editor tools. Coordinates are page units. */
 object PageEdits {
+
+    /** The same points with one medium pressure: a pen line as wide all along. */
+    fun steadyPressure(inputs: androidx.ink.strokes.StrokeInputBatch, pressure: Float = 0.5f): MutableStrokeInputBatch {
+        val batch = MutableStrokeInputBatch()
+        val p = StrokeInput()
+        for (i in 0 until inputs.size) {
+            inputs.populate(i, p)
+            p.update(
+                x = p.x,
+                y = p.y,
+                elapsedTimeMillis = p.elapsedTimeMillis,
+                toolType = p.toolType,
+                strokeUnitLengthCm = p.strokeUnitLengthCm,
+                pressure = pressure,
+                tiltRadians = p.tiltRadians,
+                orientationRadians = p.orientationRadians,
+            )
+            batch.add(p)
+        }
+        return batch
+    }
+
     private const val MIN_BRUSH = 0.2f
     private const val MAX_BRUSH = 500f
 

@@ -121,6 +121,19 @@ class AppPrefs(context: Context) {
         get() = prefs.getBoolean(STRAIGHT_HIGHLIGHTER, true)
         set(value) = prefs.edit().putBoolean(STRAIGHT_HIGHLIGHTER, value).apply()
 
+    /** The pen line's width follows the pressure (off: one width all along). */
+    var penPressure: Boolean
+        get() = prefs.getBoolean("penPressure", true)
+        set(value) = prefs.edit().putBoolean("penPressure", value).apply()
+
+    /** Last choices of the export dialog: "pdf"/"png", "all"/"page"/"range". */
+    var exportFormat: String
+        get() = prefs.getString("exportFormat", "pdf") ?: "pdf"
+        set(value) = prefs.edit().putString("exportFormat", value).apply()
+    var exportPages: String
+        get() = prefs.getString("exportPages", "all") ?: "all"
+        set(value) = prefs.edit().putString("exportPages", value).apply()
+
     /** A zigzag scribbled over writing erases it. */
     var scribbleErase: Boolean
         get() = prefs.getBoolean(SCRIBBLE, true)

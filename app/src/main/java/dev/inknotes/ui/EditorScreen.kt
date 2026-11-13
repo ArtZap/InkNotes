@@ -14,6 +14,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.zIndex
 import kotlinx.coroutines.launch
 import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.PaddingValues
@@ -155,8 +156,40 @@ fun EditorScreen(
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) controller.insertImage(uri, resolver)
     }
+    // Export: what was chosen in the dialog waits for the system "save as" or folder dialog.
+    var exportPending by remember { mutableStateOf<List<Int>>(emptyList()) }
+    var showExport by remember { mutableStateOf(false) }
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/pdf")) { uri ->
-        if (uri != null) controller.exportPdf(uri, resolver)
+        if (uri != null) controller.exportTo(uri, resolver, exportPending, EditorController.ExportFormat.PDF)
+    }
+    val pngLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("image/png")) { uri ->
+        if (uri != null) controller.exportTo(uri, resolver, exportPending, EditorController.ExportFormat.PNG)
+    }
+    val pngFolderLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) controller.exportPngToFolder(uri, resolver, exportPending)
+    }
+    fun sendFiles(uris: List<Uri>, mime: String) {
+        val send = if (uris.size == 1) {
+            Intent(Intent.ACTION_SEND).setType(mime).putExtra(Intent.EXTRA_STREAM, uris[0])
+        } else {
+            Intent(Intent.ACTION_SEND_MULTIPLE).setType(mime).putParcelableArrayListExtra(Intent.EXTRA_STREAM, ArrayList(uris))
+        }.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        context.startActivity(Intent.createChooser(send, "Отправить"))
+    }
+    val shareExport = { format: EditorController.ExportFormat, pages: List<Int> ->
+        controller.exportForSharing(context, pages, format) { uris -> sendFiles(uris, format.mime) }
+    }
+    // Scanner: the camera writes into a cache file, then the photo opens in the editor.
+    val scanFile = remember { java.io.File(java.io.File(context.cacheDir, "camera").apply { mkdirs() }, "scan.jpg") }
+    val scanLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
+        if (ok) controller.scanned(Uri.fromFile(scanFile), resolver)
+    }
+    val scan = {
+        runCatching {
+            scanFile.delete()
+            scanLauncher.launch(androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.files", scanFile))
+        }.onFailure { controller.showStatus("Камера недоступна") }
+        Unit
     }
     val saveLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
         if (uri != null) controller.saveNotebookFile(uri, resolver)
@@ -198,7 +231,10 @@ fun EditorScreen(
         onPageShift = { showShift = true },
         onShare = { share() },
         onSave = { saveLauncher.launch("${controller.fileName(controller.notebook.title)}.inknote") },
-        onPdf = { exportLauncher.launch("${controller.fileName(controller.notebook.title)}.pdf") },
+        onPdf = { showExport = true },
+        onPdfShare = { shareExport(EditorController.ExportFormat.PDF, controller.exportIndices(EditorController.ExportPages.All)) },
+        onPrint = { controller.print(context, controller.exportIndices(EditorController.ExportPages.All)) },
+        onScan = scan,
         onHelp = { showHelp = true },
     )
     Column(
@@ -287,6 +323,46 @@ fun EditorScreen(
     if (controller.showLinkDialog) LinkDialog(controller, onDismiss = { controller.showLinkDialog = false })
     if (controller.showAddBookmark) AddBookmarkDialog(controller, onDismiss = { controller.showAddBookmark = false })
     if (showHelp) HelpDialog(onDismiss = { showHelp = false })
+    if (showExport) {
+        ExportDialog(
+            pageCount = controller.notebook.pageIds.size,
+            currentPage = controller.pageIndex,
+            initialFormat = controller.exportFormat,
+            initialPages = controller.exportPagesChoice,
+            onDismiss = { showExport = false },
+            onShare = { format, pages ->
+                showExport = false
+                shareExport(format, controller.exportIndices(pages))
+            },
+            onSave = { format, pages ->
+                showExport = false
+                val list = controller.exportIndices(pages)
+                exportPending = list
+                when {
+                    format == EditorController.ExportFormat.PDF -> exportLauncher.launch(controller.exportName(list, format))
+                    list.size == 1 -> pngLauncher.launch(controller.exportName(list, format))
+                    else -> pngFolderLauncher.launch(null)
+                }
+            },
+            onPrint = { pages ->
+                showExport = false
+                controller.print(context, controller.exportIndices(pages))
+            },
+            onRemember = { format, which ->
+                controller.exportFormat = format
+                controller.exportPagesChoice = which
+            },
+        )
+    }
+    controller.photoEdit?.let { edit ->
+        PhotoEditorDialog(
+            source = edit.bitmap,
+            startMode = edit.mode,
+            doneLabel = if (edit.target == null) "Вставить" else "Готово",
+            onCancel = controller::cancelPhotoEdit,
+            onDone = controller::finishPhotoEdit,
+        )
+    }
     if (showShift) PageShiftDialog(controller, onDismiss = { showShift = false })
     if (showBackground) BackgroundDialog(controller, onDismiss = { showBackground = false })
     if (showSelectionSize && controller.selectionCount > 0) SelectionSizeDialog(controller, onDismiss = { showSelectionSize = false })
@@ -351,6 +427,9 @@ private fun barActions(
     onShare: () -> Unit,
     onSave: () -> Unit,
     onPdf: () -> Unit,
+    onPdfShare: () -> Unit,
+    onPrint: () -> Unit,
+    onScan: () -> Unit,
     onHelp: () -> Unit,
 ): Map<String, BarAction> {
     val math = c.math.state
@@ -430,7 +509,18 @@ private fun barActions(
         a("page-shift", "Отступ страницы слева или справа", onPageShift, title = "Отступ страницы слева или справа…"),
         a("share", "Поделиться файлом тетради", onShare, title = "Поделиться файлом тетради"),
         a("save", "Сохранить файл тетради", onSave, title = "Сохранить файл тетради…"),
-        a("pdf", "Экспорт в PDF", onPdf, title = "Экспорт в PDF…"),
+        a("pdf", "Экспорт: PDF или PNG, все страницы, эта или диапазон", onPdf, title = "Экспорт: PDF, PNG…"),
+        a("pdf-share", "Отправить тетрадь как PDF одним нажатием", onPdfShare, title = "Отправить как PDF"),
+        a("print", "Печать тетради", onPrint, title = "Печать…"),
+        a("zoom-window", "Окно увеличения: пишите крупно, на странице мелко", c::toggleZoomPad, selected = c.zoomPadOpen),
+        a("scan", "Сканировать документ камерой", onScan, title = "Сканировать документ"),
+        a(
+            "pressure",
+            if (c.penPressure) "Ручка чувствует нажим (нажмите, чтобы линия была одной толщины)" else "Ручка без нажима: линия одной толщины",
+            c::togglePenPressure,
+            selected = c.penPressure,
+            title = if (c.penPressure) "Нажим ручки: включён" else "Нажим ручки: выключен",
+        ),
         a(
             "theme",
             "Тема: ${themeMode.title.lowercase()} (нажмите, чтобы сменить)",
@@ -1119,6 +1209,7 @@ private fun SelectionOptions(c: EditorController, onPickColor: () -> Unit, onHat
     IconAction(InkIcons.FlipHorizontal, "Отразить слева направо", { c.flipSelection(horizontal = true) })
     IconAction(InkIcons.FlipVertical, "Отразить сверху вниз", { c.flipSelection(horizontal = false) })
     IconAction(InkIcons.Ruler, "Размер в миллиметрах", onSelectionSize)
+    if (c.selectedPicture != null) IconAction(InkIcons.PhotoEdit, "Изменить картинку: обрезать, выпрямить, перспектива, фон", c::editSelectedPicture)
     if (c.selectedText != null) {
         TextButton(onClick = { c.editingText = true }) { Text("Изменить текст") }
         TextButton(onClick = { c.scaleSelectedText(1f / 1.2f) }) { Text("А−") }

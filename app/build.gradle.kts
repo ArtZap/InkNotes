@@ -16,8 +16,8 @@ android {
         applicationId = "dev.inknotes"
         minSdk = 29
         targetSdk = 36
-        versionCode = 10
-        versionName = "0.31"
+        versionCode = 11
+        versionName = "0.32"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

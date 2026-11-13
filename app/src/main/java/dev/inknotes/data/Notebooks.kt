@@ -661,6 +661,39 @@ class NotebookRepository(filesDir: File) {
     }
 
     /**
+     * Saves an edited picture (cropped, straightened…) as a new file of the notebook (PNG when
+     * it has see-through parts, JPEG otherwise) and calls [onDone] on the main thread with its
+     * name and pixel size, or null on failure. The bitmap is recycled.
+     */
+    fun saveImageAsync(nb: Notebook, bitmap: Bitmap, onDone: (Triple<String, Int, Int>?) -> Unit) {
+        transferring {
+            val result = runCatching {
+                val png = bitmap.hasAlpha()
+                val fileName = "img-${newId()}.${if (png) "png" else "jpg"}"
+                atomicWrite(File(dir(nb.id).apply { mkdirs() }, fileName)) { out ->
+                    bitmap.compress(if (png) Bitmap.CompressFormat.PNG else Bitmap.CompressFormat.JPEG, 92, out)
+                }
+                Triple(fileName, bitmap.width, bitmap.height)
+            }.getOrNull()
+            bitmap.recycle()
+            main.post { onDone(result) }
+        }
+    }
+
+    /** Decodes a picture from [uri] (camera or gallery), at most [MAX_IMAGE_SIDE] px, upright. Blocking. */
+    fun decodePicture(uri: Uri, resolver: ContentResolver): Bitmap? = runCatching {
+        ImageDecoder.decodeBitmap(ImageDecoder.createSource(resolver, uri)) { decoder, info, _ ->
+            val side = max(info.size.width, info.size.height)
+            if (side > MAX_IMAGE_SIDE) {
+                val k = MAX_IMAGE_SIDE.toFloat() / side
+                decoder.setTargetSize((info.size.width * k).toInt().coerceAtLeast(1), (info.size.height * k).toInt().coerceAtLeast(1))
+            }
+            decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+            decoder.isMutableRequired = true
+        }
+    }.getOrNull()
+
+    /**
      * A picture placed on a page, decoded no larger than [MAX_IMAGE_SIDE] px whatever the file
      * says (it may come from someone else's notebook); null for unknown names or bad files.
      */
