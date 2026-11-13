@@ -393,6 +393,9 @@ class EditorController(
     /** Search hit to show once the view is attached (notebook opened from library search). */
     var pendingHit: SearchHit? = null
 
+    /** Page to show when the editor first appears (a quick note: the empty page at the end). */
+    var openAtPage: Int? = null
+
     fun attach(v: PageEditorView) {
         view = v
         toolbar = dev.inknotes.data.ToolbarLayout.decode(prefs.toolbarLayout)
@@ -406,15 +409,23 @@ class EditorController(
         v.source = this
         updateUndo()
         pendingHit?.let(::showHit)
-        if (pendingHit == null) returnPlace?.let { (page, place) -> handler.post { view?.restorePagePlace(page, place) } }
+        val start = openAtPage
+        if (start != null) handler.post { view?.scrollToPage(start, 0f) }
+        else if (pendingHit == null) returnPlace?.let { (page, place) -> handler.post { view?.restorePagePlace(page, place) } }
         pendingHit = null
+        openAtPage = null
         math.onReady = { requestMath() }
         handler.post(mathRunnable)
     }
 
-    /** The editor screen went away (another tab, or the library): the notebook stays open. */
-    fun detach() {
+    /**
+     * The editor screen went away (another tab, or the library): the notebook stays open.
+     * [from]: the view that screen showed. A newer view may already be attached (two panes
+     * changing places make the new view before the old one is gone): then it is left alone.
+     */
+    fun detach(from: PageEditorView? = null) {
         flush()
+        if (from != null && view !== from) return
         // Where it was, to come back to in this tab.
         view?.let { v -> returnPlace = pageIndex to (v.pagePlace(pageIndex) ?: 0f) }
         math.onReady = null

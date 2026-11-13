@@ -16,3 +16,6 @@ probe.txt
 hang.txt
 promo/
 __pycache__/
+
+# Temporary files of tools/release.sh.
+.tmp/

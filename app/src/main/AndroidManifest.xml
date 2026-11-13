@@ -49,6 +49,40 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+        <!-- A quick note, over the lock screen too (tile, widget). -->
+        <activity
+            android:name=".ui.QuickNoteActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode|density"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:label="@string/widget_quick_note"
+            android:showWhenLocked="true"
+            android:taskAffinity="dev.inknotes.quicknote"
+            android:theme="@style/Theme.InkNotes"
+            android:turnScreenOn="true" />
+
+        <service
+            android:name=".ui.QuickNoteTile"
+            android:exported="true"
+            android:icon="@drawable/ic_tile_note"
+            android:label="@string/tile_quick_note"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
+        <receiver
+            android:name=".ui.QuickWidget"
+            android:exported="true"
+            android:label="@string/widget_description">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/quick_widget" />
+        </receiver>
     </application>
 
 </manifest>

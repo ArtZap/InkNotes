@@ -103,10 +103,12 @@ object Toolbars {
         "formula", "protractor", "compass", "timer",
         // Added in 0.34.
         "pdf-text", "pdf-page", "pdf-dark",
+        // Added in 0.36.
+        "side", "swap",
     )
 
     /** Buttons there were when layouts could first be saved (later ones are placed by [FULL] once). */
-    val KNOWN_AT_START: Set<String> = ALL.toSet() - setOf("zoom-window", "scan", "pdf-share", "print", "pressure", "formula", "protractor", "compass", "timer", "pdf-text", "pdf-page", "pdf-dark")
+    val KNOWN_AT_START: Set<String> = ALL.toSet() - setOf("zoom-window", "scan", "pdf-share", "print", "pressure", "formula", "protractor", "compass", "timer", "pdf-text", "pdf-page", "pdf-dark", "side", "swap")
 
     /** Undo always stays on a bar; the help is never hidden (the menu is enough for it). */
     fun allowed(id: String): Set<Zone> = when (id) {
@@ -120,7 +122,7 @@ object Toolbars {
         top = listOf("spoiler", "laser", "picture", "table", "stamps", "ruler", "zoom-window", "undo", "redo", "pages", "search", "math", "page-nav", "add-page"),
         menu = listOf(
             "text", "space", "scan", "formula", "protractor", "compass", "page-text", "toc", "layers", "cards", "timer", "record", "recordings",
-            "pdf-text", "pdf-page", "pdf-dark",
+            "pdf-text", "pdf-page", "pdf-dark", "side", "swap",
             "background", "page-size", "page-shift", "fractions", "units", "pdf-share", "pdf", "print", "share", "save", "theme", "pen-button", "pressure", "scribble", "help",
         ),
     )
@@ -142,7 +144,7 @@ object Toolbars {
                 tools = listOf("pen", "highlighter", "spoiler", "eraser", "lasso"),
                 top = listOf("picture", "record", "zoom-window", "undo", "redo", "pages", "search", "page-nav", "add-page"),
                 menu = listOf(
-                    "text", "space", "scan", "toc", "cards", "timer", "recordings", "page-text", "layers", "table", "formula", "pdf-text", "pdf-page", "pdf-dark",
+                    "text", "space", "scan", "toc", "cards", "timer", "recordings", "page-text", "layers", "table", "formula", "pdf-text", "pdf-page", "pdf-dark", "side", "swap",
                     "background", "page-size", "pdf-share", "pdf", "print", "share", "save", "theme", "scribble", "help",
                 ),
             ),
@@ -154,7 +156,7 @@ object Toolbars {
                 tools = listOf("pen", "highlighter", "eraser", "lasso", "area"),
                 top = listOf("math", "formula", "ruler", "protractor", "compass", "stamps", "table", "picture", "undo", "redo", "pages", "page-nav", "add-page"),
                 menu = listOf(
-                    "units", "fractions", "text", "space", "zoom-window", "scan", "search", "toc", "layers", "spoiler", "cards", "timer", "pdf-text", "pdf-page", "pdf-dark",
+                    "units", "fractions", "text", "space", "zoom-window", "scan", "search", "toc", "layers", "spoiler", "cards", "timer", "pdf-text", "pdf-page", "pdf-dark", "side", "swap",
                     "background", "page-size", "page-shift", "pdf-share", "pdf", "print", "share", "save", "theme", "help",
                 ),
             ),

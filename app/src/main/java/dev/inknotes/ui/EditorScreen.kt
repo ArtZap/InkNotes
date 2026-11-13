@@ -117,10 +117,17 @@ fun EditorScreen(
     tabs: List<EditorController> = emptyList(),
     onTab: (EditorController) -> Unit = {},
     onCloseTab: (EditorController) -> Unit = {},
+    /** Opens a notebook beside this one, or closes the one beside (null: not offered). */
+    onSide: (() -> Unit)? = null,
+    sideOpen: Boolean = false,
+    /** Beside another: the two change places. */
+    onSwap: (() -> Unit)? = null,
 ) {
     BackHandler(onBack = onClose)
+    // The view this screen made: only it is let go of when the screen goes.
+    val shownView = remember { arrayOfNulls<PageEditorView>(1) }
     DisposableEffect(controller) {
-        onDispose { controller.detach() }
+        onDispose { controller.detach(shownView[0]) }
     }
     var showBackground by remember { mutableStateOf(false) }
     var showPicker by remember { mutableStateOf(false) }
@@ -255,6 +262,9 @@ fun EditorScreen(
         onScan = scan,
         onTimer = { showTimer = true },
         onPdfPage = { showPdfPage = true },
+        onSide = onSide,
+        sideOpen = sideOpen,
+        onSwap = onSwap,
         onHelp = { showHelp = true },
     )
     Column(
@@ -299,7 +309,7 @@ fun EditorScreen(
                 }
             }
             AndroidView(
-                factory = { ctx -> PageEditorView(ctx).also(controller::attach) },
+                factory = { ctx -> PageEditorView(ctx).also { shownView[0] = it; controller.attach(it) } },
                 // Its own layer: a redrawn page (every frame of a scroll) then re-records only
                 // the canvas, not the toolbars and panels around it.
                 modifier = Modifier.weight(1f).fillMaxHeight().graphicsLayer(),
@@ -473,6 +483,9 @@ private fun barActions(
     onScan: () -> Unit,
     onTimer: () -> Unit,
     onPdfPage: () -> Unit,
+    onSide: (() -> Unit)?,
+    sideOpen: Boolean,
+    onSwap: (() -> Unit)?,
     onHelp: () -> Unit,
 ): Map<String, BarAction> {
     val math = c.math.state
@@ -563,6 +576,15 @@ private fun barActions(
         a("pdf-text", "Текст PDF: проведите пером по словам — скопировать или выделить маркером", c::togglePdfText, selected = c.pdfTextOn, title = "Текст PDF"),
         a("pdf-page", "Страница PDF: повернуть, поля для заметок, вставить страницы", onPdfPage, title = "Страница PDF…"),
         a("pdf-dark", "Тёмный PDF: светлый текст на тёмном", c::togglePdfDark, selected = c.pdfDark),
+        a(
+            "side",
+            if (sideOpen) "Закрыть тетрадь рядом" else "Открыть рядом: вторая тетрадь или PDF на том же экране",
+            { onSide?.invoke() },
+            enabled = onSide != null,
+            selected = sideOpen,
+            title = if (sideOpen) "Закрыть рядом" else "Открыть рядом…",
+        ),
+        a("swap", "Поменять тетради местами", { onSwap?.invoke() }, enabled = onSwap != null, title = "Поменять местами"),
         a("scan", "Сканировать документ камерой", onScan, title = "Сканировать документ"),
         a(
             "pressure",

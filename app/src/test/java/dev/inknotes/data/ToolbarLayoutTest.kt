@@ -71,7 +71,7 @@ class ToolbarLayoutTest {
 
     @Test
     fun layoutOf031GetsTheButtonsOf032() {
-        val old = Toolbars.ALL - setOf("zoom-window", "scan", "pdf-share", "print", "pressure", "formula", "protractor", "compass", "timer", "pdf-text", "pdf-page", "pdf-dark")
+        val old = Toolbars.ALL - setOf("zoom-window", "scan", "pdf-share", "print", "pressure", "formula", "protractor", "compass", "timer", "pdf-text", "pdf-page", "pdf-dark", "side", "swap")
         val l = ToolbarLayout.decode("tools=pen,eraser;top=undo;menu=help;seen=" + old.joinToString(","))
         assertEquals(Zone.TOP, l.zoneOf("zoom-window"))
         assertEquals(Zone.MENU, l.zoneOf("pdf-share"))
@@ -84,11 +84,19 @@ class ToolbarLayoutTest {
 
     @Test
     fun layoutOf033GetsThePdfButtons() {
-        val old = Toolbars.ALL - setOf("pdf-text", "pdf-page", "pdf-dark")
+        val old = Toolbars.ALL - setOf("pdf-text", "pdf-page", "pdf-dark", "side", "swap")
         val l = ToolbarLayout.decode("tools=pen,eraser;top=undo;menu=help;seen=" + old.joinToString(","))
         assertEquals(Zone.MENU, l.zoneOf("pdf-text"))
         assertEquals(Zone.MENU, l.zoneOf("pdf-page"))
         assertEquals(Zone.MENU, l.zoneOf("pdf-dark"))
         assertEquals(Zone.HIDDEN, l.zoneOf("timer"))
+    }
+
+    @Test
+    fun layoutOf035GetsSideBySide() {
+        val old = Toolbars.ALL - setOf("side", "swap")
+        val l = ToolbarLayout.decode("tools=pen,eraser;top=undo;menu=help;seen=" + old.joinToString(","))
+        assertEquals(Zone.MENU, l.zoneOf("side"))
+        assertEquals(Zone.MENU, l.zoneOf("swap"))
     }
 }

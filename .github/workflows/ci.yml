@@ -32,6 +32,9 @@ jobs:
       - name: Release APK size
         if: always()
         run: ls -la app/build/outputs/apk/release/ app/build/outputs/mapping/release/ 2>/dev/null || true
+      - name: Lint findings
+        if: failure()
+        run: cat app/build/reports/lint-results-debug.txt 2>/dev/null || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -74,11 +77,11 @@ jobs:
             adb install -r app/build/outputs/apk/minified/app-minified.apk
             adb install -r app/build/outputs/apk/androidTest/minified/app-minified-androidTest.apk
             if [ ! -d app/src/androidTest/assets/golden ]; then adb shell am instrument -w -e golden make -e class dev.inknotes.data.GoldenFilesTest#make dev.inknotes.test/androidx.test.runner.AndroidJUnitRunner; mkdir -p golden && adb pull /sdcard/Android/data/dev.inknotes/files/golden golden; for f in golden/golden/*; do echo "=====GOLDEN $(basename $f)"; base64 -w 8000 $f; echo "=====END"; done; fi
-            adb shell am instrument -w -e shots 1 -e class dev.inknotes.ui.V032Screenshots,dev.inknotes.ui.V033Screenshots,dev.inknotes.ui.V034Screenshots,dev.inknotes.ui.V035Screenshots dev.inknotes.test/androidx.test.runner.AndroidJUnitRunner || true
+            adb shell am instrument -w -e shots 1 -e class dev.inknotes.ui.V032Screenshots,dev.inknotes.ui.V033Screenshots,dev.inknotes.ui.V034Screenshots,dev.inknotes.ui.V035Screenshots,dev.inknotes.ui.V036Screenshots dev.inknotes.test/androidx.test.runner.AndroidJUnitRunner || true
             adb shell am instrument -w -e package dev.inknotes.data dev.inknotes.test/androidx.test.runner.AndroidJUnitRunner > data-tests.txt 2>&1 || true
             cat data-tests.txt
             adb logcat -d -b crash | tail -120 || true
-            adb logcat -d -b main -t 3000 | grep -iE "inknotes|hwui|OpenGLRenderer|EGL|RenderThread" | tail -60 || true
+            adb logcat -d -b main -t 3000 | grep -iE "inknotes|hwui|OpenGLRenderer|RenderThread|InkTest|libc " | tail -80 || true
             mkdir -p shots && adb pull /sdcard/Android/data/dev.inknotes/files/shots shots || true
             grep -q "^OK (" data-tests.txt
       - name: Screenshots into the log

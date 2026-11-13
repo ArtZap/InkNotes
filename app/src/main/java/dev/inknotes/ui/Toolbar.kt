@@ -137,6 +137,8 @@ object BarCatalog {
         "pdf-text" to Entry("Текст PDF", { InkIcons.PdfText }, 10),
         "pdf-page" to Entry("Страница PDF", { InkIcons.PdfPage }, 10),
         "pdf-dark" to Entry("Тёмный PDF", { InkIcons.PdfDark }, 10),
+        "side" to Entry("Рядом", { InkIcons.SideBySide }, 11),
+        "swap" to Entry("Поменять местами", { InkIcons.Swap }, 11),
         "theme" to Entry("Тема", { InkIcons.AutoTheme }, 9),
         "pen-button" to Entry("Кнопка пера", { InkIcons.PenButton }, 9),
         "pressure" to Entry("Нажим ручки", { InkIcons.Pressure }, 9),
