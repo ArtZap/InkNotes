@@ -203,10 +203,13 @@ class Backup(private val context: Context, private val repo: NotebookRepository,
             val copies = ids.keys.filter(BackupFiles::isCopy)
             val whole = prefs.backupWhole.filter { it in ids }.toSet()
             val gone = BackupFiles.toDelete(copies, whole, KEEP) + BackupFiles.stalePartials(modified, System.currentTimeMillis())
-            for (name in gone) {
-                DocumentsContract.deleteDocument(resolver, DocumentsContract.buildDocumentUriUsingTree(tree, ids.getValue(name)))
+            // One copy that can't be removed does not keep the others.
+            val removed = gone.filter { name ->
+                runCatching { DocumentsContract.deleteDocument(resolver, DocumentsContract.buildDocumentUriUsingTree(tree, ids.getValue(name))) }
+                    .onFailure { Log.w(TAG, "could not remove old backup $name", it) }
+                    .getOrDefault(false)
             }
-            prefs.backupWhole = whole - gone.toSet()
+            prefs.backupWhole = whole - removed.toSet()
         }.onFailure { Log.w(TAG, "pruning old backups failed", it) }
     }
 

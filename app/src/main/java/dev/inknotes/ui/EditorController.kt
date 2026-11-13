@@ -397,6 +397,14 @@ class EditorController(
     var pendingHit: SearchHit? = null
 
     /** Page to show when the editor first appears (a quick note: the empty page at the end). */
+    /** New elements go onto this notebook's active layer (see [dev.inknotes.data.Layers.active]). */
+    fun activateLayer() {
+        dev.inknotes.data.Layers.active = notebook.activeLayer
+    }
+
+    /** Two notebooks side by side: this one's tool bar is hidden for room (the pen keeps its tool). */
+    var toolsHidden by mutableStateOf(false)
+
     var openAtPage: Int? = null
 
     fun attach(v: PageEditorView) {
@@ -614,11 +622,14 @@ class EditorController(
         val ok = runCatching { r.stop() }.isSuccess
         runCatching { r.release() }
         repo.endRecordingJournal(notebook, file.name)
-        if (!ok) {
+        if (!ok && file.length() < MIN_RECORDING_BYTES) {
             // Stopped right after starting: nothing was recorded.
             file.delete()
             return
         }
+        // A stop that failed (a call came, the system took the microphone) still keeps what was
+        // recorded up to then: AAC in ADTS frames plays without being finished.
+        if (!ok) showStatus("Запись прервана системой — сохранено то, что успело записаться")
         val rec = dev.inknotes.data.Recording(file.name, since, System.currentTimeMillis() - since)
         val marks = pendingMarks.toList()
         notebook = repo.addRecording(notebook, rec, marks)
@@ -888,6 +899,10 @@ class EditorController(
             docs[pageId] = it
             savedRevision[pageId] = it.revision
             it.onEdit = ::onPageEdited
+            repo.takeDamaged(notebook, pageId)?.let { copy ->
+                val n = notebook.pageIds.indexOf(pageId) + 1
+                showStatus("Страница $n повреждена и открыта пустой. Её файл не удалён: он сохранён рядом как $copy — пришлите его разработчику или верните из автокопии")
+            }
         }
 
     private fun prefetch(index: Int) {
@@ -2622,6 +2637,9 @@ class EditorController(
     }
 
     companion object {
+        /** Less than this is a recording header with no sound in it. */
+        private const val MIN_RECORDING_BYTES = 2048L
+
         private const val SAVE_DELAY_MS = 800L
 
         /** Pages either side of the current one kept in memory. */

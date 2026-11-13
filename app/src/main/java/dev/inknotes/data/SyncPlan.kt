@@ -68,7 +68,8 @@ object SyncPlan {
                         }
                         continue
                     }
-                    val localChanged = l.updatedAt > s.localAt
+                    // Any other time than at the last sync, earlier too: the clock may have been set back.
+                    val localChanged = l.updatedAt != s.localAt
                     val remoteChanged = r.version != s.remoteVersion || r.fileId != s.fileId
                     when {
                         localChanged && remoteChanged -> if (id !in busy) out += Action.Conflict(id, r.fileId)

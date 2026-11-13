@@ -61,22 +61,30 @@ class MathNotes(private val enabledPref: () -> Boolean, private val setEnabledPr
         if (enabledPref()) enable()
     }
 
+    private var attempt = 0
+    private var timeout: Runnable? = null
+
     fun enable() {
         if (state == State.Downloading || state == State.Ready) return
         state = State.Downloading
         val manager = RemoteModelManager.getInstance()
+        // Each «Включить» is its own try: a late answer or the time limit of an earlier one
+        // changes nothing in this one.
+        val mine = ++attempt
+        timeout?.let(main::removeCallbacks)
         // Turned off meanwhile, or given up on: a late answer changes nothing.
         val ready = {
-            if (state == State.Downloading) {
+            if (mine == attempt && state == State.Downloading) {
+                timeout?.let(main::removeCallbacks)
                 setEnabledPref(true)
                 state = State.Ready
                 onReady?.invoke()
             }
         }
         val failed = {
-            if (state == State.Downloading) state = State.Failed("Не удалось загрузить модель распознавания формул. Нужен интернет.")
+            if (mine == attempt && state == State.Downloading) state = State.Failed("Не удалось загрузить модель распознавания формул. Нужен интернет.")
         }
-        main.postDelayed({ failed() }, DOWNLOAD_TIMEOUT_MS)
+        timeout = Runnable { failed() }.also { main.postDelayed(it, DOWNLOAD_TIMEOUT_MS) }
         // A repeated download request of a present model may never complete; ask first.
         manager.isModelDownloaded(model)
             .addOnSuccessListener { present ->

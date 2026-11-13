@@ -122,6 +122,12 @@ fun EditorScreen(
     sideOpen: Boolean = false,
     /** Beside another: the two change places. */
     onSwap: (() -> Unit)? = null,
+    /**
+     * Half of the screen or less (two notebooks side by side): the bars take as little height
+     * as they can — the tools and their options in one line that scrolls instead of wrapping,
+     * and a button that hides them altogether.
+     */
+    compact: Boolean = false,
 ) {
     BackHandler(onBack = onClose)
     // The view this screen made: only it is let go of when the screen goes.
@@ -294,16 +300,19 @@ fun EditorScreen(
             onClose = onClose,
             onAllFunctions = { showAllFunctions = true },
             onTimer = { showTimer = true },
+            compact = compact,
         )
         SoundBar(controller)
         PdfPickBar(controller)
-        ToolRow(
+        // Hidden tools come back by themselves for a selection: its options are needed then.
+        if (!compact || !controller.toolsHidden || controller.selectionCount > 0) ToolRow(
             controller,
             tools = layout.tools.mapNotNull(actions::get),
             placing = placing,
             onPickColor = { showPicker = true },
             onHatchSettings = { showHatch = true },
             onSelectionSize = { showSelectionSize = true },
+            compact = compact,
         )
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         Row(Modifier.fillMaxSize()) {
@@ -646,11 +655,12 @@ private fun TopRow(
     onClose: () -> Unit,
     onAllFunctions: () -> Unit,
     onTimer: () -> Unit,
+    compact: Boolean = false,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth()) {
-        // What does not fit goes to the top of the menu, in order.
-        val (fits, spill) = fitOnBar(top.map { it.id }, maxWidth - TOP_BAR_RESERVED)
+        // What does not fit goes to the top of the menu, in order (compact: room for the tools button).
+        val (fits, spill) = fitOnBar(top.map { it.id }, maxWidth - TOP_BAR_RESERVED - (if (compact) 48.dp else 0.dp))
         val shown = top.filter { it.id in fits }
         val spilled = top.filter { it.id in spill }.flatMap { if (it.id == "page-nav") pageNavMenu(c) else listOf(it) }
         Row(
@@ -671,7 +681,7 @@ private fun TopRow(
                 Text(
                     c.notebook.title,
                     fontWeight = FontWeight.SemiBold,
-                    fontSize = 18.sp,
+                    fontSize = if (compact) 16.sp else 18.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -694,6 +704,15 @@ private fun TopRow(
             }
             StudyTimerChip(onClick = onTimer)
             Row(verticalAlignment = Alignment.CenterVertically) { BarButtons(c, shown, placing, BarCatalog.GROUP_GAP) }
+            if (compact) {
+                // Hidden, the button shows the tool in hand, so it is clear what the pen does.
+                IconAction(
+                    if (c.toolsHidden) toolIcon(c.tool) else InkIcons.ToolsHide,
+                    if (c.toolsHidden) "Показать инструменты" else "Скрыть инструменты (больше места для страницы)",
+                    { c.toolsHidden = !c.toolsHidden },
+                    selected = if (c.toolsHidden) true else null,
+                )
+            }
             Box {
                 IconAction(InkIcons.More, "Ещё", { menuOpen = true })
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
@@ -713,6 +732,19 @@ private fun TopRow(
             }
         }
     }
+}
+
+/** The icon of [tool] on its button. */
+private fun toolIcon(tool: Tool) = when (tool) {
+    Tool.PEN -> InkIcons.Pen
+    Tool.FOUNTAIN -> InkIcons.Fountain
+    Tool.HIGHLIGHTER -> InkIcons.Highlighter
+    Tool.ERASER -> InkIcons.Eraser
+    Tool.LASSO -> InkIcons.Lasso
+    Tool.AREA -> InkIcons.Area
+    Tool.NEON -> InkIcons.Neon
+    Tool.LASER -> InkIcons.Laser
+    Tool.SPOILER -> InkIcons.Spoiler
 }
 
 /** How long the pages panel takes to slide in or out. */
@@ -1042,6 +1074,7 @@ private fun ToolRow(
     onPickColor: () -> Unit,
     onHatchSettings: () -> Unit,
     onSelectionSize: () -> Unit,
+    compact: Boolean = false,
 ) {
     val selection = c.selectionCount > 0
     val toolButtons = tools
@@ -1051,6 +1084,13 @@ private fun ToolRow(
     }
     val options: @Composable () -> Unit = { ToolOptions(c, onPickColor, onHatchSettings, onSelectionSize) }
     val line: @Composable () -> Unit = if (selection) options else ({ tools(); divider(); options() })
+    if (compact) {
+        // One line that scrolls sideways: the page keeps the height that wrapping would take.
+        CompositionLocalProvider(LocalColorStrip provides COMPACT_COLOR_STRIP, LocalCompactBar provides true) {
+            BarRow(vertical = 0.dp) { line() }
+        }
+        return
+    }
     SubcomposeLayout(Modifier.fillMaxWidth()) { constraints ->
         // The line laid out at its natural width with the narrowest colour strip, never shown.
         fun natural(slot: String, content: @Composable () -> Unit) = subcompose(slot) {
@@ -1083,6 +1123,10 @@ private fun ToolRow(
 private val LocalColorStrip = androidx.compose.runtime.compositionLocalOf<androidx.compose.ui.unit.Dp?> { null }
 private val MIN_COLOR_STRIP = 112.dp
 private val MAX_COLOR_STRIP = 336.dp
+private val COMPACT_COLOR_STRIP = 236.dp
+
+/** The bar is the one line of a narrow pane: sliders are shorter there. */
+private val LocalCompactBar = androidx.compose.runtime.compositionLocalOf { false }
 
 /** Options that wrap onto more lines rather than run off the edge. */
 @Composable
@@ -1100,11 +1144,11 @@ private fun androidx.compose.ui.layout.Measurable.naturalWidth(constraints: andr
     measure(androidx.compose.ui.unit.Constraints(maxHeight = constraints.maxHeight)).width
 
 @Composable
-private fun BarRow(modifier: Modifier = Modifier, scroll: Boolean = true, content: @Composable () -> Unit) {
+private fun BarRow(modifier: Modifier = Modifier, scroll: Boolean = true, vertical: androidx.compose.ui.unit.Dp = 4.dp, content: @Composable () -> Unit) {
     Row(
         modifier
             .let { if (scroll) it.fillMaxWidth().horizontalScroll(rememberScrollState()) else it }
-            .padding(horizontal = 16.dp, vertical = 4.dp),
+            .padding(horizontal = if (vertical == 0.dp) 8.dp else 16.dp, vertical = vertical),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) { content() }
@@ -1439,7 +1483,7 @@ private fun SizeSlider(c: EditorController, tool: Tool = c.tool) {
             value = value.coerceIn(range.min, range.max),
             onValueChange = { c.selectSize(it) },
             valueRange = range.min..range.max,
-            modifier = Modifier.width(160.dp),
+            modifier = Modifier.width(if (LocalCompactBar.current) 112.dp else 160.dp),
             valueLabel = { "%.1f".format(it) },
         )
     }

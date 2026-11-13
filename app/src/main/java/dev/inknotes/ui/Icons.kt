@@ -257,6 +257,8 @@ object InkIcons {
     val Compass by lazy { icon("compass", "M12,3v3M12,6l-5,14M12,6l5,14M8.5,15h7", accent = "M12,4.5a1.5,1.5 0,1 0,0.01 0") }
     val Timer by lazy { icon("timer", "M12,6a7.5,7.5 0,1 0,0.01 0zM10,2.5h4M12,2.5v3.5", accent = "M12,13.5V9.5M12,13.5l3,2") }
     val Cloud by lazy { icon("cloud", "M7,18h10a4,4 0,0 0,0.5 -7.97A6,6 0,0 0,6.1 10.6A3.75,3.75 0,0 0,7 18z", accent = "M12,16v-5M9.8,13l2.2,-2.2l2.2,2.2") }
+    /** Hide the tool bar (narrow panes): a bar going up. */
+    val ToolsHide by lazy { icon("tools-hide", "M4,15h16", accent = "M8,10.5l4,-4l4,4") }
     val SideBySide by lazy { icon("side", "M3,5h18v14H3zM12,5v14", accent = "M5.5,9h4M5.5,12h4M14.5,9h4M14.5,12h3") }
     val Notebook by lazy { icon("notebook", "M6,3h12v18H6zM9,3v18", accent = "M11.5,8h4M11.5,11h4") }
     val Swap by lazy { icon("swap", "M4,9h14l-3,-3M20,15H6l3,3") }

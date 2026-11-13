@@ -79,10 +79,24 @@ class DriveSync(
             val id = f.props[PROP_ID] ?: return@mapNotNull null
             SyncPlan.Remote(f.id, id, f.version, f.props[PROP_TIME]?.toLongOrNull() ?: 0L)
         }
-        val notebooks = repo.io { list() }.associateBy { it.id }
-        val local = notebooks.values.map { SyncPlan.Local(it.id, it.title, it.updatedAt) }
         val synced = state.notebooks
-        val actions = SyncPlan.plan(local, remote, synced, busy())
+        // A notebook rebuilt here from its pages (its notebook.json was damaged) lacks its page
+        // order, title and PDF: it must not go up over the whole copy on the Drive. It becomes a
+        // notebook of its own, and the copy on the Drive comes down in its place.
+        val remoteIds = remote.map { it.notebookId }.toSet()
+        // Read once first: a damaged notebook.json is recovered while the library is read.
+        repo.io { list() }
+        for (id in repo.io { recoveredIds() }.filter { it in remoteIds && it in synced && it !in busy() }) {
+            if (repo.io { detachRecovered(id) } != null) {
+                synced.remove(id)
+                saveState(state)
+            }
+        }
+        val notebooks = repo.io { list() }.associateBy { it.id }
+        // Here but unreadable for now: neither deleted here nor to be replaced.
+        val unknown = repo.unlisted
+        val local = notebooks.values.map { SyncPlan.Local(it.id, it.title, it.updatedAt) }
+        val actions = SyncPlan.plan(local, remote, synced, busy() + unknown)
         val holdTrash = !trashMany && SyncPlan.massTrash(actions, local.size)
         val held = ArrayList<Pair<String, String>>()
         var up = 0
@@ -95,6 +109,8 @@ class DriveSync(
             // Opened in the meantime: left for the next sync.
             val replaces = a is SyncPlan.Action.Download || a is SyncPlan.Action.Conflict || a is SyncPlan.Action.TrashLocal
             if (replaces && a.notebookId in notebooks && a.notebookId in busy()) continue
+            // Unreadable here for now: left alone both ways until it can be read again.
+            if (a.notebookId in unknown) continue
             when (a) {
                 is SyncPlan.Action.Upload -> {
                     val nb = notebooks.getValue(a.notebookId)
@@ -133,7 +149,8 @@ class DriveSync(
                     trashHere++
                 }
                 is SyncPlan.Action.TrashRemote -> {
-                    api.trash(a.fileId)
+                    // Every file of it: an older second one would bring it back next time.
+                    for (f in remote.filter { it.notebookId == a.notebookId }) api.trash(f.fileId)
                     synced.remove(a.notebookId)
                     trashThere++
                 }
@@ -188,15 +205,24 @@ class DriveSync(
         }
     }
 
-    private fun loadState(): State = runCatching {
-        val o = JSONObject(stateFile.readText())
+    /**
+     * What the last sync left, or the copy before it if that file is damaged. Neither readable:
+     * a fresh start, which only compares (notebooks changed on one side become two copies, none
+     * is lost).
+     */
+    private fun loadState(): State = readState(stateFile) ?: readState(backupFile()) ?: State(null, HashMap())
+
+    private fun backupFile() = File(stateFile.parentFile, stateFile.name + ".bak")
+
+    private fun readState(file: File): State? = if (!file.isFile) null else runCatching {
+        val o = JSONObject(file.readText())
         val folder = o.optString(KEY_FOLDER).ifEmpty { null }
         val map = o.keys().asSequence().filter { !it.startsWith("_") }.associateWith { id ->
             val s = o.getJSONObject(id)
             SyncPlan.Synced(s.getString("file"), s.getLong("local"), s.getLong("remote"))
         }.toMutableMap()
         State(folder, map)
-    }.getOrElse { State(null, HashMap()) }
+    }.onFailure { Log.w(TAG, "sync state ${file.name} unreadable", it) }.getOrNull()
 
     private fun saveState(state: State) {
         val o = JSONObject()
@@ -204,6 +230,8 @@ class DriveSync(
         for ((id, s) in state.notebooks) o.put(id, JSONObject().put("file", s.fileId).put("local", s.localAt).put("remote", s.remoteVersion))
         val tmp = File(stateFile.parentFile, stateFile.name + ".tmp")
         tmp.writeText(o.toString())
+        // The last good one is kept: a damaged state file does not start the sync afresh.
+        if (stateFile.isFile) runCatching { stateFile.copyTo(backupFile(), overwrite = true) }
         if (!tmp.renameTo(stateFile)) {
             stateFile.writeText(o.toString())
             tmp.delete()
@@ -213,6 +241,7 @@ class DriveSync(
     /** Forget what was synced (signed out, or another account): the next sync compares afresh. */
     fun forget() {
         stateFile.delete()
+        backupFile().delete()
     }
 
     companion object {

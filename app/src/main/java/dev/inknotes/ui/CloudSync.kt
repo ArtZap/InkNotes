@@ -98,7 +98,12 @@ class CloudSync(private val context: Context, private val repo: NotebookReposito
                         status = "Google не дал постоянного ключа. Отзовите доступ InkNotes в аккаунте Google и войдите снова"
                     } else {
                         // Another account: what was synced with the old one does not count.
-                        if (prefs.driveEmail != null && prefs.driveEmail != t.email) stateFile().delete()
+                        // What was synced is kept per account: the same account again compares as
+                        // before (no copies), another one starts from its own. An account whose
+                        // address Google did not give can't be told apart: it starts afresh.
+                        if (t.email == null) stateFile(null).delete()
+                        // The old one-file state goes to the account it belongs to, not this one.
+                        prefs.driveEmail?.let { stateFile(it) }
                         prefs.driveRefreshToken = refresh
                         prefs.driveEmail = t.email
                         email = t.email
@@ -123,14 +128,27 @@ class CloudSync(private val context: Context, private val repo: NotebookReposito
         signingIn = false
         held = emptyList()
         prefs.driveRefreshToken = null
+        // What was synced stays (per account): signing in again does not turn changes into copies.
+        stateFile()
         prefs.driveEmail = null
-        stateFile().delete()
         signedIn = false
         email = null
         status = "Вы вышли. Тетради на Диске остались"
     }
 
-    private fun stateFile() = File(context.filesDir, "drive-sync.json")
+    /**
+     * What was synced with the Drive of [email] (a file per account). The one file of versions
+     * before 0.39 belongs to the account signed in when it is first needed.
+     */
+    private fun stateFile(email: String? = prefs.driveEmail): File {
+        val legacy = File(context.filesDir, "drive-sync.json")
+        if (email == null) return legacy
+        val hash = java.security.MessageDigest.getInstance("SHA-256").digest(email.trim().lowercase().toByteArray())
+            .take(8).joinToString("") { "%02x".format(it) }
+        val own = File(context.filesDir, "drive-sync-$hash.json")
+        if (!own.exists() && legacy.isFile) legacy.renameTo(own)
+        return own
+    }
 
     private fun unmetered(): Boolean {
         val cm = context.getSystemService(ConnectivityManager::class.java) ?: return false
@@ -222,6 +240,7 @@ class CloudSync(private val context: Context, private val repo: NotebookReposito
                         // The sign-in was taken back (or ran out): sign in again.
                         m.contains("invalid_grant") -> "Вход в Google больше не действует — войдите снова"
                         e is java.net.UnknownHostException || e is java.net.SocketTimeoutException -> "Нет связи с Google Диском"
+                        e is dev.inknotes.data.DriveError -> e.friendly()
                         else -> "Не удалось: ${m.take(200)}"
                     }
                 },

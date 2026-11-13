@@ -295,6 +295,9 @@ class NotebookRepository(filesDir: File) {
     /** Pages that could not be read for a reason other than damage (too little memory, newer app). */
     private val unreadable = java.util.Collections.synchronizedSet(HashSet<String>())
 
+    /** Pages set aside as damaged in this run, by path: the name of the kept copy. */
+    private val damaged = java.util.concurrent.ConcurrentHashMap<String, String>()
+
     /** Notebooks with a page saved in this run: an undo there may bring a picture back. */
     private val savedThisRun = java.util.Collections.synchronizedSet(HashSet<String>())
 
@@ -322,11 +325,44 @@ class NotebookRepository(filesDir: File) {
 
     // Reads go through the same executor as writes, so they always see queued saves.
     fun list(): List<Notebook> = onIo {
+        val missing = HashSet<String>()
         root.listFiles().orEmpty()
             .filter { !it.name.startsWith(".") } // skip import staging folders
             .filter { !File(it, LOCK_NOTE).exists() } // a note being written over the lock screen
-            .mapNotNull { dir -> runCatching { readMeta(dir) }.getOrElse { e -> recoverMeta(dir, e) } }
+            .mapNotNull { dir ->
+                runCatching { readMeta(dir) }.getOrElse { e ->
+                    recoverMeta(dir, e).also { if (it == null && UUID_RE.matches(dir.name) && File(dir, META).exists()) missing += dir.name }
+                }
+            }
             .sortedByDescending { it.updatedAt }
+            .also { unlisted = missing }
+    }
+
+    /**
+     * Notebooks whose folder is here but that the last [list] could not read nor recover:
+     * not deleted, only unknown for now. The sync must not take them for deleted here.
+     */
+    @Volatile
+    var unlisted: Set<String> = emptySet()
+        private set
+
+    /** Notebooks rebuilt from their pages ([recoverMeta]) that are still marked so. */
+    fun recoveredIds(): Set<String> = onIo {
+        root.listFiles().orEmpty().filter { File(it, RECOVERED).exists() && UUID_RE.matches(it.name) }.map { it.name }.toSet()
+    }
+
+    /**
+     * Recovered notebook [id] becomes a notebook of its own under a new id, so a whole copy
+     * of [id] (from the Drive) can take its place instead of being written over by it.
+     * Returns the new id, or null if it could not be moved.
+     */
+    fun detachRecovered(id: String): String? = onIo {
+        val from = dir(id)
+        val nb = runCatching { readMeta(from) }.getOrNull() ?: return@onIo null
+        val copy = nb.copy(id = newId(), updatedAt = System.currentTimeMillis())
+        if (!from.renameTo(dir(copy.id))) return@onIo null
+        writeMetaNow(copy)
+        copy.id
     }
 
     /**
@@ -713,12 +749,29 @@ class NotebookRepository(filesDir: File) {
         val from = dir(nb.id)
         if (!from.isDirectory) return@background
         val to = File(trashDir(), nb.id)
-        deleteQuietly(to)
+        // An older copy of it already in the trash (deleted, restored, deleted again) is kept
+        // under an id of its own, not removed unseen.
+        if (to.exists()) keepAsOtherTrashCopy(to)
         if (from.renameTo(to)) {
             runCatching { File(to, DELETED_AT).writeText(System.currentTimeMillis().toString()) }
         } else {
             Log.w(TAG, "could not move ${nb.id} to the trash")
         }
+    }
+
+    private fun keepAsOtherTrashCopy(old: File) {
+        val nb = runCatching { readMeta(old) }.getOrNull()
+        if (nb == null) {
+            deleteQuietly(old)
+            return
+        }
+        val copy = nb.copy(id = newId(), title = "${nb.title} (старая копия)".take(MAX_TITLE))
+        val moved = File(trashDir(), copy.id)
+        if (!old.renameTo(moved)) {
+            deleteQuietly(old)
+            return
+        }
+        runCatching { atomicWrite(File(moved, META)) { it.write(encodeMeta(copy, moved).second) } }
     }
 
     val trashDays get() = TRASH_DAYS
@@ -763,8 +816,17 @@ class NotebookRepository(filesDir: File) {
 
     private fun trashDir() = File(root, TRASH).apply { mkdirs() }
 
+    /**
+     * When [d] went to the trash. Without a readable record (it could not be written then) the
+     * time is taken as now and written down: the folder's own date is when the notebook was
+     * last changed, maybe long ago, and the notebook would be removed for good at once.
+     */
     private fun deletedAt(d: File): Long =
-        runCatching { File(d, DELETED_AT).readText().trim().toLong() }.getOrElse { d.lastModified() }
+        runCatching { File(d, DELETED_AT).readText().trim().toLong() }.getOrElse {
+            val now = System.currentTimeMillis()
+            runCatching { File(d, DELETED_AT).writeText(now.toString()) }
+            now
+        }
 
     fun insertPage(nb: Notebook, index: Int, size: PageSize = PageSize.DEFAULT): Notebook {
         val id = newId()
@@ -1634,7 +1696,10 @@ class NotebookRepository(filesDir: File) {
                 Log.e(TAG, "page $pageId not loaded", t)
                 when (PageCopies.failure(t, reading)) {
                     // Not a page: set aside, so the empty page that replaces it destroys nothing.
-                    PageCopies.Failure.DAMAGED -> file.renameTo(File(file.parentFile, "${file.name}.broken-${System.currentTimeMillis()}"))
+                    PageCopies.Failure.DAMAGED -> {
+                        val aside = File(file.parentFile, "${file.name}.broken-${System.currentTimeMillis()}")
+                        if (file.renameTo(aside)) damaged[file.path] = aside.name
+                    }
                     // Storage or memory trouble, or a newer app's page: the file is probably fine.
                     // It stays as it is and nothing is written over it (see savePageAsync).
                     PageCopies.Failure.LOCKED -> unreadable += file.path
@@ -1658,6 +1723,13 @@ class NotebookRepository(filesDir: File) {
     /** Size and time of a page's file: changes whenever the page is saved ("-" when there is none). */
     fun pageStamp(nb: Notebook, pageId: String): String =
         pageFile(nb.id, pageId).let { if (it.isFile) "${it.length()}:${it.lastModified()}" else "-" }
+
+    /**
+     * Page [pageId] was found damaged when it was opened and set aside: the name of the copy
+     * kept, once (null: nothing to say). The editor says so instead of showing an empty page
+     * without a word.
+     */
+    fun takeDamaged(nb: Notebook, pageId: String): String? = damaged.remove(pageFile(nb.id, pageId).path)
 
     /** Page [pageId] could not be read and is shown empty: it must not be changed or saved. */
     fun isLocked(nb: Notebook, pageId: String) = pageFile(nb.id, pageId).path in unreadable
@@ -1908,7 +1980,7 @@ class NotebookRepository(filesDir: File) {
         atomicWrite(file) { it.write(bytes) }
     }
 
-    private fun encodeMeta(nb: Notebook): Pair<File, ByteArray> {
+    private fun encodeMeta(nb: Notebook, into: File? = null): Pair<File, ByteArray> {
         fun bg(b: PageBackground) = JSONObject().put("kind", b.kind.name).apply {
             b.photo?.let { put("photo", it) }
             b.color?.let { put("color", it.toLong() and 0xFFFFFFFFL) }
@@ -1981,7 +2053,7 @@ class NotebookRepository(filesDir: File) {
             }
             json.put("pdf", pdf)
         }
-        val file = File(dir(nb.id).apply { mkdirs() }, META)
+        val file = File(into ?: dir(nb.id).apply { mkdirs() }, META)
         return file to json.toString().toByteArray()
     }
 

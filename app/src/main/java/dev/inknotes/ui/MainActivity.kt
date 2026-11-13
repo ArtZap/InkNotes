@@ -141,6 +141,7 @@ class MainActivity : ComponentActivity() {
                             onCloseTab = ::closeTab,
                             onSide = { if (side == null) pickingSide = true else closeSide() },
                             sideOpen = side != null,
+                            compact = side != null,
                         ) }
                     }
                     val other = side
@@ -151,7 +152,13 @@ class MainActivity : ComponentActivity() {
                         SplitPanes(
                             share = sideShare,
                             onShare = { sideShare = it },
-                            onFocus = { left -> focused = if (left) current else other },
+                            onFocus = { left ->
+                                val pane = if (left) current else other
+                                focused = pane
+                                // New writing goes onto the active layer of the notebook touched,
+                                // not of the one attached last (the layer is one for the app).
+                                pane.activateLayer()
+                            },
                             first = main,
                             second = {
                                 androidx.compose.runtime.key(other) { EditorScreen(
@@ -162,6 +169,7 @@ class MainActivity : ComponentActivity() {
                                     onSide = ::closeSide,
                                     sideOpen = true,
                                     onSwap = ::swapSides,
+                                    compact = true,
                                 ) }
                             },
                         )

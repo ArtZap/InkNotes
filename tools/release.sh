@@ -190,7 +190,7 @@ gradle() { ./gradlew --console=plain "$@" 2>&1 | tee -a "$LOG"; return "${PIPEST
 stop_daemons() {
   [ "${KEEP_DAEMON:-0}" = 1 ] && return
   ./gradlew --stop >/dev/null 2>&1 || true
-  pkill -f 'KotlinCompileDaemon' 2>/dev/null || true
+  pkill -u "$(id -u)" -f 'KotlinCompileDaemon' 2>/dev/null || true
 }
 trap stop_daemons EXIT
 

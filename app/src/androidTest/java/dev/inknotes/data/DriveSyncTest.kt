@@ -186,4 +186,33 @@ class DriveSyncTest {
         assertEquals(2, a.run().uploaded)
         assertEquals(2, drive.live())
     }
+
+    @Test
+    fun aRecoveredNotebookDoesNotGoUpOverTheWholeOne() {
+        val drive = FakeDrive()
+        val a = Device("recovered", drive)
+        val nb = a.repo.create("Лекция", PaperKind.LINED)
+        a.run()
+        File(a.root, "notebooks/${nb.id}/notebook.json").writeText("{damaged")
+        a.run()
+        // The whole one came back from the Drive under its id; what was rebuilt is a notebook of its own.
+        assertEquals(listOf("Восстановленная тетрадь", "Лекция"), a.titles())
+        assertEquals("Лекция", a.repo.list().first { it.id == nb.id }.title)
+    }
+
+    @Test
+    fun aDeletedNotebookDoesNotComeBackFromASecondFile() {
+        val drive = FakeDrive()
+        val a = Device("twice", drive)
+        val nb = a.repo.create("Дважды", PaperKind.BLANK)
+        a.run()
+        // A second file of the same notebook (two devices sent it up at once).
+        val e = drive.files.values.first()
+        drive.files["dup"] = FakeDrive.Entry(e.name, 1, e.props, e.bytes)
+        a.repo.delete(nb)
+        assertEquals(1, a.run().trashedThere)
+        assertEquals(0, drive.live())
+        a.run()
+        assertTrue(a.titles().isEmpty())
+    }
 }

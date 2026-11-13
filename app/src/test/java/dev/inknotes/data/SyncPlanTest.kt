@@ -78,4 +78,10 @@ class SyncPlanTest {
         // Other actions don't count.
         assertEquals(false, SyncPlan.massTrash(listOf(Action.Upload("a", null), Action.TrashRemote("b", "f")), 2))
     }
+
+    @Test
+    fun aClockSetBackStillCountsAsAChange() {
+        val s = mapOf("a" to Synced("f", 10, 3))
+        assertEquals(listOf(Action.Upload("a", "f")), plan(listOf(Local("a", "A", 5)), listOf(Remote("f", "a", 3, 10)), s))
+    }
 }
