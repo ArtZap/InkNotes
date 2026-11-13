@@ -17,6 +17,9 @@ interface DriveApi {
     /** The app's folder ("InkNotes" at the top of the Drive), made the first time. */
     fun folder(): String
 
+    /** Folder [folderId] is still there (not deleted, not in the trash), wherever it was moved. */
+    fun exists(folderId: String): Boolean
+
     fun list(folderId: String): List<DriveFile>
 
     /** [fileId] null: a new file in [folderId]; else that file gets new contents. */
@@ -80,6 +83,16 @@ class DriveClient(private val token: () -> String, private val refresh: () -> St
             val conn = open("$API/files?fields=id", "POST", t)
             json(conn, JSONObject().put("name", FOLDER).put("mimeType", FOLDER_MIME))
             JSONObject(conn.answer()).getString("id")
+        }
+    }
+
+    override fun exists(folderId: String): Boolean = authorized { t ->
+        try {
+            val o = JSONObject(open("$API/files/${q(folderId)}?fields=${q("id,trashed,mimeType")}", "GET", t).answer())
+            !o.optBoolean("trashed") && o.optString("mimeType") == FOLDER_MIME
+        } catch (e: DriveError) {
+            // Gone for good (a 403 may be a rate limit: not taken for gone).
+            if (e.code == 404) false else throw e
         }
     }
 
@@ -205,7 +218,15 @@ class DriveClient(private val token: () -> String, private val refresh: () -> St
                 while (true) {
                     val socket = server.accept()
                     socket.use { s ->
-                        val line = s.getInputStream().bufferedReader().readLine().orEmpty()
+                        // Browsers open spare connections ahead and may send nothing on them:
+                        // such a one is dropped after a few seconds instead of blocking the
+                        // one that brings the answer.
+                        s.soTimeout = 5_000
+                        val line = try {
+                            s.getInputStream().bufferedReader().readLine().orEmpty()
+                        } catch (e: java.net.SocketTimeoutException) {
+                            return@use
+                        }
                         val reply = GoogleAuth.parse(line, state)
                         val ok = reply is GoogleAuth.Reply.Code
                         val page = if (reply == GoogleAuth.Reply.Other) "" else

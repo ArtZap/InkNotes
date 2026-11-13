@@ -25,7 +25,12 @@ class DriveSyncTest {
         private var next = 1
         private var clock = 100L
 
-        override fun folder() = "folder"
+        /** The InkNotes folder now: another id when it was deleted and made anew. */
+        var folderId = "folder"
+
+        override fun folder() = folderId
+
+        override fun exists(folderId: String) = folderId == this.folderId
 
         override fun list(folderId: String) = files.filter { !it.value.trashed }.map { (id, e) -> DriveFile(id, e.name, e.version, e.props) }
 
@@ -56,7 +61,7 @@ class DriveSyncTest {
         val repo = NotebookRepository(root)
         val sync = DriveSync(repo, drive, File(root, "drive-sync.json"), ctx.cacheDir)
 
-        fun run(busy: Set<String> = emptySet()) = runBlocking { sync.run(busy) }
+        fun run(busy: Set<String> = emptySet(), trashMany: Boolean = false) = runBlocking { sync.run({ busy }, trashMany) }
 
         fun titles() = repo.list().map { it.title }.sorted()
     }
@@ -129,6 +134,56 @@ class DriveSyncTest {
         val r = a.run()
         assertEquals(1, r.uploaded)
         assertEquals(0, r.downloaded)
+        assertEquals(1, r.unread)
         assertEquals(listOf("Своя"), a.titles())
+    }
+
+    @Test
+    fun aFolderDeletedOnTheDriveDeletesNothingHere() {
+        val drive = FakeDrive()
+        val a = Device("lost", drive)
+        a.repo.create("Первая", PaperKind.BLANK)
+        a.repo.create("Вторая", PaperKind.BLANK)
+        assertEquals(2, a.run().uploaded)
+        // The folder is deleted on the Drive: the app makes a new, empty one.
+        drive.files.clear()
+        drive.folderId = "folder-2"
+        val r = a.run()
+        assertTrue(r.folderLost)
+        assertEquals(0, r.trashedHere)
+        assertEquals(2, r.uploaded)
+        assertEquals(listOf("Вторая", "Первая"), a.titles())
+    }
+
+    @Test
+    fun manyDeletionsAtOnceWaitForTheUser() {
+        val drive = FakeDrive()
+        val a = Device("many", drive)
+        repeat(3) { a.repo.create("Тетрадь $it", PaperKind.BLANK) }
+        a.run()
+        // Every file gone from the folder at once (the folder itself is still there).
+        drive.files.values.forEach { it.trashed = true }
+        val held = a.run()
+        assertEquals(0, held.trashedHere)
+        assertEquals(3, held.held.size)
+        assertEquals(3, a.titles().size)
+        // Asked again until decided; agreed, they go to the trash here.
+        assertEquals(3, a.run().held.size)
+        assertEquals(3, a.run(trashMany = true).trashedHere)
+        assertTrue(a.titles().isEmpty())
+    }
+
+    @Test
+    fun notebooksKeptHereGoUpAgain() {
+        val drive = FakeDrive()
+        val a = Device("keep", drive)
+        repeat(2) { a.repo.create("Тетрадь $it", PaperKind.BLANK) }
+        a.run()
+        drive.files.values.forEach { it.trashed = true }
+        val held = a.run().held
+        assertEquals(2, held.size)
+        a.sync.keepHere(held.map { it.first })
+        assertEquals(2, a.run().uploaded)
+        assertEquals(2, drive.live())
     }
 }

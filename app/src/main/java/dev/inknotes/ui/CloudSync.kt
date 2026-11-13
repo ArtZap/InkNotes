@@ -49,12 +49,25 @@ class CloudSync(private val context: Context, private val repo: NotebookReposito
 
     private var loopback: DriveClient.Companion.Loopback? = null
 
+    /** Counts sign-ins: a sign-in given up for a newer one changes nothing when it ends. */
+    private var attempt = 0
+
+    /**
+     * Notebooks deleted on the Drive and not put in the trash here, because so many went at once
+     * (id and title): the dialog asks what to do with them.
+     */
+    var held by mutableStateOf<List<Pair<String, String>>>(emptyList())
+        private set
+
     private suspend fun main(block: () -> Unit) = withContext(Dispatchers.Main) { block() }
 
     /** Opens Google's page in the browser; the answer comes back to the app by itself. */
     fun signIn(from: Context) {
-        if (!configured || signingIn) return
+        if (!configured) return
+        // Pressed again while waiting (the browser closed, the page lost): that sign-in is given
+        // up and a new one starts, instead of waiting out the old one's minutes.
         loopback?.close()
+        val mine = ++attempt
         val server = DriveClient.Companion.Loopback().also { loopback = it }
         val verifier = GoogleAuth.verifier()
         val state = GoogleAuth.state()
@@ -77,6 +90,7 @@ class CloudSync(private val context: Context, private val repo: NotebookReposito
             }
             server.close()
             main {
+                if (mine != attempt) return@main
                 signingIn = false
                 result.onSuccess { t ->
                     val refresh = t.refresh
@@ -91,13 +105,23 @@ class CloudSync(private val context: Context, private val repo: NotebookReposito
                         signedIn = true
                         status = "Вход выполнен" + (t.email?.let { ": $it" } ?: "")
                     }
-                }.onFailure { status = it.message ?: "Вход не выполнен" }
+                }.onFailure { status = signInError(it) }
             }
-            if (result.isSuccess && prefs.driveRefreshToken != null) sync(emptySet())
+            if (mine == attempt && result.isSuccess && prefs.driveRefreshToken != null) sync()
         }
     }
 
+    private fun signInError(e: Throwable): String = when (e) {
+        is java.net.SocketTimeoutException -> "Время входа вышло. Нажмите «Войти через Google» ещё раз"
+        is java.net.SocketException -> "Вход прерван"
+        else -> e.message?.takeIf { it.isNotBlank() } ?: "Вход не выполнен"
+    }
+
     fun signOut() {
+        attempt++
+        loopback?.close()
+        signingIn = false
+        held = emptyList()
         prefs.driveRefreshToken = null
         prefs.driveEmail = null
         stateFile().delete()
@@ -121,12 +145,27 @@ class CloudSync(private val context: Context, private val repo: NotebookReposito
     }
 
     /**
+     * Who has notebooks open in an editor now (the app, a quick note): asked by the sync before
+     * every step that would replace or remove one. Weakly held: a closed screen is not kept
+     * in memory by this process-wide object.
+     */
+    private val openers = java.util.concurrent.ConcurrentHashMap<String, java.lang.ref.WeakReference<() -> Set<String>>>()
+
+    /** [key]'s open notebooks are [ids]; registered again with the same key replaces it. */
+    fun watchOpen(key: String, ids: () -> Set<String>) {
+        openers[key] = java.lang.ref.WeakReference(ids)
+    }
+
+    fun unwatchOpen(key: String) {
+        openers.remove(key)
+    }
+
+    fun openNow(): Set<String> = openers.values.flatMap { ref -> ref.get()?.let { runCatching { it() }.getOrNull() }.orEmpty() }.toSet()
+
+    /**
      * When the app is opened or left: a sync if it is on, and not more often than every couple
      * of minutes. [busy]: notebooks open in the editor (already saved).
      */
-    /** Notebooks open in the editor now (set by the activity): not replaced under it. */
-    var openNow: () -> Set<String> = { emptySet() }
-
     fun autoSync(busy: Set<String>) {
         if (!configured || !signedIn || !prefs.driveAuto || running) return
         if (System.currentTimeMillis() - prefs.driveLastSync < AUTO_EVERY_MS) return
@@ -134,7 +173,33 @@ class CloudSync(private val context: Context, private val repo: NotebookReposito
         sync(busy)
     }
 
-    fun sync(busy: Set<String>) {
+    /**
+     * Notebooks [held] back go to the trash here after all (the user deleted them on purpose),
+     * or stay here and go up to the Drive again ([trash] false).
+     */
+    fun resolveHeld(trash: Boolean) {
+        val ids = held.map { it.first }
+        held = emptyList()
+        if (trash) {
+            sync(trashMany = true)
+        } else {
+            DriveSync(repo, NoDrive, stateFile(), context.cacheDir).keepHere(ids)
+            sync()
+        }
+    }
+
+    /** For [DriveSync.keepHere], which only edits what is remembered. */
+    private object NoDrive : dev.inknotes.data.DriveApi {
+        override fun folder() = error("offline")
+        override fun exists(folderId: String) = error("offline")
+        override fun list(folderId: String) = error("offline")
+        override fun upload(folderId: String, fileId: String?, name: String, props: Map<String, String>, from: File) = error("offline")
+        override fun download(fileId: String, to: File) = error("offline")
+        override fun trash(fileId: String) = error("offline")
+    }
+
+    /** [busy]: notebooks open now besides those registered with [watchOpen]. */
+    fun sync(busy: Set<String> = emptySet(), trashMany: Boolean = false) {
         if (!configured || !signedIn) return
         if (!DriveSync.running.compareAndSet(false, true)) return
         running = true
@@ -145,7 +210,7 @@ class CloudSync(private val context: Context, private val repo: NotebookReposito
                 val refresh = prefs.driveRefreshToken ?: error("Войдите в Google")
                 val token = { DriveClient.refresh(clientId, secret, refresh).access }
                 val api = DriveClient(token, token)
-                DriveSync(repo, api, stateFile(), context.cacheDir).run(busy)
+                DriveSync(repo, api, stateFile(), context.cacheDir).run({ busy + openNow() }, trashMany)
             }
             DriveSync.running.set(false)
             val now = System.currentTimeMillis()
@@ -156,6 +221,7 @@ class CloudSync(private val context: Context, private val repo: NotebookReposito
                     when {
                         // The sign-in was taken back (or ran out): sign in again.
                         m.contains("invalid_grant") -> "Вход в Google больше не действует — войдите снова"
+                        e is java.net.UnknownHostException || e is java.net.SocketTimeoutException -> "Нет связи с Google Диском"
                         else -> "Не удалось: ${m.take(200)}"
                     }
                 },
@@ -168,6 +234,7 @@ class CloudSync(private val context: Context, private val repo: NotebookReposito
             main {
                 running = false
                 status = text
+                result.getOrNull()?.let { held = it.held }
                 lastSync = prefs.driveLastSync
                 signedIn = prefs.driveRefreshToken != null
             }

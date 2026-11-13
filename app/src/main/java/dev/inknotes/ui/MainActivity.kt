@@ -61,7 +61,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        AppServices.get(this).cloud.openNow = ::openIds
+        // The sync asks what is open before each step (held only weakly there: no leak).
+        AppServices.get(this).cloud.watchOpen(SYNC_KEY, openForSync)
         val services = AppServices.get(this)
         repo = services.repo
         handwriting = services.handwriting
@@ -312,7 +313,9 @@ class MainActivity : ComponentActivity() {
             it.flush()
             editor = null
         }
-        // An import may replace an open notebook: every tab is closed (they are saved first).
+        // An import may replace an open notebook: every tab is closed (they are saved first),
+        // and the notebook beside them too.
+        closeSide()
         for (t in tabs) t.close()
         tabs = emptyList()
         libraryMessage = "Открываю " + if (uris.size == 1) "файл…" else "файлы (${uris.size})…"
@@ -408,6 +411,14 @@ class MainActivity : ComponentActivity() {
     /** Notebooks open here: the sync does not replace them under the editor. */
     private fun openIds() = (tabs + listOfNotNull(side)).map { it.notebook.id }.toSet()
 
+    /** Kept by this activity: the sync holds it only weakly. */
+    private val openForSync: () -> Set<String> = { openIds() }
+
+    override fun onDestroy() {
+        AppServices.get(this).cloud.unwatchOpen(SYNC_KEY)
+        super.onDestroy()
+    }
+
     override fun onResume() {
         super.onResume()
         AppServices.get(this).cloud.autoSync(openIds())
@@ -446,5 +457,6 @@ class MainActivity : ComponentActivity() {
 
     private companion object {
         const val MAX_TABS = 5
+        const val SYNC_KEY = "main"
     }
 }

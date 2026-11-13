@@ -410,6 +410,12 @@ object InkBrushes {
 /** A page written by a newer app version (not a corrupt file). */
 class NewerFormatException(message: String) : IOException(message)
 
+/**
+ * A page that holds more than a page file may (see [PageCodec.Limits]): it is not written, so
+ * the copy on disk stays readable. [message] says what to do, in the words of the interface.
+ */
+class PageTooComplexException(message: String) : IOException(message)
+
 object PageCodec {
     private const val MAGIC = 0x494E4B50 // "INKP"
     private const val VERSION = 12
@@ -423,22 +429,33 @@ object PageCodec {
         FillPattern.DOTS to HatchStyle(angle = 0f),
     )
 
-    // Page files may come from other people's devices (shared notebooks): cap every
-    // length read from the file before allocating.
-    private const val MAX_ELEMENTS = 200_000
-    private const val MAX_STROKE_BYTES = 8 * 1024 * 1024
-    private const val MAX_FLOATS = 2_000_000
-
-    /** Fills per page: each can cost up to [dev.inknotes.editor.Hatch] budget on every redraw. */
-    private const val MAX_FILLS = 2_000
-
-    /** Point coordinates of all fills and cuts of a page together, and cuts in all. */
-    private const val MAX_PAGE_FLOATS = 4_000_000L
-    private const val MAX_PAGE_CUTS = 20_000
+    /**
+     * Page files may come from other people's devices (shared notebooks): every length read
+     * from the file is capped before allocating. [STRICT] is what a page file may hold: it is
+     * checked on import and every write keeps to it, so what one device writes every other
+     * one reads. [OWN] is wider, for pages already on this device written by versions that
+     * did not check (before 0.39): such a page opens instead of being set aside as damaged.
+     */
+    class Limits(
+        val elements: Int,
+        val strokeBytes: Int,
+        val floats: Int,
+        /** Fills per page: each can cost up to [dev.inknotes.editor.Hatch] budget on every redraw. */
+        val fills: Int,
+        /** Point coordinates of all fills and cuts of a page together, and cuts in all. */
+        val pageFloats: Long,
+        val cuts: Int,
+        val images: Int,
+    ) {
+        companion object {
+            val STRICT = Limits(200_000, 8 * 1024 * 1024, 2_000_000, 2_000, 4_000_000L, 20_000, 500)
+            val OWN = Limits(2_000_000, 64 * 1024 * 1024, 20_000_000, 20_000, 40_000_000L, 200_000, 5_000)
+        }
+    }
 
     /** Real coordinates stay within a few page heights; huge ones upset Skia's path math. */
     private const val MAX_COORD = 1_000_000f
-    private const val MAX_IMAGES = 500
+    private const val MAX_BRUSH = 1000f
 
     private fun DataInputStream.readCount(max: Int): Int {
         val n = readInt()
@@ -446,7 +463,43 @@ object PageCodec {
         return n
     }
 
+    /**
+     * What on [content] keeps it from being written within [Limits.STRICT], in words for the
+     * user, or null if it fits. Counts only: numbers out of range are brought into range by
+     * [write] itself. The size of each line's encoding is checked while writing.
+     */
+    fun tooComplex(content: PageContent): String? {
+        val l = Limits.STRICT
+        val pictures = content.images.count { !it.isText }
+        val texts = content.images.size - pictures
+        val fills = content.fills.filter { it.outline.size >= 6 }
+        val cuts = fills.sumOf { f -> f.cuts.count { it.points.size >= 2 } }
+        val floats = fills.sumOf { f -> f.outline.size.toLong() + f.cuts.sumOf { it.points.size.toLong() } }
+        return when {
+            content.strokes.size > l.elements -> "на странице больше ${l.elements} линий"
+            fills.size > l.fills -> "на странице больше ${l.fills} штриховок"
+            pictures > l.images -> "на странице больше ${l.images} картинок"
+            texts > l.images -> "на странице больше ${l.images} текстовых блоков"
+            cuts > l.cuts || floats > l.pageFloats || fills.any { f -> f.outline.size > l.floats || f.cuts.any { it.points.size > l.floats } } ->
+                "штриховки на странице слишком сложные (много стёртых мест)"
+            else -> null
+        }
+    }
+
+    private fun finite(v: Float) = if (v.isFinite()) v.coerceIn(-MAX_COORD, MAX_COORD) else 0f
+
+    private fun clampPoints(values: FloatArray): FloatArray {
+        val even = if (values.size % 2 == 0) values else values.copyOf(values.size - 1)
+        return FloatArray(even.size) { finite(even[it]) }
+    }
+
+    /**
+     * Writes [content] so that [decode] with [Limits.STRICT] reads it back: coordinates and
+     * sizes are brought into range, degenerate fills and cuts (invisible) are left out, and a
+     * page over the counts throws [PageTooComplexException] before anything is written.
+     */
     fun write(out: OutputStream, content: PageContent) {
+        tooComplex(content)?.let { throw PageTooComplexException(it) }
         val data = DataOutputStream(BufferedOutputStream(out))
         data.writeInt(MAGIC)
         data.writeInt(
@@ -464,14 +517,17 @@ object PageCodec {
         for (s in content.strokes) {
             data.writeByte(s.kind.ordinal)
             data.writeInt(s.stroke.brush.colorIntArgb)
-            data.writeFloat(s.stroke.brush.size)
+            val size = s.stroke.brush.size
+            data.writeFloat(if (size.isFinite() && size > 0f) size.coerceAtMost(MAX_BRUSH) else 1f)
             buffer.reset()
             s.stroke.inputs.encode(buffer)
+            if (buffer.size() > Limits.STRICT.strokeBytes) throw PageTooComplexException("на странице есть слишком длинная линия")
             data.writeInt(buffer.size())
             buffer.writeTo(data)
         }
-        data.writeInt(content.fills.size)
-        for (f in content.fills) {
+        val fills = content.fills.filter { it.outline.size >= 6 }
+        data.writeInt(fills.size)
+        for (f in fills) {
             data.writeByte(f.pattern.ordinal)
             data.writeInt(f.color)
             data.writeFloat(f.style.width)
@@ -480,22 +536,19 @@ object PageCodec {
             data.writeFloat(f.style.scale)
             data.writeFloat(f.style.opacity)
             data.writeByte(f.style.lineType.ordinal)
-            writeFloats(data, f.outline)
-            data.writeInt(f.cuts.size)
-            for (cut in f.cuts) {
+            writeFloats(data, clampPoints(f.outline))
+            val cuts = f.cuts.filter { it.points.size >= 2 && it.radius.isFinite() && it.radius > 0f }
+            data.writeInt(cuts.size)
+            for (cut in cuts) {
                 data.writeFloat(cut.radius)
-                writeFloats(data, cut.points)
+                writeFloats(data, clampPoints(cut.points))
             }
         }
         val pictures = content.images.filter { !it.isText }
         data.writeInt(pictures.size)
         for (img in pictures) {
             data.writeUTF(img.file)
-            data.writeFloat(img.x)
-            data.writeFloat(img.y)
-            data.writeFloat(img.w)
-            data.writeFloat(img.h)
-            data.writeFloat(img.rotation)
+            writeRect(data, img)
         }
         // v11: dash patterns, by index of the line (only lines that have one).
         val dashed = content.strokes.withIndex().filter { it.value.dash != null }
@@ -517,17 +570,13 @@ object PageCodec {
             for (img in texts) {
                 val t = img.text!!
                 data.writeUTF(t.text.take(PageText.MAX_CHARS))
-                data.writeFloat(t.size)
+                data.writeFloat(if (t.size.isFinite()) t.size.coerceIn(PageText.MIN_SIZE, PageText.MAX_SIZE) else PageText.MIN_SIZE)
                 data.writeInt(t.color)
-                data.writeFloat(img.x)
-                data.writeFloat(img.y)
-                data.writeFloat(img.w)
-                data.writeFloat(img.h)
-                data.writeFloat(img.rotation)
+                writeRect(data, img)
             }
             // Layers other than the main one: kind (0 line, 1 fill, 2 picture or text), index, layer.
             val all = (content.strokes.withIndex().map { Triple(0, it.index, it.value.layer) } +
-                content.fills.withIndex().map { Triple(1, it.index, it.value.layer) } +
+                fills.withIndex().map { Triple(1, it.index, it.value.layer) } +
                 (pictures + texts).withIndex().map { Triple(2, it.index, it.value.layer) }).filter { it.third != 0 }
             data.writeInt(all.size)
             for ((kind, i, layer) in all) {
@@ -539,32 +588,40 @@ object PageCodec {
         data.flush()
     }
 
+    private fun writeRect(data: DataOutputStream, img: PageImage) {
+        data.writeFloat(finite(img.x))
+        data.writeFloat(finite(img.y))
+        data.writeFloat(finite(img.w).coerceAtLeast(1f))
+        data.writeFloat(finite(img.h).coerceAtLeast(1f))
+        data.writeFloat(if (img.rotation.isFinite()) img.rotation else 0f)
+    }
+
     private fun anyLayer(c: PageContent) = c.strokes.any { it.layer != 0 } || c.fills.any { it.layer != 0 } || c.images.any { it.layer != 0 }
 
-    fun read(file: File): PageContent = decode(file.readBytes())
+    fun read(file: File, limits: Limits = Limits.STRICT): PageContent = decode(file.readBytes(), limits)
 
     /** A page from its file's bytes; any error here means the bytes are not a page. */
-    fun decode(bytes: ByteArray): PageContent =
+    fun decode(bytes: ByteArray, limits: Limits = Limits.STRICT): PageContent =
         DataInputStream(java.io.ByteArrayInputStream(bytes)).use { data ->
             if (data.readInt() != MAGIC) throw IOException("not a page file")
             val version = data.readInt()
             if (version > VERSION) throw NewerFormatException("page format v$version is newer than supported v$VERSION")
             // What the whole page may hold, however it is split up: every cut is a path operation on each redraw.
-            val floatsLeft = longArrayOf(MAX_PAGE_FLOATS)
-            var cutsLeft = MAX_PAGE_CUTS
-            val strokes = MutableList(data.readCount(MAX_ELEMENTS)) {
+            val floatsLeft = longArrayOf(limits.pageFloats)
+            var cutsLeft = limits.cuts
+            val strokes = MutableList(data.readCount(limits.elements)) {
                 val kind = InkKind.entries.getOrNull(data.readUnsignedByte()) ?: throw IOException("bad ink kind")
                 val color = data.readInt()
                 val size = data.readFloat()
-                if (!size.isFinite() || size <= 0f || size > 1000f) throw IOException("bad brush size")
-                val bytes = ByteArray(data.readCount(MAX_STROKE_BYTES)).also(data::readFully)
+                if (!size.isFinite() || size <= 0f || size > MAX_BRUSH) throw IOException("bad brush size")
+                val bytes = ByteArray(data.readCount(limits.strokeBytes)).also(data::readFully)
                 val inputs = StrokeInputBatch.decode(ByteArrayInputStream(bytes))
                 PageStroke(kind, Stroke(InkBrushes.create(kind, color, size), inputs), layer = 0)
             }
             val fills = if (version < 2) {
                 emptyList()
             } else {
-                List(data.readCount(MAX_FILLS)) {
+                List(data.readCount(limits.fills)) {
                     val code = data.readUnsignedByte()
                     val pattern: FillPattern
                     var style = HatchStyle.DEFAULT
@@ -586,14 +643,14 @@ object PageCodec {
                         }
                         style = HatchStyle(values[0], values[1], values[2], values[3], values[4], lineType).sane()
                     }
-                    val outline = readFloats(data, floatsLeft)
+                    val outline = readFloats(data, floatsLeft, limits.floats)
                     if (outline.size < 6) throw IOException("fill outline needs 3 points")
-                    val cutCount = data.readCount(MAX_ELEMENTS)
+                    val cutCount = data.readCount(limits.elements)
                     cutsLeft -= cutCount
                     if (cutsLeft < 0) throw IOException("too many erase cuts")
                     val cuts = List(cutCount) {
                         val radius = data.readFloat()
-                        val points = readFloats(data, floatsLeft)
+                        val points = readFloats(data, floatsLeft, limits.floats)
                         if (points.size < 2 || !radius.isFinite() || radius <= 0f) throw IOException("bad erase cut")
                         EraseCut(points, radius)
                     }
@@ -603,7 +660,7 @@ object PageCodec {
             val images = if (version < 6) {
                 emptyList()
             } else {
-                List(data.readCount(MAX_IMAGES)) {
+                List(data.readCount(limits.images)) {
                     // The name becomes a file path: accept only names the app generates.
                     val file = data.readUTF()
                     if (!PageImage.NAME.matches(file)) throw IOException("bad image name")
@@ -617,7 +674,7 @@ object PageCodec {
                 }
             }
             if (version >= 11) {
-                repeat(data.readCount(MAX_ELEMENTS)) {
+                repeat(data.readCount(limits.elements)) {
                     val i = data.readInt()
                     val pattern = DashPattern.entries.getOrNull(data.readUnsignedByte()) ?: throw IOException("bad dash pattern")
                     val dash = data.readFloat()
@@ -630,7 +687,7 @@ object PageCodec {
             val texts = if (version < 12) {
                 emptyList()
             } else {
-                List(data.readCount(MAX_IMAGES)) {
+                List(data.readCount(limits.images)) {
                     val text = data.readUTF()
                     val size = data.readFloat()
                     val color = data.readInt()
@@ -643,7 +700,7 @@ object PageCodec {
             val fillList = fills.toMutableList()
             val imageList = (images + texts).toMutableList()
             if (version >= 12) {
-                repeat(data.readCount(MAX_ELEMENTS)) {
+                repeat(data.readCount(limits.elements)) {
                     val kind = data.readUnsignedByte()
                     val i = data.readInt()
                     val layer = data.readUnsignedByte()
@@ -664,8 +721,8 @@ object PageCodec {
         for (v in values) data.writeFloat(v)
     }
 
-    private fun readFloats(data: DataInputStream, left: LongArray): FloatArray {
-        val n = data.readCount(MAX_FLOATS)
+    private fun readFloats(data: DataInputStream, left: LongArray, max: Int): FloatArray {
+        val n = data.readCount(max)
         left[0] -= n
         if (left[0] < 0) throw IOException("page too complex")
         val values = FloatArray(n) { data.readFloat() }

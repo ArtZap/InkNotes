@@ -63,4 +63,19 @@ class SyncPlanTest {
         val r = listOf(Remote("old", "a", 2, 5), Remote("new", "a", 7, 9))
         assertEquals(listOf(Action.Download("a", "new")), plan(remote = r))
     }
+
+    @Test
+    fun manyDeletionsAtOnceLookLikeAMistake() {
+        val trash = { n: Int -> List(n) { Action.TrashLocal("n$it") } }
+        // One notebook deleted on the other device: as before.
+        assertEquals(false, SyncPlan.massTrash(trash(1), 1))
+        // Two of three, or every one: asked first.
+        assertEquals(true, SyncPlan.massTrash(trash(2), 3))
+        assertEquals(true, SyncPlan.massTrash(trash(5), 5))
+        // A few of a big library: as before; ten or more at once: asked.
+        assertEquals(false, SyncPlan.massTrash(trash(3), 40))
+        assertEquals(true, SyncPlan.massTrash(trash(10), 400))
+        // Other actions don't count.
+        assertEquals(false, SyncPlan.massTrash(listOf(Action.Upload("a", null), Action.TrashRemote("b", "f")), 2))
+    }
 }

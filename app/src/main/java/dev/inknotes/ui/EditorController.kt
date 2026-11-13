@@ -1092,7 +1092,7 @@ class EditorController(
         for ((id, m) in moves) {
             val content = docs[id]?.content() ?: repo.loadPage(nb, id)
             val moved = movedContent(content, m)
-            repo.savePageAsync(nb, id, moved)
+            repo.savePageAsync(nb, id, moved) { problem -> notSaved(id, problem) }
             handwriting.pageSaved(nb, id, moved)
             val open = docs.remove(id) != null
             savedRevision.remove(id)
@@ -2234,6 +2234,15 @@ class EditorController(
 
     // ------------------------------------------------------------------- save
 
+    /**
+     * Page [id] holds more than a page file may and was not written (the copy on disk is the
+     * last one that fit): said on screen, and tried again at the next save.
+     */
+    private fun notSaved(id: String, problem: String) {
+        savedRevision.remove(id)
+        showStatus("Страница не сохранена: $problem. Перенесите часть на другую страницу")
+    }
+
     /** Writes every page whose revision changed since the last save. */
     fun flush() {
         handler.removeCallbacks(saveRunnable)
@@ -2241,7 +2250,7 @@ class EditorController(
         for ((id, doc) in docs) {
             if (savedRevision[id] == doc.revision) continue
             val content = doc.content()
-            repo.savePageAsync(notebook, id, content)
+            repo.savePageAsync(notebook, id, content) { problem -> notSaved(id, problem) }
             handwriting.pageSaved(notebook, id, content)
             savedRevision[id] = doc.revision
             any = true

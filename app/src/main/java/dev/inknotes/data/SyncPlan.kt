@@ -81,4 +81,19 @@ object SyncPlan {
         }
         return out
     }
+
+    /**
+     * Whether [actions] put so many notebooks here in the trash at once that it looks like a
+     * mistake on the Drive (the folder deleted, emptied or replaced) rather than deletions made
+     * on another device: at least [MASS_TRASH_MIN] of them, and half the library or more (or
+     * [MASS_TRASH_MAX] and more). Then the sync asks before it does that; [localCount] is the
+     * number of notebooks here.
+     */
+    fun massTrash(actions: List<Action>, localCount: Int): Boolean {
+        val n = actions.count { it is Action.TrashLocal }
+        return n >= MASS_TRASH_MIN && (n * 2 >= localCount || n >= MASS_TRASH_MAX)
+    }
+
+    const val MASS_TRASH_MIN = 2
+    const val MASS_TRASH_MAX = 10
 }
