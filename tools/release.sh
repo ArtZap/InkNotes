@@ -72,11 +72,18 @@ if [ ! -f keystore.properties ]; then
   if [ "$NEW_KEY" = 1 ]; then
     mkdir -p keystore
     [ -e keystore/inknotes-release.jks ] && die "keystore/inknotes-release.jks уже есть, а keystore.properties нет — восстановите пароли, новый ключ не создаю"
-    PASS=$(head -c 24 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 24)
-    "$KEYTOOL" -genkeypair -v -keystore keystore/inknotes-release.jks -alias inknotes \
-      -keyalg RSA -keysize 4096 -validity 36500 -storepass "$PASS" -keypass "$PASS" \
-      -dname "CN=InkNotes" >/dev/null
-    printf 'storeFile=keystore/inknotes-release.jks\nstorePassword=%s\nkeyAlias=inknotes\nkeyPassword=%s\n' "$PASS" "$PASS" > keystore.properties
+    # The password goes to keytool through the environment, not its arguments (seen in ps),
+    # and the files are made readable only by their owner from the start.
+    INKNOTES_KEY_PASS=$(head -c 24 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 24)
+    export INKNOTES_KEY_PASS
+    (
+      umask 077
+      "$KEYTOOL" -genkeypair -v -keystore keystore/inknotes-release.jks -alias inknotes \
+        -keyalg RSA -keysize 4096 -validity 36500 -storepass:env INKNOTES_KEY_PASS -keypass:env INKNOTES_KEY_PASS \
+        -dname "CN=InkNotes" >/dev/null
+      printf 'storeFile=keystore/inknotes-release.jks\nstorePassword=%s\nkeyAlias=inknotes\nkeyPassword=%s\n' "$INKNOTES_KEY_PASS" "$INKNOTES_KEY_PASS" > keystore.properties
+    )
+    unset INKNOTES_KEY_PASS
     chmod 600 keystore.properties keystore/inknotes-release.jks
     warn "Создан новый ключ. Сохраните keystore/ и keystore.properties в надёжном месте:"
     warn "без них обновить уже установленный релиз будет нельзя."
@@ -113,7 +120,8 @@ if [ "$DEVICE" = 1 ] || [ "$INSTALL" = 1 ]; then
   ON_TABLET=""
   if [ -x "$APKSIGNER" ]; then ON_TABLET=$(installed_cert) || exit 1; fi
   RELEASE_CERT=$(sed -n 's/^storePassword=//p' keystore.properties | {
-    read -r sp; "$KEYTOOL" -list -v -keystore "$STORE" -alias "$(sed -n 's/^keyAlias=//p' keystore.properties)" -storepass "$sp" 2>/dev/null; } \
+    read -r INKNOTES_STORE_PASS; export INKNOTES_STORE_PASS
+    "$KEYTOOL" -list -v -keystore "$STORE" -alias "$(sed -n 's/^keyAlias=//p' keystore.properties)" -storepass:env INKNOTES_STORE_PASS 2>/dev/null; } \
     | sed -n 's/^[[:space:]]*SHA256: //p' | head -1 | hexsha)
   if [ -z "$ON_TABLET" ]; then
     ok "InkNotes на планшете нет — ставим как есть"

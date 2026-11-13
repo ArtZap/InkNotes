@@ -295,6 +295,12 @@ class NotebookRepository(filesDir: File) {
     /** Pages that could not be read for a reason other than damage (too little memory, newer app). */
     private val unreadable = java.util.Collections.synchronizedSet(HashSet<String>())
 
+    /** Notebooks with a page saved in this run: an undo there may bring a picture back. */
+    private val savedThisRun = java.util.Collections.synchronizedSet(HashSet<String>())
+
+    /** When this run began: lock screen notes older than this were left by an earlier one. */
+    private val startedAt = System.currentTimeMillis()
+
     init {
         // Leftovers of imports and exports cut short by the app being closed. On the thread
         // that makes them, first, so it never meets one of this run's.
@@ -307,7 +313,10 @@ class NotebookRepository(filesDir: File) {
         background {
             SafeFiles.recoverAside(root)
             runCatching { recoverRecordings() }.onFailure { Log.w(TAG, "recording recovery failed", it) }
-            runCatching { sweepOrphans() }.onFailure { Log.w(TAG, "orphan sweep failed", it) }
+            // One notebook at a time, each queued after what was asked meanwhile: opening the
+            // library or a notebook does not wait for every page of every notebook to be read.
+            val dirs = root.listFiles().orEmpty().filter { !it.name.startsWith(".") && it.isDirectory }
+            sweepNext(dirs, 0)
         }
     }
 
@@ -391,8 +400,6 @@ class NotebookRepository(filesDir: File) {
             .filter { d -> File(d, LOCK_NOTE).let { it.exists() && (!leftOnly || it.lastModified() < startedAt) } }
             .mapNotNull { runCatching { readMeta(it) }.getOrNull() }
     }
-
-    private val startedAt = System.currentTimeMillis()
 
     /**
      * Moves the pages written in lock screen note [note] (empty ones are dropped), with their
@@ -1161,23 +1168,27 @@ class NotebookRepository(filesDir: File) {
         return Orphans.referenced(all, pages)
     }
 
+    private fun sweepNext(dirs: List<File>, i: Int) {
+        if (i >= dirs.size) return
+        runCatching { sweepOrphans(dirs[i]) }.onFailure { Log.w(TAG, "orphan sweep failed", it) }
+        background { sweepNext(dirs, i + 1) }
+    }
+
     /**
-     * Pictures and PDFs no page uses any more (left by deleted pages) are removed from disk.
-     * Run at start, before any notebook is open (no undo can bring a page back then), and
-     * only for files older than a day.
+     * Pictures and PDFs no page of the notebook in [dir] uses any more (left by deleted pages)
+     * are removed from disk, only files older than a day. Started when the app starts; a
+     * notebook changed since then is left alone (an undo there may still bring a page back).
      */
-    private fun sweepOrphans() {
+    private fun sweepOrphans(dir: File) {
         val old = System.currentTimeMillis() - 24L * 3600 * 1000
-        for (dir in root.listFiles().orEmpty()) {
-            if (dir.name.startsWith(".") || !dir.isDirectory || File(dir, RECOVERED).exists()) continue
-            val nb = runCatching { readMeta(dir) }.getOrNull() ?: continue
-            val used = runCatching { usedPictures(nb, dir) }.getOrNull() ?: continue
-            val pdfs = nb.pdfPages.values.map { it.file }.toSet()
-            for (f in dir.listFiles().orEmpty()) {
-                if (f.lastModified() > old) continue
-                val orphan = (PageImage.NAME.matches(f.name) && f.name !in used) || (PDF_NAME.matches(f.name) && f.name !in pdfs && f.name != nb.light.photo && f.name != nb.dark.photo)
-                if (orphan) f.delete()
-            }
+        if (!dir.isDirectory || File(dir, RECOVERED).exists() || dir.name in savedThisRun) return
+        val nb = runCatching { readMeta(dir) }.getOrNull() ?: return
+        val used = runCatching { usedPictures(nb, dir) }.getOrNull() ?: return
+        val pdfs = nb.pdfPages.values.map { it.file }.toSet()
+        for (f in dir.listFiles().orEmpty()) {
+            if (f.lastModified() > old) continue
+            val orphan = (PageImage.NAME.matches(f.name) && f.name !in used) || (PDF_NAME.matches(f.name) && f.name !in pdfs && f.name != nb.light.photo && f.name != nb.dark.photo)
+            if (orphan) f.delete()
         }
     }
 
@@ -1657,6 +1668,7 @@ class NotebookRepository(filesDir: File) {
      * nothing is written then, and it gets what is too much, in words for the user.
      */
     fun savePageAsync(nb: Notebook, pageId: String, content: PageContent, onTooComplex: ((String) -> Unit)? = null) {
+        savedThisRun += nb.id
         val file = pageFile(nb.id, pageId)
         background {
             // A page shown empty because it could not be read is never written over.

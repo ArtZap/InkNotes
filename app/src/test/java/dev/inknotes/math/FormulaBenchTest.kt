@@ -12,7 +12,10 @@ import java.io.File
 class FormulaBenchTest {
     @Test
     fun noRegressionOnCrohme() {
-        val root = System.getenv("CROHME_DIR")?.let(::File)?.takeIf { it.isDirectory } ?: return
+        val root = System.getenv("CROHME_DIR")?.let(::File)?.takeIf { it.isDirectory }
+        // Without the data the test is reported as skipped, not as passed.
+        org.junit.Assume.assumeTrue("CROHME_DIR is not set: the formula bench is skipped (tools/formula-bench.sh)", root != null)
+        checkNotNull(root)
         val numbers = Printer.numbers
         Printer.numbers = Printer.Numbers.DECIMAL
         try {

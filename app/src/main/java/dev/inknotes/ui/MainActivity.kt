@@ -205,7 +205,7 @@ class MainActivity : ComponentActivity() {
             Intent.ACTION_SEND_MULTIPLE -> IntentCompat.getParcelableArrayListExtra(intent, Intent.EXTRA_STREAM, Uri::class.java).orEmpty()
             else -> emptyList()
         }
-        if (uris.isNotEmpty()) importNotebookFiles(uris, null)
+        if (uris.isNotEmpty()) importFiles(uris, null, outside = true)
     }
 
     private fun openNotebook(nb: dev.inknotes.data.Notebook, hit: SearchHit? = null) {
@@ -307,22 +307,23 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /** `.inknote` and `.inknotes` files, added under library folder [into]. */
-    private fun importNotebookFiles(uris: List<Uri>, into: String?) {
-        editor?.let {
-            it.flush()
-            editor = null
-        }
-        // An import may replace an open notebook: every tab is closed (they are saved first),
-        // and the notebook beside them too.
-        closeSide()
-        for (t in tabs) t.close()
-        tabs = emptyList()
+    /** `.inknote` and `.inknotes` files picked in the library, added under library folder [into]. */
+    private fun importNotebookFiles(uris: List<Uri>, into: String?) = importFiles(uris, into, outside = false)
+
+    /**
+     * Reads [uris] first; nothing open is touched before that, so a file that is not a
+     * notebook changes nothing. [outside]: sent by another app ("Открыть с помощью",
+     * "Поделиться"): asked before anything is added, as the app is offered for any binary file.
+     */
+    private fun importFiles(uris: List<Uri>, into: String?, outside: Boolean) {
         libraryMessage = "Открываю " + if (uris.size == 1) "файл…" else "файлы (${uris.size})…"
         repo.readImportsAsync(uris.map { uri -> { contentResolver.openInputStream(uri) } }) { set ->
             when {
-                set.items.isEmpty() -> libraryMessage = set.failures.firstOrNull() ?: "Не удалось открыть файл"
-                set.conflicts > 0 -> {
+                set.items.isEmpty() -> (set.failures.firstOrNull() ?: "Не удалось открыть файл").let { m ->
+                    libraryMessage = m
+                    editor?.showStatus(m)
+                }
+                set.conflicts > 0 || outside -> {
                     // A second import while the first one's question is open: the first one's
                     // unpacked files go, it is replaced by the new one.
                     pendingImport?.let { (old, _) -> repo.discardImports(old) }
@@ -336,6 +337,13 @@ class MainActivity : ComponentActivity() {
     private fun commit(set: NotebookRepository.ImportSet, into: String?, replace: Boolean) {
         pendingImport?.let { (old, _) -> if (old !== set) repo.discardImports(old) }
         pendingImport = null
+        // Notebooks replaced by the import must not stay open: the tabs would write over them.
+        // They are saved and closed (with the notebook beside them); new ones and copies touch nothing open.
+        val replaced = if (replace) set.items.mapNotNull { it.ready.existing?.id }.toSet() else emptySet()
+        if (replaced.isNotEmpty()) {
+            side?.takeIf { it.notebook.id in replaced }?.let { closeSide() }
+            for (t in tabs.filter { it.notebook.id in replaced }) closeTab(t)
+        }
         repo.commitImportsAsync(set, replace, into) { added ->
             handwriting.indexAll()
             libraryVersion++
@@ -352,6 +360,23 @@ class MainActivity : ComponentActivity() {
     @androidx.compose.runtime.Composable
     private fun ImportConflictDialog(set: NotebookRepository.ImportSet, into: String?) {
         val single = set.items.singleOrNull()?.ready
+        if (set.conflicts == 0) {
+            // From another app, nothing to replace: only "add or not".
+            AlertDialog(
+                onDismissRequest = {},
+                title = { Text(if (single != null) "Добавить тетрадь «${single.notebook.title}»?" else "Добавить тетради: ${set.items.size}?") },
+                text = { Text("Файл открыт из другого приложения. Тетради добавятся в библиотеку, ваши не изменятся.") },
+                confirmButton = { Button(onClick = { commit(set, into, replace = false) }) { Text("Добавить") } },
+                dismissButton = {
+                    TextButton(onClick = {
+                        pendingImport = null
+                        libraryMessage = null
+                        repo.discardImports(set)
+                    }) { Text("Отмена") }
+                },
+            )
+            return
+        }
         AlertDialog(
             onDismissRequest = {},
             title = {

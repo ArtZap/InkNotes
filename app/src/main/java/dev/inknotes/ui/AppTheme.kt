@@ -172,8 +172,13 @@ class AppPrefs(context: Context) {
     // ---- Google Drive (0.37)
     /** The lasting key of the Drive sign-in (only in the app's private storage). */
     var driveRefreshToken: String?
-        get() = prefs.getString("driveRefresh", null)
-        set(value) = prefs.edit().putString("driveRefresh", value).apply()
+        get() = prefs.getString("driveRefresh", null)?.let { stored ->
+            dev.inknotes.data.Secrets.open(stored).also { plain ->
+                // Kept in plain text by an older version: encrypted from now on.
+                if (plain != null && plain == stored) prefs.edit().putString("driveRefresh", dev.inknotes.data.Secrets.seal(plain)).apply()
+            }
+        }
+        set(value) = prefs.edit().putString("driveRefresh", value?.let(dev.inknotes.data.Secrets::seal)).apply()
     var driveEmail: String?
         get() = prefs.getString("driveEmail", null)
         set(value) = prefs.edit().putString("driveEmail", value).apply()
@@ -196,6 +201,11 @@ class AppPrefs(context: Context) {
     var quickNoteId: String?
         get() = prefs.getString("quickNoteId", null)
         set(value) = prefs.edit().putString("quickNoteId", value).apply()
+
+    /** When an automatic copy in the backup folder was last read back whole (see Backup). */
+    var backupReadBackAt: Long
+        get() = prefs.getLong("backupReadBackAt", 0L)
+        set(value) = prefs.edit().putLong("backupReadBackAt", value).apply()
 
     /** The notification permission was asked for once (with the first recording). */
     var askedNotifications: Boolean

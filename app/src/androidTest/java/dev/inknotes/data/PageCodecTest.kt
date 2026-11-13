@@ -210,4 +210,65 @@ class PageCodecTest {
         file.outputStream().use { PageCodec.write(it, PageContent(emptyList(), emptyList(), listOf(PageImage("../../evil.png", 0f, 0f, 10f, 10f)))) }
         assertTrue(runCatching { PageCodec.read(file) }.exceptionOrNull() is IOException)
     }
+
+    /**
+     * What is written reads back with the strict limits (those of shared files): numbers out of
+     * range are brought into range, too many elements are refused before anything is written.
+     */
+    @Test
+    fun writingKeepsToTheLimitsOfReading() {
+        val file = File(dir, "limits.ink")
+        val far = PageImage("img-00000000-0000-0000-0000-000000000000.png", 5e7f, Float.NaN, 0.5f, 200f)
+        val flat = PageFill(floatArrayOf(0f, 0f, 1f), FillPattern.SOLID, Color.RED)
+        val wild = PageFill(floatArrayOf(0f, 0f, 1e9f, 0f, Float.POSITIVE_INFINITY, 100f), FillPattern.SOLID, Color.RED, layer = 1)
+        file.outputStream().use { PageCodec.write(it, PageContent(emptyList(), listOf(flat, wild), listOf(far))) }
+        val read = PageCodec.read(file)
+        // The fill with fewer than three points is invisible and left out; the other keeps its layer.
+        assertEquals(1, read.fills.size)
+        assertEquals(1, read.fills[0].layer)
+        assertTrue(read.fills[0].outline.all { it.isFinite() && it <= 1_000_000f })
+        assertTrue(read.images.single().w >= 1f)
+
+        val tooMany = PageContent(emptyList(), List(2001) { PageFill(square, FillPattern.SOLID, Color.RED) })
+        assertTrue(PageCodec.tooComplex(tooMany) != null)
+        val before = file.readBytes()
+        try {
+            file.outputStream().use { PageCodec.write(it, tooMany) }
+            throw AssertionError("a page over the limits was written")
+        } catch (e: PageTooComplexException) {
+            // Refused before the first byte: what the stream got is empty.
+        }
+        assertEquals(0L, file.length())
+        file.writeBytes(before)
+        assertEquals(1, PageCodec.read(file).fills.size)
+    }
+
+    /** A page over the strict limits, written by an older version, opens on this device. */
+    @Test
+    fun ownOldPagesOverTheLimitsStillOpen() {
+        val bytes = java.io.ByteArrayOutputStream()
+        DataOutputStream(bytes).use { d ->
+            d.writeInt(0x494E4B50)
+            d.writeInt(7)
+            d.writeInt(0) // strokes
+            d.writeInt(2500) // fills: over the strict 2000
+            repeat(2500) {
+                d.writeByte(FillPattern.SOLID.ordinal)
+                d.writeInt(Color.RED)
+                repeat(5) { d.writeFloat(1f) }
+                d.writeByte(0)
+                d.writeInt(square.size)
+                square.forEach(d::writeFloat)
+                d.writeInt(0)
+            }
+            d.writeInt(0) // pictures
+        }
+        try {
+            PageCodec.decode(bytes.toByteArray())
+            throw AssertionError("strict limits let it through")
+        } catch (e: IOException) {
+            // As for a shared file.
+        }
+        assertEquals(2500, PageCodec.decode(bytes.toByteArray(), PageCodec.Limits.OWN).fills.size)
+    }
 }

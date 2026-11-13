@@ -77,6 +77,7 @@ class Backup(private val context: Context, private val repo: NotebookRepository,
         val name = "InkNotes ${SimpleDateFormat("yyyy-MM-dd HH-mm", Locale.ROOT).format(Date(now))}.inknotes"
         var created: Uri? = null
         var renames = false
+        val written = java.util.concurrent.atomic.AtomicLong(-1)
         val open = {
             val parent = DocumentsContract.buildDocumentUriUsingTree(tree, DocumentsContract.getTreeDocumentId(tree))
             val partial = DocumentsContract.createDocument(resolver, parent, MIME, name + BackupFiles.PARTIAL)
@@ -86,7 +87,7 @@ class Backup(private val context: Context, private val repo: NotebookRepository,
                 runCatching { DocumentsContract.deleteDocument(resolver, partial) }
                 DocumentsContract.createDocument(resolver, parent, MIME, name)
             }
-            created?.let { resolver.openOutputStream(it, "wt") }
+            created?.let { resolver.openOutputStream(it, "wt") }?.let { Counting(it, written) }
         }
         // Whether anything changed is read off the main thread too; then the copy on its own.
         Thread {
@@ -99,7 +100,7 @@ class Backup(private val context: Context, private val repo: NotebookRepository,
                 Thread {
                     val doc = created
                     var final: Uri? = null
-                    if (ok && doc != null && readsBackWhole(doc)) {
+                    if (ok && doc != null && isWhole(doc, written.get())) {
                         final = if (renames) runCatching { DocumentsContract.renameDocument(resolver, doc, name) }.getOrNull() else doc
                     }
                     if (final == null) {
@@ -130,6 +131,47 @@ class Backup(private val context: Context, private val repo: NotebookRepository,
             c.moveToFirst() && c.getInt(0) and DocumentsContract.Document.FLAG_SUPPORTS_RENAME != 0
         } ?: false
     }.getOrDefault(false)
+
+    /**
+     * The copy just written is all there. On this device's storage it is read back whole (cheap).
+     * From a cloud provider reading back means downloading it again every day: there the size
+     * the provider reports is compared with what was written, and the whole copy is read back
+     * once a week (or whenever the provider does not tell the size).
+     */
+    private fun isWhole(doc: Uri, written: Long): Boolean {
+        val local = doc.authority == LOCAL_STORAGE
+        val weekly = System.currentTimeMillis() - prefs.backupReadBackAt > READ_BACK_EVERY_MS
+        if (!local && !weekly && written > 0) {
+            sizeOf(doc)?.let { return it == written }
+        }
+        return readsBackWhole(doc).also { if (it) prefs.backupReadBackAt = System.currentTimeMillis() }
+    }
+
+    private fun sizeOf(doc: Uri): Long? = runCatching {
+        context.contentResolver.query(doc, arrayOf(DocumentsContract.Document.COLUMN_SIZE), null, null, null)?.use { c ->
+            if (c.moveToFirst() && !c.isNull(0)) c.getLong(0).takeIf { it > 0 } else null
+        }
+    }.getOrNull()
+
+    /** Counts what goes through to the copy; [total] is set when it is closed. */
+    private class Counting(out: java.io.OutputStream, private val total: java.util.concurrent.atomic.AtomicLong) : java.io.FilterOutputStream(out) {
+        private var n = 0L
+
+        override fun write(b: Int) {
+            out.write(b)
+            n++
+        }
+
+        override fun write(b: ByteArray, off: Int, len: Int) {
+            out.write(b, off, len)
+            n += len
+        }
+
+        override fun close() {
+            super.close()
+            total.set(n)
+        }
+    }
 
     private fun readsBackWhole(doc: Uri): Boolean = runCatching {
         context.contentResolver.openInputStream(doc)?.use(BackupFiles::isWhole) ?: false
@@ -173,5 +215,7 @@ class Backup(private val context: Context, private val repo: NotebookRepository,
         private const val MIME = "application/octet-stream"
         const val KEEP = 7
         private const val INTERVAL_MS = 24L * 3600 * 1000
+        private const val READ_BACK_EVERY_MS = 7 * INTERVAL_MS
+        private const val LOCAL_STORAGE = "com.android.externalstorage.documents"
     }
 }
