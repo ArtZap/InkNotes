@@ -209,6 +209,8 @@ class DriveSyncTest {
         val drive = FakeDrive()
         val a = Device("recovered-new", drive)
         val nb = a.repo.create("Своя", PaperKind.LINED)
+        // Written in the background: waited for, then damaged.
+        a.repo.list()
         File(a.root, "notebooks/${nb.id}/notebook.json").writeText("{damaged")
         repeat(3) { a.run() }
         assertEquals(listOf("Восстановленная тетрадь"), a.titles())
