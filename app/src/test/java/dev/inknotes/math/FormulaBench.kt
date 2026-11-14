@@ -3,7 +3,6 @@ package dev.inknotes.math
 import java.io.File
 import kotlin.math.abs
 import kotlin.math.max
-import kotlin.random.Random
 
 /**
  * Formula recognition bench on handwritten datasets (CROHME InkML, see tools/fetch_crohme.sh).
@@ -64,52 +63,46 @@ object FormulaBench {
         return e.takeIf { values(it, 0) != null }
     }
 
-    private val rnd = Random(7)
-    private val trials = List(3) { List(26) { 1.1 + rnd.nextDouble() * 1.8 } }
+    fun values(e: Expr, t: Int): String? = FormulaValues.values(e, t)
 
-    /** The value of [e] with letters a…z set as in trial [t]; null when it cannot be computed. */
-    fun values(e: Expr, t: Int): String? {
-        val env = Env()
-        for (v in Algebra.freeVars(e)) {
-            if (v in Algebra.CONSTANTS) continue
-            val k = (v.lowercase().firstOrNull() ?: 'a') - 'a'
-            // Letters that look the same in both cases are read in either (X and x): one value.
-            val x = trials[t][k.coerceIn(0, 25)] + v.length * 0.01 + (if (v[0].isUpperCase() && v[0] !in "CKOPSUVWXYZ") 0.37 else 0.0)
-            Calc.define(Expr.Sym(v), Expr.Num(x), env)
-        }
-        val a = runCatching { Calc.evaluate(e, env) }.getOrNull() ?: return null
-        return when (a) {
-            is Answer.Text -> a.lines.joinToString(";")
-            is Answer.Grid -> a.rows.toString()
-            is Answer.Graph, is Answer.Surface -> null
-        }
-    }
+    fun same(a: Expr, b: Expr): Boolean = FormulaValues.same(a, b)
 
-    fun same(a: Expr, b: Expr): Boolean = (0 until trials.size).all { t ->
-        val x = values(a, t) ?: return false
-        val y = values(b, t) ?: return false
-        close(x, y)
-    }
-
-    private fun num(s: String): Double? = s.replace(Printer.MINUS, "-").replace(',', '.').toDoubleOrNull()
-
-    private fun close(x: String, y: String): Boolean {
-        if (x == y) return true
-        val a = num(x) ?: return false
-        val b = num(y) ?: return false
-        return abs(a - b) <= 1e-5 * max(1.0, max(abs(a), abs(b)))
-    }
+    private fun close(x: String, y: String): Boolean = FormulaValues.close(x, y)
 
     /**
      * Line height and middle as the app takes them for a lasso selection
      * ([MathPage.formulaSource]): the height three quarters up the stroke heights, the middle of
      * the strokes about that tall. A median over all symbols would be the index's height in T₈₅₀.
      */
-    private fun axis(s: InkSample): Pair<Float, Float> {
+    fun axis(s: InkSample): Pair<Float, Float> {
         val heights = s.strokes.filter { !it.isDash }.map { it.height }.sorted()
         val h = max(heights.getOrNull(heights.size * 3 / 4) ?: s.strokes.maxOf { it.height }, 8f)
         val mids = s.strokes.filter { it.height in 0.4f * h..1.6f * h }.map { it.cy }
         return h to (MathLayout.median(mids) ?: Box.of(s.strokes).cy)
+    }
+
+    /**
+     * One formula for the device run (FormulaReadTest): set, id, kind, line height and middle,
+     * the value of the formula, the value a "=" after it must give ("" when the page level does
+     * not apply, as in [page]), the middle the "=" is drawn at, and the strokes ("x y,x y;…" in
+     * stroke order).
+     */
+    fun exportLine(set: String, s: InkSample, expected: Expr): String? {
+        val fp = FormulaValues.fingerprint(expected) ?: return null
+        val (h, ax) = axis(s)
+        val pageWant = if (Algebra.freeVars(expected).any { it !in Algebra.CONSTANTS } || expected is Expr.Num ||
+            (expected is Expr.Mul && expected.factors.all { it is Expr.Num })
+        ) {
+            ""
+        } else {
+            values(expected, 0).orEmpty()
+        }
+        val strokes = s.strokes.sortedBy { it.order }.joinToString(";") { k -> k.xs.indices.joinToString(",") { "%.1f %.1f".format(java.util.Locale.ROOT, k.xs[it], k.ys[it]) } }
+        val pageAx = if ("\\frac" in s.truth) Box.of(s.strokes).cy else ax
+        return listOf(
+            set, s.id, kind(s.truth), "%.2f".format(java.util.Locale.ROOT, h), "%.2f".format(java.util.Locale.ROOT, ax), fp, pageWant,
+            "%.2f".format(java.util.Locale.ROOT, pageAx), strokes,
+        ).joinToString("\t")
     }
 
     /** The answer read at once, without the checks: as printed, and whether right (null: none). */

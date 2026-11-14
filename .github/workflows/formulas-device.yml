@@ -1,22 +1,26 @@
-name: Formula level 0
+name: Formulas on a device
 
-# How ML Kit reads single handwritten symbols (CROHME, research data: on the test device only).
-# By hand, and whenever the test or the extraction changes; measures, never blocks.
+# The formula bench with the real handwriting reader (ML Kit) on an emulator: single symbols
+# (level 0, SymbolReadTest) and whole formulas (FormulaReadTest). CROHME is research data: it
+# goes to the test device only. By hand, and whenever these tests change; measures, never blocks.
 on:
   workflow_dispatch:
   push:
     branches: ["claude/**"]
     paths:
       - app/src/androidTest/java/dev/inknotes/math/SymbolReadTest.kt
+      - app/src/androidTest/java/dev/inknotes/math/FormulaReadTest.kt
+      - app/src/test/java/dev/inknotes/math/FormulaExportTest.kt
+      - app/src/sharedTest/**
       - tools/crohme_symbols.py
-      - .github/workflows/level0.yml
+      - .github/workflows/formulas-device.yml
 
 concurrency:
-  group: level0-${{ github.ref }}
+  group: formulas-device-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  level0:
+  device:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -34,6 +38,11 @@ jobs:
         run: |
           tools/formula-bench.sh --fetch
           python3 tools/crohme_symbols.py build/crohme/CROHME_full_v2 symbols.tsv 4000
+      - name: Formulas
+        env:
+          CROHME_DIR: ${{ github.workspace }}/build/crohme/CROHME_full_v2
+          FORMULA_EXPORT: ${{ github.workspace }}/formulas.tsv
+        run: ./gradlew --no-daemon :app:testDebugUnitTest --tests 'dev.inknotes.math.FormulaExportTest' --rerun
       - name: Build
         run: ./gradlew --no-daemon :app:assembleDebug :app:assembleDebugAndroidTest
       - name: Enable KVM
@@ -41,7 +50,7 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Read symbols on an emulator
+      - name: Read symbols and formulas on an emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
@@ -54,11 +63,15 @@ jobs:
             adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
             adb shell mkdir -p /sdcard/Android/data/dev.inknotes/files/level0
             adb push symbols.tsv /sdcard/Android/data/dev.inknotes/files/level0/symbols.tsv
+            adb shell mkdir -p /sdcard/Android/data/dev.inknotes/files/level1
+            adb push formulas.tsv /sdcard/Android/data/dev.inknotes/files/level1/formulas.tsv
             adb shell am instrument -w -e class dev.inknotes.math.SymbolReadTest dev.inknotes.test/androidx.test.runner.AndroidJUnitRunner || true
+            adb shell am instrument -w -e class dev.inknotes.math.FormulaReadTest dev.inknotes.test/androidx.test.runner.AndroidJUnitRunner || true
             adb pull /sdcard/Android/data/dev.inknotes/files/level0/report.txt level0-report.txt || true
-            cat level0-report.txt || adb logcat -d | grep -i "SymbolReadTest\|mlkit\|digitalink" | tail -60
+            adb pull /sdcard/Android/data/dev.inknotes/files/level1/report.txt level1-report.txt || true
+            cat level0-report.txt level1-report.txt || adb logcat -d | grep -i "SymbolReadTest\|FormulaReadTest\|mlkit\|digitalink" | tail -60
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: level0-report
-          path: level0-report.txt
+          name: formulas-device-report
+          path: level*-report.txt

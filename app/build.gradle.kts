@@ -19,6 +19,12 @@ android {
     namespace = "dev.inknotes"
     compileSdk = 37
 
+    // Test helpers used both on the JVM and on a device (the formula bench and its device run).
+    sourceSets {
+        getByName("test").java.srcDir("src/sharedTest/java")
+        getByName("androidTest").java.srcDir("src/sharedTest/java")
+    }
+
     defaultConfig {
         applicationId = "dev.inknotes"
         minSdk = 29
