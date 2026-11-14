@@ -21,8 +21,9 @@ android {
 
     // Test helpers used both on the JVM and on a device (the formula bench and its device run).
     sourceSets {
-        getByName("test").java.srcDir("src/sharedTest/java")
-        getByName("androidTest").java.srcDir("src/sharedTest/java")
+        // Kotlin sources: with the built-in Kotlin support they are compiled from the kotlin set.
+        getByName("test").kotlin.srcDir("src/sharedTest/java")
+        getByName("androidTest").kotlin.srcDir("src/sharedTest/java")
     }
 
     defaultConfig {
