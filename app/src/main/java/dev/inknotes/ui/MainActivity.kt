@@ -128,7 +128,7 @@ class MainActivity : ComponentActivity() {
                 if (current == null) {
                     saved.SaveableStateProvider("library") { androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.appear()) { LibraryScreen(
                         repo = repo,
-                        backup = AppServices.get(this).backup,
+                        backup = AppServices.get(this@MainActivity).backup,
                         handwriting = handwriting,
                         onOpenHit = { openNotebook(it.notebook, it) },
                         themeMode = themeMode,
@@ -139,7 +139,7 @@ class MainActivity : ComponentActivity() {
                         onOpen = { openNotebook(it) },
                         onOpenFiles = ::importNotebookFiles,
                         // The probe is in debug builds only (src/debug): started by name.
-                        onProbe = { runCatching { startActivity(Intent().setClassName(this, "dev.inknotes.probe.ProbeActivity")) } },
+                        onProbe = { runCatching { startActivity(Intent().setClassName(this@MainActivity, "dev.inknotes.probe.ProbeActivity")) } },
                         version = libraryVersion,
                     ) } }
                 } else {
