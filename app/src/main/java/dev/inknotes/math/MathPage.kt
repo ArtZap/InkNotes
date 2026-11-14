@@ -81,7 +81,8 @@ object MathPage {
         }.take(MAX_EQUALS)
         // First the definitions (a = 5, f(x) = …): they hold for the whole page. A line uses
         // the nearest definition above it, or else the first one below (a = 2 written later).
-        class Def(val index: Int, val left: Expr, val right: Expr)
+        /** An equation read off the page; [again] reads it anew with moved thresholds (null: same layout). */
+        class Def(val index: Int, val left: Expr, val right: Expr, val again: ((MathLayout.Shift) -> Pair<Expr, Expr>?)? = null)
         val defs = ArrayList<Def>()
         // Equations outside a "{" (x³ = 6x² − 12x + 11): solved when one unknown is left.
         val single = ArrayList<Def>()
@@ -112,7 +113,14 @@ object MathPage {
                 // z = x² + y²: about letters, not the reading with fewest of them.
                 ?: (if (surface) read(right, eq.h, eq.cy, reader, Prefer.FIRST) else null)
                 ?: read(right, eq.h, eq.cy, reader, Prefer.NUMBERS) ?: continue
-            if (Calc.isDefinition(l)) defs += Def(i, l, r) else single += Def(i, l, r)
+            // The same reading, the thresholds moved: for "unsure" (an equation is solved only
+            // when read the same; a side laid out the same is taken as it was).
+            val again = { shift: MathLayout.Shift ->
+                val l2 = read(left, eq.h, eq.cy, reader, Prefer.FIRST, shift = shift)
+                val r2 = read(right, eq.h, eq.cy, reader, if (surface) Prefer.FIRST else Prefer.NUMBERS, shift = shift)
+                if (l2 == null && r2 == null) null else (l2 ?: l) to (r2 ?: r)
+            }
+            if (Calc.isDefinition(l)) defs += Def(i, l, r) else single += Def(i, l, r, again)
         }
         val definedNames = defs.mapNotNull { Calc.definedName(it.left) }.toSet()
         fun envAt(index: Int): Env {
@@ -225,7 +233,10 @@ object MathPage {
             // nothing worth showing; errors are kept for a "{" only.
             val answer = runCatching { Calc.solve(listOf(d.left to d.right), envAt(d.index)) }.getOrNull() ?: continue
             if ((answer as? Answer.Text)?.lines == listOf(tr("∞ решений", "∞ solutions"))) continue
-            out += PageAnswer(at, eq.cy, eq.h, answer, steps = Steps.of(listOf(d.left to d.right), envAt(d.index)))
+            val others = d.again?.let { again ->
+                otherAnswers(answer) { shift -> again(shift)?.let { (l2, r2) -> Calc.solve(listOf(l2 to r2), envAt(d.index)) } }
+            }.orEmpty()
+            out += PageAnswer(at, eq.cy, eq.h, answer, steps = Steps.of(listOf(d.left to d.right), envAt(d.index)), others = others)
         }
         val done = HashSet<Ink>()
         for ((i, eq) in ordered.withIndex()) {

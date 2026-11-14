@@ -1,6 +1,7 @@
 package dev.inknotes.math
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -522,5 +523,22 @@ class MathPageTest {
     fun rootOfDegreeParses() {
         assertEquals("2", (Calc.evaluate(Parser.parse("\\sqrt[3]{8}"), Env()) as Answer.Text).lines.single())
         assertEquals(Printer.MINUS + "2", (Calc.evaluate(Parser.parse("\\sqrt[3]{-8}"), Env()) as Answer.Text).lines.single())
+    }
+
+    @Test
+    fun equationOnTheEdgeOfAnExponentIsUnsure() {
+        // x2 = 4 with the 2 moved up step by step: low it is x·2 = 4 (x = 2), high x² = 4
+        // (x = ±2); in between, where the layout is in doubt, the answer is unsure.
+        fun answerAt(top: Float): PageAnswer {
+            val s = Sheet()
+            s.glyph("x", 100f, 100f)
+            s.add("2", listOf(117f, 124.2f, 117f, 124.2f), listOf(top, top + 4f, top + 8f, top + 12f))
+            s.equals(140f, 112f)
+            s.glyph("4", 164f, 100f)
+            return s.answers().single()
+        }
+        val answers = (0..40).map { answerAt(112f - it * 0.5f) }
+        assertTrue(answers.joinToString { text(it) + if (it.unsure) "?" else "" }, answers.any { it.unsure && it.others.isNotEmpty() })
+        assertTrue("low: plain", !answers.first().unsure)
     }
 }
