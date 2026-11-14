@@ -29,6 +29,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.Switch
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -323,6 +324,8 @@ fun SettingsDialog(
                         FilterChip(selected = m == themeMode, onClick = { onTheme(m) }, label = { Text(m.title) })
                     }
                 }
+                Spacer(Modifier.height(4.dp))
+                LanguageChoice()
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                     Button(onClick = onDismiss) { Text("Готово") }
                 }
@@ -405,4 +408,30 @@ private fun StylePreview(style: UiStyle, dark: Boolean, modifier: Modifier) {
             }
         }
     }
+}
+
+/**
+ * The interface language: as the system's, Russian or English. Shown in both languages, so it
+ * can be found whatever the app is in now. A change restarts the app in the new language.
+ */
+@Composable
+private fun LanguageChoice() {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val activity = context as? android.app.Activity
+    val chosen = remember { Language.chosen(context) }
+    Text("Язык · Language", style = MaterialTheme.typography.titleMedium)
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        for ((tag, label) in listOf(Language.SYSTEM to dev.inknotes.data.tr("Как в системе", "System"), Language.RU to "Русский", Language.EN to "English")) {
+            FilterChip(
+                selected = tag == chosen,
+                onClick = { if (activity != null && tag != chosen) Language.set(activity, tag) },
+                label = { Text(label) },
+            )
+        }
+    }
+    Text(
+        dev.inknotes.data.tr("Приложение перезапустится в выбранном языке.", "The app restarts in the chosen language."),
+        fontSize = 12.sp,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }

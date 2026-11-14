@@ -73,6 +73,11 @@ object QuickNotes {
  * (back closes it); everything opens after unlocking, in the app.
  */
 class QuickNoteActivity : ComponentActivity() {
+    // Before Android 13 the chosen interface language is put on the screen here.
+    override fun attachBaseContext(newBase: android.content.Context) {
+        super.attachBaseContext(Language.wrap(newBase))
+    }
+
     private var controller by mutableStateOf<EditorController?>(null)
     private lateinit var penButton: PenButtonBinding
 
@@ -81,6 +86,9 @@ class QuickNoteActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // The language was changed in the system settings of the app while it ran: start anew in it.
+        AppServices.get(this)
+        if (Language.restartIfChanged(this)) return
         // Shown over the lock screen and waking it (the manifest says the same for Android 8.1+).
         setShowWhenLocked(true)
         setTurnScreenOn(true)

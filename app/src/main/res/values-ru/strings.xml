@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_quick_note">✎ Быстрая заметка</string>
+    <string name="widget_empty">Здесь появятся последние тетради</string>
+    <string name="widget_description">Быстрая заметка и последние тетради</string>
+    <string name="tile_quick_note">Заметка</string>
+</resources>

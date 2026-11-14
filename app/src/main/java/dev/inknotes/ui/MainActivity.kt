@@ -41,6 +41,11 @@ import dev.inknotes.search.HandwritingIndex
 import dev.inknotes.search.SearchHit
 
 class MainActivity : ComponentActivity() {
+    // Before Android 13 the chosen interface language is put on the screen here.
+    override fun attachBaseContext(newBase: android.content.Context) {
+        super.attachBaseContext(Language.wrap(newBase))
+    }
+
 
     private lateinit var repo: NotebookRepository
     private lateinit var penButton: PenButtonBinding
@@ -78,6 +83,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // The language was changed in the system settings of the app while it ran: start anew in it.
+        AppServices.get(this)
+        if (Language.restartIfChanged(this)) return
         // The sync asks what is open before each step (held only weakly there: no leak).
         AppServices.get(this).cloud.watchOpen(SYNC_KEY, openForSync)
         val services = AppServices.get(this)

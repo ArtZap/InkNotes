@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="widget_quick_note">✎ Быстрая заметка</string>
-    <string name="widget_empty">Здесь появятся последние тетради</string>
-    <string name="widget_description">Быстрая заметка и последние тетради</string>
-    <string name="tile_quick_note">Заметка</string>
+    <string name="widget_quick_note">✎ Quick note</string>
+    <string name="widget_empty">Your recent notebooks will appear here</string>
+    <string name="widget_description">Quick note and recent notebooks</string>
+    <string name="tile_quick_note">Note</string>
 
     <style name="WidgetRow">
         <item name="android:layout_width">match_parent</item>
