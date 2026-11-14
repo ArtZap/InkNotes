@@ -73,6 +73,11 @@ jobs:
             # The math checks on real pages, in Russian and in English: the answers must be the same.
             adb shell am instrument -w -e class dev.inknotes.math.RealPagesTest,dev.inknotes.math.MathNotesTest dev.inknotes.test/dev.inknotes.InkTestRunner | tee math-ru.txt || true
             adb shell am instrument -w -e lang en -e class dev.inknotes.math.RealPagesTest,dev.inknotes.math.MathNotesTest dev.inknotes.test/dev.inknotes.InkTestRunner | tee math-en.txt || true
+            # Which layout rule changes the real pages' answers: each switched off in turn.
+            for t in pointLow=99 subRelBelow=99,subRelTop=99 nestBottom=-9 degreeTop=9 dotGap=0.45; do
+              echo "=== tune $t"
+              adb shell am instrument -w -e tune $t -e class dev.inknotes.math.RealPagesTest dev.inknotes.test/dev.inknotes.InkTestRunner | grep -E "^OK|but was" | cut -c1-400 || true
+            done
             adb pull /sdcard/Android/data/dev.inknotes/files/level0/report.txt level0-report.txt || true
             adb pull /sdcard/Android/data/dev.inknotes/files/level1/report.txt level1-report.txt || true
             cat level0-report.txt level1-report.txt || adb logcat -d | grep -i "SymbolReadTest\|FormulaReadTest\|mlkit\|digitalink" | tail -60

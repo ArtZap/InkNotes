@@ -18,6 +18,14 @@ import java.io.File
 class RealPagesTest {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
 
+    // For tracking a change: thresholds of the layout set from the command line,
+    // -e tune pointLow=99,subRelBelow=99 (none by default).
+    init {
+        InstrumentationRegistry.getArguments().getString("tune")?.split(',')?.filter { '=' in it }?.forEach {
+            Tune.set(it.substringBefore('='), it.substringAfter('=').toFloat())
+        }
+    }
+
     private fun answers(asset: String): List<String> {
         val file = File(instrumentation.targetContext.cacheDir, asset.substringAfter('/'))
         instrumentation.context.assets.open(asset).use { input -> file.outputStream().use { input.copyTo(it) } }
