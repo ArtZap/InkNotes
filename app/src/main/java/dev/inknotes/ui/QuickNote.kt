@@ -147,6 +147,14 @@ class QuickNoteActivity : ComponentActivity() {
 
 /** A tile in the quick settings: a quick note, over the lock screen too. */
 class QuickNoteTile : TileService() {
+    // The label in the app's language (the manifest's follows the system's before Android 13).
+    override fun onStartListening() {
+        super.onStartListening()
+        val tile = qsTile ?: return
+        tile.label = tr("Заметка", "Note")
+        tile.updateTile()
+    }
+
     override fun onClick() {
         val intent = QuickNotes.intent(this)
         if (Build.VERSION.SDK_INT >= 34) {
@@ -197,6 +205,10 @@ class QuickWidget : AppWidgetProvider() {
                 .take(ROWS.size)
             val flags = PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
             val views = RemoteViews(context.packageName, R.layout.widget_quick)
+            // Set here, not only by resources: the launcher draws them in the system's language,
+            // which before Android 13 can differ from the app's.
+            views.setTextViewText(R.id.widget_quick_note, tr("✎ Быстрая заметка", "✎ Quick note"))
+            views.setTextViewText(R.id.widget_empty, tr("Здесь появятся последние тетради", "Your recent notebooks will appear here"))
             views.setOnClickPendingIntent(R.id.widget_quick_note, PendingIntent.getActivity(context, 1, QuickNotes.intent(context), flags))
             val app = Intent(context, MainActivity::class.java).setAction(Intent.ACTION_MAIN).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             views.setOnClickPendingIntent(R.id.widget_open_app, PendingIntent.getActivity(context, 2, app, flags))

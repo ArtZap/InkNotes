@@ -26,7 +26,7 @@ object AppServices {
         Services(
             repo,
             prefs,
-            HandwritingIndex(repo, { prefs.handwritingEnabled }, { prefs.handwritingEnabled = it }),
+            HandwritingIndex(repo, { prefs.handwritingEnabled }, { prefs.handwritingEnabled = it }, Language.handwritingEnglish(app)),
             MathNotes({ prefs.mathEnabled }, { prefs.mathEnabled = it }),
             Backup(app, repo, prefs),
             CoverPreviews(repo),

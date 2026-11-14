@@ -28,12 +28,13 @@ object Motion {
 /**
  * Fades in (and, with [fromX], slides in by that share of its width) when first shown: a new
  * screen or notebook does not just pop up. Only drawing changes: layout and touch are at once.
+ * [fromAlpha] above 0 for what is switched to often (tabs): a short settle, not a flash.
  */
-fun Modifier.appear(fromX: Float = 0f, durationMs: Int = Motion.NORMAL): Modifier = composed {
+fun Modifier.appear(fromX: Float = 0f, durationMs: Int = Motion.NORMAL, fromAlpha: Float = 0f): Modifier = composed {
     val p = remember { Animatable(0f) }
     LaunchedEffect(Unit) { p.animateTo(1f, tween(durationMs, easing = FastOutSlowInEasing)) }
     graphicsLayer {
-        alpha = p.value
+        alpha = fromAlpha + (1f - fromAlpha) * p.value
         translationX = (1f - p.value) * fromX * size.width
     }
 }

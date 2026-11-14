@@ -788,7 +788,8 @@ class NotebookRepository(filesDir: File) {
             deleteQuietly(old)
             return
         }
-        val title = if (nb.title.endsWith(OLD_COPY)) nb.title else "${nb.title}$OLD_COPY".take(MAX_TITLE)
+        // Made in either language: a copy of a copy gets no second mark.
+        val title = if (OLD_COPY_MARKS.any(nb.title::endsWith)) nb.title else "${nb.title}$OLD_COPY".take(MAX_TITLE)
         val copy = nb.copy(id = newId(), title = title)
         val moved = File(trashDir(), copy.id)
         if (!old.renameTo(moved)) {
@@ -1764,7 +1765,13 @@ class NotebookRepository(filesDir: File) {
      * words for the user, and whether it was saved here all the same (saved: over the shared
      * limits only; not saved: over even this device's, nothing written, the old copy stays).
      */
-    fun savePageAsync(nb: Notebook, pageId: String, content: PageContent, onTooComplex: ((problem: String, saved: Boolean) -> Unit)? = null) {
+    fun savePageAsync(
+        nb: Notebook,
+        pageId: String,
+        content: PageContent,
+        onTooComplex: ((problem: String, saved: Boolean) -> Unit)? = null,
+        onWritten: (() -> Unit)? = null,
+    ) {
         savedThisRun += nb.id
         val file = pageFile(nb.id, pageId)
         background {
@@ -1789,6 +1796,8 @@ class NotebookRepository(filesDir: File) {
             }
             unreadable -= file.path
             pruneCopies(file)
+            // Only now: what is indexed for search is what is on disk.
+            if (onWritten != null) main.post(onWritten)
         }
     }
 
@@ -1869,6 +1878,12 @@ class NotebookRepository(filesDir: File) {
     private fun deleteQuietly(file: File): Boolean = runCatching { file.deleteRecursively() }.getOrDefault(false)
 
     /** On the IO thread, waited for; run in place when already there (no deadlock). */
+    /**
+     * Waits until every write queued so far is done, at most [timeoutMs]: before the process is
+     * ended on purpose (a language change), which would otherwise drop them. False on timeout.
+     */
+    fun awaitWrites(timeoutMs: Long): Boolean = runCatching { io.submit {}.get(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS) }.isSuccess
+
     private fun <T> onIo(block: () -> T): T = if (Thread.currentThread() === ioThread) block() else io.submit<T>(block).get()
 
     /**
@@ -2104,7 +2119,10 @@ class NotebookRepository(filesDir: File) {
 
     private companion object {
         const val TRASH_DAYS = 30
-        private val OLD_COPY: String get() = tr(" (старая копия)", " (old copy)")
+        private val OLD_COPY: String get() = tr(OLD_COPY_RU, OLD_COPY_EN)
+        private const val OLD_COPY_RU = " (старая копия)" // ru-only: the Russian side of OLD_COPY
+        private const val OLD_COPY_EN = " (old copy)"
+        private val OLD_COPY_MARKS = listOf(OLD_COPY_RU, OLD_COPY_EN)
         const val TAG = "NotebookRepository"
         const val META = "notebook.json"
         private const val TOUCHED = "touched"

@@ -154,7 +154,7 @@ class MainActivity : ComponentActivity() {
                 } else {
                     val main = @androidx.compose.runtime.Composable {
                         // A fresh editor for each notebook: nothing of the last one carries over.
-                        androidx.compose.runtime.key(current) { androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.appear()) { EditorScreen(
+                        androidx.compose.runtime.key(current) { androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.appear(durationMs = Motion.FAST, fromAlpha = 0.6f)) { EditorScreen(
                             controller = current,
                             themeMode = themeMode,
                             onThemeModeChange = changeTheme,
@@ -191,8 +191,8 @@ class MainActivity : ComponentActivity() {
                             },
                             first = main,
                             second = {
-                                // Slides in a little from the right, where it opens.
-                                androidx.compose.runtime.key(other) { androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.appear(fromX = 0.06f)) { EditorScreen(
+                                // Settles in briefly, as the main half does: switched to often.
+                                androidx.compose.runtime.key(other) { androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.appear(durationMs = Motion.FAST, fromAlpha = 0.6f)) { EditorScreen(
                                     controller = other,
                                     themeMode = themeMode,
                                     onThemeModeChange = changeTheme,
@@ -785,6 +785,25 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * Before the process is ended for a language change: recordings stopped and kept, every
+     * open page written, and the writes waited for (they run on a background queue).
+     */
+    fun saveBeforeRestart() {
+        for (t in tabs + sideTabs) {
+            runCatching { t.stopRecording() }
+            t.flush()
+        }
+        rememberTabs()
+        AppServices.get(this).repo.awaitWrites(RESTART_SAVE_WAIT_MS)
+    }
+
+    // With "as the system" the app follows a system language change while it runs.
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        Language.restartIfChanged(this)
+    }
+
     override fun onPause() {
         rememberTabs()
         for (t in tabs) t.flush()
@@ -808,6 +827,9 @@ class MainActivity : ComponentActivity() {
 
     private companion object {
         const val MAX_TABS = 20
+
+        /** How long a language change waits for open pages to be written before restarting. */
+        const val RESTART_SAVE_WAIT_MS = 5_000L
 
         /**
          * Notebooks open in both halves together. A tab out of sight keeps only the page it was
