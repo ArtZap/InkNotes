@@ -94,6 +94,16 @@ object MathLayout {
         }
     }
 
+    /** The same layout: the same text around holes of the same strokes. */
+    fun same(a: List<Piece>, b: List<Piece>): Boolean = a.size == b.size && a.indices.all { i ->
+        val x = a[i]
+        val y = b[i]
+        when (x) {
+            is Piece.Text -> y is Piece.Text && x.s == y.s
+            is Piece.Hole -> y is Piece.Hole && x.strokes == y.strokes
+        }
+    }
+
     private fun layOut(strokes: List<Ink>, h: Float, axis: Float): List<Piece> {
         val out = ArrayList<Piece>()
         Builder(h, out).flow(items(strokes, h), axis)

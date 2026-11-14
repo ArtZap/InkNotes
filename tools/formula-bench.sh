@@ -5,6 +5,8 @@
 # on a regression against app/src/test/resources/formula-baseline.json.
 # Choosing layout thresholds: run dev.inknotes.math.LayoutTuner (a main in the unit tests)
 # with build/crohme/CROHME_full_v2/CROHME2013_data/TrainINKML and check sets as arguments.
+# --fetch: only download and check the data (CI does this, then runs all unit tests with
+# CROHME_DIR set).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 DATA=build/crohme/CROHME_full_v2
@@ -20,4 +22,5 @@ if [ ! -d "$DATA" ]; then
   fi
   (cd build/crohme && unzip -q full.zip && rm full.zip)
 fi
+if [ "${1:-}" = "--fetch" ]; then exit 0; fi
 CROHME_DIR="$PWD/$DATA" ./gradlew :app:testDebugUnitTest --tests 'dev.inknotes.math.FormulaBenchTest' --rerun

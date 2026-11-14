@@ -432,6 +432,11 @@ object MathPage {
             trace?.invoke("  layout failed: ${e.message}")
             return emptyList()
         }
+        // Read again with moved thresholds only to see whether the answer changes: when the
+        // layout came out the same, so would the answer, and nothing is read.
+        if (shift != MathLayout.Shift.NONE && runCatching { MathLayout.same(pieces, MathLayout.formula(strokes, h, axis)) }.getOrDefault(false)) {
+            return emptyList()
+        }
         val holes = pieces.filterIsInstance<Piece.Hole>()
         if (holes.size > MAX_HOLES) return emptyList()
         val cands = holes.map { hole ->
@@ -561,7 +566,8 @@ object MathPage {
     /**
      * Answers the formula could have with its layout read a little differently
      * ([MathLayout.Shift]): not empty when the layout is not clear-cut, and then the answer is
-     * shown as unsure, these offered beside it.
+     * shown as unsure, these offered beside it. [again] gives null when a shift changes nothing
+     * in the layout ([readings] then reads nothing): the usual case costs only the layouts.
      */
     fun otherAnswers(answer: Answer, again: (MathLayout.Shift) -> Answer?): List<String> {
         val text = (answer as? Answer.Text)?.lines ?: return emptyList()
