@@ -45,6 +45,12 @@ private class Topic(val title: String, val entries: List<Pair<String, String>>)
 
 private val TOPICS = listOf(
     Topic(
+        tr("Новое в 0.40", "What's new in 0.40"),
+        listOf(
+            tr("Язык интерфейса", "Interface language") to tr("В настройках (шестерёнка) — «Язык · Language»: как в системе, русский или английский. После выбора приложение перезапускается. «Как в системе» включает русский, если система на русском, и английский — для любого другого языка. Поиск по почерку читает страницы на языке интерфейса и после смены языка перечитывает их.", "In the settings (the gear) — “Язык · Language”: system, Russian or English. The app restarts after you choose. “System” gives Russian when the system is in Russian and English for any other language. Handwriting search reads pages in the interface language and re-reads them after the language changes."),
+        ),
+    ),
+    Topic(
         tr("Новое в 0.39", "What's new in 0.39"),
         listOf(
             tr("Две тетради рядом — больше места", "Two notebooks side by side — more room") to tr("Когда тетради открыты рядом, инструменты и их настройки помещаются в одну строку: она листается пальцем вбок или стрелками ‹ › по её краям. Кнопка со стрелкой вверх справа сверху прячет инструменты совсем: панель сворачивается в цветную кнопку со значком инструмента в руке и стрелкой вниз — касание по ней возвращает панель. Слой для нового штриха берётся из той тетради, в которой пишете.", "With notebooks side by side, the tools and their settings fit in one line: swipe it sideways or use the ‹ › arrows at its ends. The up-arrow button at the top right hides the tools altogether: the bar folds into a coloured button with the tool in hand and a down arrow — tap it to bring the bar back. A new stroke goes onto the layer of the notebook you are writing in."),
