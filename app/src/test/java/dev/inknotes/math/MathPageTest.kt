@@ -439,4 +439,88 @@ class MathPageTest {
             Parser.units = false
         }
     }
+
+    // ------------------------------------------------------------ 0.41
+
+    /** A dot of [r] around ([cx], [cy]). */
+    private fun Sheet.dot(cx: Float, cy: Float, r: Float = 1.2f) = add(".", listOf(cx - r, cx + r, cx, cx - r), listOf(cy, cy, cy + r, cy))
+
+    /** A ring (0 or a degree sign) in the box at ([x], [top]). */
+    private fun Sheet.ring(label: String, x: Float, top: Float, w: Float, h: Float) {
+        val ts = (0..24).map { it / 24f * 2 * Math.PI }
+        add(label, ts.map { (x + w / 2 + w / 2 * Math.sin(it)).toFloat() }, ts.map { (top + h / 2 - h / 2 * Math.cos(it)).toFloat() })
+    }
+
+    @Test
+    fun lowDotIsADecimalPoint() {
+        val s = Sheet()
+        s.glyph("8", 100f, 100f)
+        s.dot(119f, 121f)
+        s.glyph("5", 124f, 100f)
+        s.glyph("+", 144f, 106f, 12f, 12f)
+        s.glyph("1", 162f, 100f)
+        s.equals(184f, 112f)
+        assertTrue(text(s.answers().single()) in setOf("9,5", "9.5", "19/2"))
+    }
+
+    @Test
+    fun dotInTheMiddleIsMultiplication() {
+        val s = Sheet()
+        s.glyph("8", 100f, 100f)
+        s.dot(119f, 112f)
+        s.glyph("5", 124f, 100f)
+        s.equals(150f, 112f)
+        assertEquals("40", text(s.answers().single()))
+    }
+
+    @Test
+    fun oneAndZeroOfAnExponentAreNotAPrimeAndADegree() {
+        // 2¹⁰: the 1 is a short upright like a prime, the 0 a small ring like a degree sign.
+        val s = Sheet()
+        s.glyph("2", 100f, 100f)
+        s.add("1", listOf(118f, 118.5f, 119f), listOf(88f, 95f, 102f))
+        s.ring("0", 123f, 88f, 8f, 14f)
+        s.equals(145f, 112f)
+        assertEquals("1024", text(s.answers().single()))
+    }
+
+    @Test
+    fun cubeRoot() {
+        // ∛8 =: a √ in one stroke, a small 3 in its crook.
+        val s = Sheet()
+        val xs = listOf(100f, 104f, 108f, 112f) + (0..10).map { 116f + 4f * it }
+        val ys = listOf(112f, 122f, 130f, 96f) + (0..10).map { 94f }
+        s.add(null, xs, ys)
+        s.glyph("3", 97f, 95f, 8f, 12f)
+        s.glyph("8", 124f, 102f)
+        s.equals(170f, 112f)
+        assertEquals("2", text(s.answers().single()))
+    }
+
+    @Test
+    fun indexBesideItsLetter() {
+        // T₈₅₀ with the indices about half the height of the T, reaching below its foot.
+        val s = Sheet()
+        s.glyph("T", 100f, 100f)
+        s.glyph("8", 117f, 117f, 7f, 12f)
+        s.glyph("5", 126f, 117f, 7f, 12f)
+        s.glyph("0", 135f, 117f, 7f, 12f)
+        val pieces = MathLayout.formula(s.strokes, 24f, 112f)
+        assertEquals("#_{#}", pieces.joinToString("") { if (it is Piece.Text) it.s else "#" })
+    }
+
+    @Test
+    fun unsureWhenAShiftedLayoutGivesAnotherAnswer() {
+        val five = Answer.Text(listOf("5"))
+        assertEquals(emptyList<String>(), MathPage.otherAnswers(five) { five })
+        val others = MathPage.otherAnswers(five) { shift -> if (shift == MathLayout.Shift.SUP_HARDER) Answer.Text(listOf("32")) else five }
+        assertEquals(listOf("32"), others)
+        assertTrue(PageAnswer(0f, 0f, 1f, five, others = others).unsure)
+    }
+
+    @Test
+    fun rootOfDegreeParses() {
+        assertEquals("2", (Calc.evaluate(Parser.parse("\\sqrt[3]{8}"), Env()) as Answer.Text).lines.single())
+        assertEquals(Printer.MINUS + "2", (Calc.evaluate(Parser.parse("\\sqrt[3]{-8}"), Env()) as Answer.Text).lines.single())
+    }
 }

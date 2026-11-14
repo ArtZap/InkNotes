@@ -45,6 +45,15 @@ private class Topic(val title: String, val entries: List<Pair<String, String>>)
 
 private val TOPICS = listOf(
     Topic(
+        tr("Новое в 0.41", "What's new in 0.41"),
+        listOf(
+            tr("Ответ под вопросом", "Answers not certain") to tr("Если написанное можно прочитать по-разному (показатель это или просто цифра, индекс или нет) и ответы при этом расходятся, ответ показывается серым со знаком «?». Касание по нему покажет другие возможные ответы. Раньше в таких местах мог появиться уверенный неверный ответ.", "When what is written can be read in more than one way (an exponent or just a digit, an index or not) and the answers differ, the answer is shown grey with a “?”. Tap it to see the other possible answers. Before, such places could get a confident wrong answer."),
+            tr("Десятичная точка", "Decimal point") to tr("Точка внизу между цифрами — десятичная: 8.5 + 1 = 9,5. Точка посередине строки по-прежнему умножение: 8·5 = 40.", "A dot low between digits is a decimal point: 8.5 + 1 = 9.5. A dot in the middle of the line is still multiplication: 8·5 = 40."),
+            tr("Корни любой степени", "Roots of any degree") to tr("Маленькая цифра в изгибе знака корня — его степень: ∛8 = 2, ∜16 = 2. Кубический корень из отрицательного числа тоже считается: ∛−8 = −2.", "A small digit in the crook of the root sign is its degree: ∛8 = 2, ∜16 = 2. The cube root of a negative number works too: ∛−8 = −2."),
+            tr("Показатели и индексы", "Exponents and indices") to tr("Лучше читаются индексы, написанные рядом с буквой ниже её основания (T₈₅₀, x₁), и показатели вроде 2¹⁰ и 10¹²: единица в них больше не принимается за штрих производной, а ноль — за знак градуса.", "Indices written beside a letter below its foot (T₈₅₀, x₁) read better, and so do exponents like 2¹⁰ and 10¹²: the 1 in them is no longer taken for a prime, nor the 0 for a degree sign."),
+        ),
+    ),
+    Topic(
         tr("Новое в 0.40", "What's new in 0.40"),
         listOf(
             tr("Язык интерфейса", "Interface language") to tr("В настройках (шестерёнка) — «Язык · Language»: как в системе, русский или английский. После выбора приложение перезапускается. «Как в системе» включает русский, если система на русском, и английский — для любого другого языка. Поиск по почерку читает страницы на языке интерфейса и после смены языка перечитывает их.", "In the settings (the gear) — “Язык · Language”: system, Russian or English. The app restarts after you choose. “System” gives Russian when the system is in Russian and English for any other language. Handwriting search reads pages in the interface language and re-reads them after the language changes."),

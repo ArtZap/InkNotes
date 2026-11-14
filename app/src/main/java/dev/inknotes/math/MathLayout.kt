@@ -57,7 +57,44 @@ sealed class Piece {
  */
 object MathLayout {
 
-    fun formula(strokes: List<Ink>, h: Float, axis: Float): List<Piece> {
+    /**
+     * Thresholds moved a little, to read a formula again: when a reading with them gives
+     * another answer, the layout is not clear-cut and the answer is shown as unsure. Chosen on
+     * CROHME (tools/formula-bench.sh): each flags far more wrong answers than right ones.
+     */
+    enum class Shift(val deltas: Map<String, Float>) {
+        NONE(emptyMap()),
+        SUP_EASIER(mapOf("supBottom" to 0.05f, "supRaised" to 0.05f, "supLowBottom" to 0.04f, "supLowMiddle" to 0.04f, "supAbove" to 0.05f)),
+        SUP_HARDER(mapOf("supBottom" to -0.1f, "supRaised" to -0.1f, "supLowBottom" to -0.08f, "supLowMiddle" to -0.08f, "supAbove" to -0.1f)),
+        SUB_EASIER(mapOf("subRelBelow" to -0.05f, "subRelTop" to -0.05f, "subBottom" to -0.05f, "subTop" to -0.025f)),
+        SUB_HARDER(mapOf("subRelBelow" to 0.1f, "subRelTop" to 0.1f, "subBottom" to 0.1f, "subTop" to 0.05f)),
+        JOIN_EASIER(mapOf("joinGap" to 0.08f, "joinOverlap" to -0.1f)),
+        JOIN_HARDER(mapOf("joinGap" to -0.06f, "joinOverlap" to 0.1f)),
+        FRAC_EASIER(mapOf("barWidth" to -0.1f, "fracReach" to 0.2f)),
+        FRAC_HARDER(mapOf("barWidth" to 0.1f, "fracReach" to -0.2f)),
+        ;
+
+        companion object {
+            val CHECKS = entries - NONE
+        }
+    }
+
+    /**
+     * The formula as text with holes to read. With a [shift] the thresholds are moved for this
+     * one call; calls take turns, as the thresholds are shared.
+     */
+    fun formula(strokes: List<Ink>, h: Float, axis: Float, shift: Shift = Shift.NONE): List<Piece> = synchronized(Tune) {
+        if (shift == Shift.NONE) return@synchronized layOut(strokes, h, axis)
+        val saved = shift.deltas.keys.associateWith { Tune.values()[it]!! }
+        try {
+            for ((k, d) in shift.deltas) Tune.set(k, saved[k]!! + d)
+            layOut(strokes, h, axis)
+        } finally {
+            for ((k, v) in saved) Tune.set(k, v)
+        }
+    }
+
+    private fun layOut(strokes: List<Ink>, h: Float, axis: Float): List<Piece> {
         val out = ArrayList<Piece>()
         Builder(h, out).flow(items(strokes, h), axis)
         // Join neighbouring text pieces.
@@ -85,7 +122,7 @@ object MathLayout {
     }
 
     internal class Frac(override val box: Box, val num: List<Item>, val den: List<Item>, val bar: Box) : Item()
-    internal class Root(override val box: Box, val inner: List<Item>) : Item()
+    internal class Root(override val box: Box, val inner: List<Item>, val degree: List<Item> = emptyList()) : Item()
     internal class Group(override val box: Box, val open: String, val close: String, val inner: List<Item>) : Item()
     internal class Grid(override val box: Box, val rows: List<List<List<Item>>>, val det: Boolean) : Item()
     internal class IntSign(override val box: Box, val lo: List<Item>, val hi: List<Item>) : Item()
@@ -142,7 +179,7 @@ object MathLayout {
                 // the top bar of a 5 drawn as its own stroke, just touching the body's top end
                 cap(a, b, h) || cap(b, a, h) ||
                 // the dot of i or j, the dots of ÷
-                (dot && yGap < 0.45f * h && (b.cx in a.left - 0.1f * h..a.right + 0.1f * h || a.cx in b.left - 0.1f * h..b.right + 0.1f * h))
+                (dot && yGap < Tune.dotGap * h && (b.cx in a.left - 0.1f * h..a.right + 0.1f * h || a.cx in b.left - 0.1f * h..b.right + 0.1f * h))
             if (joined) parent[find(i)] = find(j)
         }
         return strokes.indices.groupBy(::find).values.map { idx -> G(Glyph(idx.map { strokes[it] })) }
@@ -499,14 +536,17 @@ object MathLayout {
                 // A dot about the middle of the line is multiplication, even drawn as a tiny
                 // ring or a little high: not a degree sign (those sit at the top), a prime or
                 // an exponent.
-                if (tiny && abs(b.cy - ax) < 0.2f * h && (r == null || b.cy > r.top + 0.15f * r.height)) {
+                // A dot low beside a symbol (8.5, 0.7) is a decimal point: it stays in the run.
+                val point = tiny && r != null && !refStructure && b.cy > r.top + Tune.pointLow * r.height && b.left > r.cx
+                if (tiny && !point && abs(b.cy - ax) < 0.2f * h && (r == null || b.cy > r.top + 0.15f * r.height)) {
                     enter(Level.BASE)
                     flush()
                     text("*")
                     continue
                 }
-                // A small circle up at the top right of a number is a degree sign: 30°, 45°.
-                if (r != null && !refStructure && item.glyph.strokes.size == 1 && ring(item.glyph.strokes[0], h) &&
+                // A small circle up at the top right of a number is a degree sign: 30°, 45°. Not
+                // within an exponent already begun: the 0 of 2¹⁰.
+                if (r != null && !refStructure && cur != Level.SUP && item.glyph.strokes.size == 1 && ring(item.glyph.strokes[0], h) &&
                     max(b.width, b.height) < 0.5f * max(r.height, 0.75f * h) && b.bottom < r.top + 0.55f * r.height && b.left > r.cx &&
                     // the dot of an i or j has its stem under it
                     items.none { o -> o !== item && b.cx in o.box.left - 0.1f * h..o.box.right + 0.1f * h && o.box.top > b.bottom - 0.1f * h && o.box.top - b.bottom < 0.8f * h }
@@ -516,7 +556,12 @@ object MathLayout {
                     text("°")
                     continue
                 }
-                if (level == Level.SUP && item.glyph.strokes.size == 1 && b.height < 0.6f * h && b.width < 0.6f * b.height && straight(item.glyph.strokes[0], 0.12f)) {
+                // A short upright up at the top right is a prime (f'), unless more of an exponent
+                // follows close beside it: then it is the 1 of 2¹⁰.
+                val next = items.getOrNull(items.indexOf(item) + 1)
+                val exponentGoesOn = next is G && r != null && next.box.left - b.right < 0.6f * h && next.box.bottom < r.top + Tune.supBottom * r.height &&
+                    next.box.height < 1.2f * max(b.height, 0.3f * h)
+                if (level == Level.SUP && !exponentGoesOn && item.glyph.strokes.size == 1 && b.height < 0.6f * h && b.width < 0.6f * b.height && straight(item.glyph.strokes[0], 0.12f)) {
                     enter(Level.BASE)
                     flush()
                     text("'")
@@ -535,7 +580,7 @@ object MathLayout {
                     if (signLevel == Level.BASE) ref = null
                     continue
                 }
-                if (level == Level.BASE && tiny && abs(b.cy - ax) < 0.25f * h) {
+                if (level == Level.BASE && tiny && !point && abs(b.cy - ax) < 0.25f * h) {
                     // A dot in the middle of the line is multiplication.
                     enter(Level.BASE)
                     flush()
@@ -597,13 +642,25 @@ object MathLayout {
             // A decimal comma hangs a little below the line; it is not an index.
             val comma = b.height < 0.35f * h && b.width < 0.6f * b.height && b.top > axis + 0.15f * h
             if (small && !comma && b.height < Tune.subSize * h && max(b.width, b.height) >= 0.22f * h && b.top > axis + Tune.subTop * h && b.bottom > axis + Tune.subBottom * h) return Level.SUB
+            // An index beside the symbol it belongs to (T₈₅₀, L₀): smaller than it, starting well
+            // down it and reaching below its foot. The line's own middle can be wrong when much
+            // of the formula is indices.
+            if (!comma && !dash && b.height < Tune.subRelSize * ref.height && max(b.width, b.height) >= 0.18f * ref.height &&
+                b.top > ref.top + Tune.subRelTop * ref.height && b.bottom > ref.bottom + Tune.subRelBelow * ref.height && b.left > ref.cx
+            ) {
+                return Level.SUB
+            }
             return Level.BASE
         }
 
         private fun emit(item: Item) {
             when (item) {
                 is Frac -> { text("\\frac{"); flow(item.num, null); text("}{"); flow(item.den, null); text("}") }
-                is Root -> { text("\\sqrt{"); flow(item.inner, null); text("}") }
+                is Root -> {
+                    text("\\sqrt")
+                    if (item.degree.isNotEmpty()) { text("["); flow(item.degree, null); text("]") }
+                    text("{"); flow(item.inner, null); text("}")
+                }
                 is Group -> { text(item.open); flow(item.inner, null); text(item.close) }
                 is Grid -> {
                     if (item.det) text("\\det{")
@@ -708,6 +765,20 @@ object MathLayout {
             return pool
         }
 
+        /**
+         * The degree of a root (∛): small symbols in the crook of the √, over its tick and left
+         * of where its bar starts.
+         */
+        private fun degreeOf(pool: List<Item>, r: Item, rb: Box): List<Item> {
+            val found = pool.filter {
+                it !== r && it is G && !it.glyph.isDash && it.box.height < 0.6f * rb.height && it.box.height < 0.8f * h &&
+                    it.box.left > rb.left - 0.4f * h && it.box.right > rb.left + 0.05f * rb.width && it.box.cx < rb.left + Tune.degreeRight * rb.width &&
+                    it.box.bottom < rb.top + Tune.degreeBottom * rb.height && it.box.bottom > rb.top + Tune.degreeTop * rb.height
+            }
+            // One short number or letter, not a whole term written before the root.
+            return if (found.size in 1..2 && found.maxOf { it.box.right } - found.minOf { it.box.left } < 1.2f * h) found else emptyList()
+        }
+
         private fun radicals(pool: MutableList<Item>): MutableList<Item> {
             // √ in two strokes: a tick, and a bar over the content starting at the tick's top.
             for (bar in pool.filterIsInstance<G>().filter { it.glyph.isDash && it.box.width > 0.6f * h }) {
@@ -729,13 +800,14 @@ object MathLayout {
             for (r in pool.filterIsInstance<G>().filter { (it.glyph.strokes.size == 1 && isRadical(it.glyph.strokes[0], h)) || radicalOfParts(it.glyph, h) }) {
                 if (r !in pool) continue
                 val rb = r.box
+                val degree = degreeOf(pool, r, rb)
                 val inner = pool.filter {
-                    it !== r && it.box.cx > rb.left + 0.25f * rb.width && it.box.cx < rb.right + 0.1f * h &&
+                    it !== r && it !in degree && it.box.cx > rb.left + 0.25f * rb.width && it.box.cx < rb.right + 0.1f * h &&
                         it.box.cy > rb.top && it.box.cy < rb.bottom + 0.2f * h
                 }
                 if (inner.isEmpty()) continue
-                pool.removeAll(inner.toSet() + r)
-                pool += Root(Box.ofBoxes(inner.map { it.box } + rb), inner)
+                pool.removeAll(inner.toSet() + degree + r)
+                pool += Root(Box.ofBoxes(inner.map { it.box } + degree.map { it.box } + rb), inner, degree)
             }
             return pool
         }
@@ -892,6 +964,24 @@ object Tune {
     @JvmField var supLowSize = 0.7f
     @JvmField var supLowBottom = 0.66f
     @JvmField var supLowMiddle = 0.484f
+
+    /** A dot is a decimal point, not multiplication, when its middle is this low on the symbol before it. */
+    @JvmField var pointLow = 0.55f
+
+    /** An index measured on the symbol before it: smaller than this part of it, its top this far down it, its bottom this far below its foot. */
+    @JvmField var subRelSize = 0.7f
+    @JvmField var subRelTop = 0.4f
+    @JvmField var subRelBelow = 0.15f
+
+    /** The dot of an i or j joins the stroke below it across at most this gap. */
+    @JvmField var dotGap = 0.45f
+
+    /** The degree of a root: its middle left of this part of the √, its bottom above this part of its height… */
+    @JvmField var degreeRight = 0.3f
+    @JvmField var degreeBottom = 0.6f
+
+    /** …and below this part of it: in the crook, not wholly above the √ (the upper limit of an ∫ before it). */
+    @JvmField var degreeTop = 0.1f
 
     /** An index: smaller than this, its top below the middle line by [subTop], its bottom by [subBottom]. */
     @JvmField var subSize = 1.03f

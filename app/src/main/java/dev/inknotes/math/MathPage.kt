@@ -19,7 +19,14 @@ class PageAnswer(
     val error: Boolean = false,
     /** How it was solved, shown when the answer is tapped; null when there is nothing to show. */
     val steps: List<String>? = null,
-)
+    /**
+     * Other answers the formula could have, read a little differently: when not empty, the
+     * answer is not sure (shown grey with "?") and these are offered when it is tapped.
+     */
+    val others: List<String> = emptyList(),
+) {
+    val unsure get() = others.isNotEmpty()
+}
 
 /**
  * Finds the math on a page: every handwritten "=" (two short stacked dashes) with what is
@@ -145,7 +152,8 @@ object MathPage {
                     val equation = listOf(asking.left to asking.right)
                     PageAnswer(at, eq.cy, eq.h, valuesOnly(Calc.solve(equation, envAt(asking.index))), steps = Steps.of(equation, envAt(asking.index)))
                 } else {
-                    PageAnswer(at, eq.cy, eq.h, Calc.evaluate(l, envAt(i)) ?: continue)
+                    val answer = Calc.evaluate(l, envAt(i)) ?: continue
+                    PageAnswer(at, eq.cy, eq.h, answer, others = otherAnswers(answer) { shift -> readTrimmed(left, eq, reader, known, shift)?.let { Calc.evaluate(it, envAt(i)) } })
                 }
             } catch (e: MathError) {
                 PageAnswer(at, eq.cy, eq.h, Answer.Text(listOf(e.message ?: "?")), error = true)
@@ -402,7 +410,8 @@ object MathPage {
         reader: RunReader,
         prefer: Prefer = Prefer.FIRST,
         known: (String) -> Boolean = { false },
-    ): Expr? = readings(strokes, h, axis, reader, prefer, known).firstOrNull()
+        shift: MathLayout.Shift = MathLayout.Shift.NONE,
+    ): Expr? = readings(strokes, h, axis, reader, prefer, known, shift = shift).firstOrNull()
 
     /** Distinct readings that parse, best first (at most [MAX_READINGS]). */
     fun readings(
@@ -415,9 +424,10 @@ object MathPage {
         maxLetters: Int = Int.MAX_VALUE,
         variable: String = "x",
         favored: Set<String> = emptySet(),
+        shift: MathLayout.Shift = MathLayout.Shift.NONE,
     ): List<Expr> {
         val pieces = try {
-            MathLayout.formula(strokes, h, axis)
+            MathLayout.formula(strokes, h, axis, shift)
         } catch (e: MathError) {
             trace?.invoke("  layout failed: ${e.message}")
             return emptyList()
@@ -526,9 +536,9 @@ object MathPage {
      * ("Ответ: 2+3 =") spoil the reading; then the parts left of wide gaps are dropped one by
      * one while that gives a cleaner reading (one that parses, with fewer unknown letters).
      */
-    private fun readTrimmed(left: List<Ink>, eq: Equals, reader: RunReader, known: (String) -> Boolean): Expr? {
+    private fun readTrimmed(left: List<Ink>, eq: Equals, reader: RunReader, known: (String) -> Boolean, shift: MathLayout.Shift = MathLayout.Shift.NONE): Expr? {
         fun score(e: Expr) = letters(e).count { !known(it) }
-        var best = read(left, eq.h, eq.cy, reader, Prefer.NUMBERS, known)
+        var best = read(left, eq.h, eq.cy, reader, Prefer.NUMBERS, known, shift)
         if (best != null && score(best) == 0) return best
         // Split points: gaps in the x-extent of the side wider than a symbol's width.
         val spans = left.map { it.left to it.right }.sortedBy { it.first }
@@ -541,11 +551,26 @@ object MathPage {
         for (cut in cuts.take(MAX_TRIMS)) {
             val part = left.filter { it.cx >= cut }
             if (part.isEmpty()) break
-            val e = read(part, eq.h, eq.cy, reader, Prefer.NUMBERS, known) ?: continue
+            val e = read(part, eq.h, eq.cy, reader, Prefer.NUMBERS, known, shift) ?: continue
             if (best == null || score(e) < score(best)) best = e
             if (score(e) == 0) break
         }
         return best
+    }
+
+    /**
+     * Answers the formula could have with its layout read a little differently
+     * ([MathLayout.Shift]): not empty when the layout is not clear-cut, and then the answer is
+     * shown as unsure, these offered beside it.
+     */
+    fun otherAnswers(answer: Answer, again: (MathLayout.Shift) -> Answer?): List<String> {
+        val text = (answer as? Answer.Text)?.lines ?: return emptyList()
+        val out = LinkedHashSet<String>()
+        for (shift in MathLayout.Shift.CHECKS) {
+            val other = runCatching { again(shift) }.getOrNull() as? Answer.Text ?: continue
+            if (other.lines != text) out += other.lines.joinToString("; ")
+        }
+        return out.take(MAX_OTHERS)
     }
 
     /** "2 + 3 = ?": a question mark after "=" asks for the answer like an empty place. */
@@ -566,6 +591,9 @@ object MathPage {
     }
 
     private const val RARE_UNKNOWNS = "oOlIiD"
+
+    /** Other possible answers offered beside an unsure one. */
+    private const val MAX_OTHERS = 3
 
     /** Integrals whose integrand does not contain their variable (likely misread). */
     private fun oddIntegrals(e: Expr): Int = when (e) {

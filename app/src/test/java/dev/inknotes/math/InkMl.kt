@@ -169,6 +169,7 @@ object Latex {
             if (c.isLetterOrDigit() || c in " +-*/^_{}()[]|.!'") s.append(c) else if (c == '=') return null else return null
             i++
         }
-        return s.toString().trim().takeIf { it.isNotEmpty() }
+        // The datasets space the digits of one number: "3 0" is 30, not 3·0.
+        return s.toString().replace(Regex("(?<=\\d) +(?=\\d)"), "").trim().takeIf { it.isNotEmpty() }
     }
 }
