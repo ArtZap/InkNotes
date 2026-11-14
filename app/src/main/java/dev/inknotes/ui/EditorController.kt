@@ -1176,8 +1176,7 @@ class EditorController(
         for ((id, m) in moves) {
             val content = docs[id]?.content() ?: repo.loadPage(nb, id)
             val moved = movedContent(content, m)
-            repo.savePageAsync(nb, id, moved) { problem, saved -> notSaved(id, problem, saved) }
-            handwriting.pageSaved(nb, id, moved)
+            repo.savePageAsync(nb, id, moved, { problem, saved -> notSaved(id, problem, saved) }) { handwriting.pageSaved(nb, id, moved) }
             val open = docs.remove(id) != null
             savedRevision.remove(id)
             if (open) install(id, moved)
@@ -2356,8 +2355,8 @@ class EditorController(
         for ((id, doc) in docs) {
             if (savedRevision[id] == doc.revision) continue
             val content = doc.content()
-            repo.savePageAsync(notebook, id, content) { problem, saved -> notSaved(id, problem, saved) }
-            handwriting.pageSaved(notebook, id, content)
+            val nb = notebook
+            repo.savePageAsync(nb, id, content, { problem, saved -> notSaved(id, problem, saved) }) { handwriting.pageSaved(nb, id, content) }
             savedRevision[id] = doc.revision
             any = true
         }

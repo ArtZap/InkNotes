@@ -436,4 +436,23 @@ private fun LanguageChoice() {
         fontSize = 12.sp,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
+    val handwriting = remember { Language.handwriting(context) }
+    Text(dev.inknotes.data.tr("Язык рукописи для поиска", "Handwriting language for search"), style = MaterialTheme.typography.titleSmall)
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        for ((tag, label) in listOf(Language.SYSTEM to dev.inknotes.data.tr("Как интерфейс", "As interface"), Language.RU to "Русский", Language.EN to "English")) {
+            FilterChip(
+                selected = tag == handwriting,
+                onClick = { if (activity != null && tag != handwriting) Language.setHandwriting(activity, tag) },
+                label = { Text(label) },
+            )
+        }
+    }
+    Text(
+        dev.inknotes.data.tr(
+            "На каком языке вы пишете от руки: по нему ищется текст в тетрадях. При смене модель скачивается заново, а страницы перечитываются.",
+            "The language you write by hand: search finds text in notebooks by it. When it changes, the model is downloaded again and pages are read anew.",
+        ),
+        fontSize = 12.sp,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }

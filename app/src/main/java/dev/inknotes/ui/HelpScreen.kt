@@ -47,7 +47,7 @@ private val TOPICS = listOf(
     Topic(
         tr("Новое в 0.40", "What's new in 0.40"),
         listOf(
-            tr("Язык интерфейса", "Interface language") to tr("В настройках (шестерёнка) — «Язык · Language»: как в системе, русский или английский. После выбора приложение перезапускается. «Как в системе» включает русский, если система на русском, и английский — для любого другого языка. Поиск по почерку читает страницы на языке интерфейса и после смены языка перечитывает их.", "In the settings (the gear) — “Язык · Language”: system, Russian or English. The app restarts after you choose. “System” gives Russian when the system is in Russian and English for any other language. Handwriting search reads pages in the interface language and re-reads them after the language changes."),
+            tr("Язык интерфейса", "Interface language") to tr("В настройках (шестерёнка) — «Язык · Language»: как в системе, русский или английский. После выбора приложение перезапускается. «Как в системе» включает русский, если система на русском, и английский — для любого другого языка. Ниже — «Язык рукописи для поиска»: на каком языке вы пишете от руки (по умолчанию как интерфейс). Его можно выбрать отдельно, например английский интерфейс и русские конспекты; после смены страницы перечитываются.", "In the settings (the gear) — “Язык · Language”: system, Russian or English. The app restarts after you choose. “System” gives Russian when the system is in Russian and English for any other language. Below it, “Handwriting language for search”: the language you write by hand (by default the interface’s). It can be set apart, say an English interface with Russian notes; after a change the pages are read again."),
         ),
     ),
     Topic(

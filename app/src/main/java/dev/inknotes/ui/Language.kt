@@ -64,6 +64,22 @@ object Language {
         return base.createConfigurationContext(config)
     }
 
+    /**
+     * The language handwriting is read in for search: [SYSTEM] here means as the interface. Set
+     * apart from the interface: an English phone can hold Russian notes.
+     */
+    fun handwriting(context: Context): String = known(prefs(context).getString(KEY_HANDWRITING, SYSTEM).orEmpty())
+
+    /** True when handwriting is read with the English model. */
+    fun handwritingEnglish(context: Context): Boolean = handwriting(context).ifEmpty { effective(context) } == EN
+
+    /** Changes the handwriting language; the app starts again, as it reads with one model per run. */
+    fun setHandwriting(activity: Activity, tag: String) {
+        if (tag == handwriting(activity)) return
+        prefs(activity).edit().putString(KEY_HANDWRITING, tag).commit()
+        restart(activity)
+    }
+
     /** Changes the language and starts the app again in it, on the screen it was on. */
     fun set(activity: Activity, tag: String) {
         if (tag == chosen(activity)) return
@@ -85,7 +101,12 @@ object Language {
         return true
     }
 
+    /**
+     * Starts the app anew in the language now set: names made once (enums, objects) are made
+     * again. Open pages and a recording are saved first: the process is ended on purpose.
+     */
     private fun restart(activity: Activity) {
+        (activity as? MainActivity)?.saveBeforeRestart()
         val intent = Intent(activity, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
         activity.startActivity(intent)
         activity.finishAffinity()
@@ -105,4 +126,5 @@ object Language {
     private fun prefs(context: Context) = context.getSharedPreferences("language", Context.MODE_PRIVATE)
 
     private const val KEY = "language"
+    private const val KEY_HANDWRITING = "handwriting"
 }

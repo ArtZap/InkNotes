@@ -1288,9 +1288,17 @@ private fun TabStrip(
     fun closeSmoothly(list: List<EditorController>, then: () -> Unit) {
         list.forEach { closing[it] = true }
         scope.launch {
-            kotlinx.coroutines.delay(Motion.FAST.toLong())
-            list.forEach { closing.remove(it) }
-            then()
+            var done = false
+            try {
+                kotlinx.coroutines.delay(Motion.FAST.toLong())
+                list.forEach { closing.remove(it) }
+                done = true
+                then()
+            } finally {
+                // The strip went away during the fold (the half closed, the screen turned): the
+                // tap still closes, just after.
+                if (!done) android.os.Handler(android.os.Looper.getMainLooper()).post(then)
+            }
         }
     }
     @Composable
