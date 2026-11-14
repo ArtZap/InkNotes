@@ -112,6 +112,13 @@ object FormulaBench {
         return h to (MathLayout.median(mids) ?: Box.of(s.strokes).cy)
     }
 
+    /** The answer read at once, without the checks: as printed, and whether right (null: none). */
+    fun answer(s: InkSample, expected: Expr): Pair<String?, Boolean?> {
+        val (h, ax) = axis(s)
+        val got = runCatching { MathPage.read(s.strokes, h, ax, PerfectReader(s), MathPage.Prefer.FIRST) }.getOrNull() ?: return null to null
+        return runCatching { Printer.expr(got) }.getOrDefault(got.toString()) to same(got, expected)
+    }
+
     fun layout(s: InkSample, expected: Expr): Result {
         val reader = PerfectReader(s)
         val (h, ax) = axis(s)

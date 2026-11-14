@@ -41,7 +41,7 @@ jobs:
         run: ./gradlew --no-daemon --stacktrace :app:testDebugUnitTest :app:compileDebugAndroidTestKotlin :app:lintDebug :app:assembleRelease
       - name: Formula bench report
         if: always()
-        run: cat app/build/formula-report.txt 2>/dev/null || echo "no formula report"
+        run: cat app/build/formula-report.txt app/build/metamorphic-report.txt 2>/dev/null || echo "no formula report"
       - name: Release APK size
         if: always()
         run: ls -la app/build/outputs/apk/release/ app/build/outputs/mapping/release/ 2>/dev/null || true
