@@ -760,13 +760,13 @@ class MainActivity : ComponentActivity() {
         (focused ?: editor)?.handleKey(event) == true || super.dispatchKeyEvent(event) || (focused ?: editor)?.handleShortcut(event) == true
 
     private companion object {
-        const val MAX_TABS = 5
+        const val MAX_TABS = 20
 
         /**
-         * Notebooks open in both halves together: each keeps pages, pictures and PDF pages in
-         * memory, and a 4 GB tablet runs short with ten.
+         * Notebooks open in both halves together. A tab out of sight keeps only the page it was
+         * left on (EditorController.sleep), so many fit; this is only a bound.
          */
-        const val MAX_OPEN = 7
+        const val MAX_OPEN = 30
 
         /** Share of the width at the right edge where a dragged tab opens beside. */
         const val BESIDE_EDGE = 0.25f

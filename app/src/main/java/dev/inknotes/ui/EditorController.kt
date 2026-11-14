@@ -56,7 +56,6 @@ import dev.inknotes.math.PageAnswer
 import dev.inknotes.math.Printer
 import dev.inknotes.search.TextLine
 import java.io.File
-import java.util.concurrent.Executors
 import kotlin.math.max
 import kotlin.math.min
 
@@ -375,8 +374,8 @@ class EditorController(
     private val pdfBitmaps = HashMap<String, Bitmap>()
     private val pdfPending = HashSet<String>()
 
-    private val thumbExec = Executors.newSingleThreadExecutor { r -> Thread(r, "thumbnails") }
-    private val loader = Executors.newSingleThreadExecutor { r -> Thread(r, "page-load") }
+    private val thumbExec = dev.inknotes.data.idleExecutor("thumbnails")
+    private val loader = dev.inknotes.data.idleExecutor("page-load")
     private val loading = HashSet<String>()
 
     /** Reads under way (see [loadedDocument]): a pen touch can wait for one ([awaitDocument]). */
@@ -388,7 +387,7 @@ class EditorController(
         override fun sizeOf(key: String, value: Bitmap) = value.byteCount
     }
     private val imagePending = HashSet<String>()
-    private val imageExec = Executors.newSingleThreadExecutor { r -> Thread(r, "page-images") }
+    private val imageExec = dev.inknotes.data.idleExecutor("page-images")
     var importingImage by mutableStateOf(false)
         private set
     private val thumbRevision = HashMap<String, Int>()
@@ -445,6 +444,39 @@ class EditorController(
         view?.listener = null
         view = null
         zoomPadOpen = false
+        sleep()
+    }
+
+    /**
+     * The tab is out of sight: it keeps only the page it was left on (and pages with an undo
+     * history, which lives in the page) — everything else is read again when it is shown. Its
+     * threads end by themselves when idle ([dev.inknotes.data.idleExecutor]).
+     */
+    private fun sleep() {
+        val here = notebook.pageIds.getOrNull(pageIndex)
+        val drop = docs.filter { (id, doc) -> id != here && savedRevision[id] == doc.revision && !doc.canUndo && !doc.canRedo }.keys
+        for (id in drop) {
+            docs.remove(id)
+            mathAnswers.remove(id)
+            mathRevision.remove(id)
+        }
+        // Pages still being read: not wanted now; read again when the tab is shown.
+        loads.values.forEach { it.cancel(false) }
+        loads.clear()
+        loading.clear()
+        thumbnails.clear()
+        thumbRevision.clear()
+        photoCache.clear()
+        pdfBitmaps.clear()
+        pdfPending.clear()
+        imageCache.evictAll()
+        imagePending.clear()
+        pdfPages.trim()
+        pdfTextPages.clear()
+        pdfWordCache.clear()
+        pdfTextPending.clear()
+        pdfText?.close()
+        pdfText = null
     }
 
     /** The notebook's tab is closed: nothing of it runs any more. */
@@ -2166,7 +2198,7 @@ class EditorController(
     var cardStates by mutableStateOf<Map<String, dev.inknotes.data.Cards.State>>(emptyMap())
         private set
     private val cardPages = HashMap<String, PageContent>()
-    private val cardExec = Executors.newSingleThreadExecutor { r -> Thread(r, "cards") }
+    private val cardExec = dev.inknotes.data.idleExecutor("cards")
     private val cardRenderer by lazy { PageRenderer() }
 
     /** Collects the cards of all pages (in the background) and opens the review. */

@@ -202,6 +202,11 @@ class AppPrefs(context: Context) {
         get() = prefs.getString("quickNoteId", null)
         set(value) = prefs.edit().putString("quickNoteId", value).apply()
 
+    /** How many times it was said where the hidden tools went (said the first few times). */
+    var toolsHiddenHints: Int
+        get() = prefs.getInt("toolsHiddenHints", 0)
+        set(value) = prefs.edit().putInt("toolsHiddenHints", value).apply()
+
     /** When an automatic copy in the backup folder was last read back whole (see Backup). */
     var backupReadBackAt: Long
         get() = prefs.getLong("backupReadBackAt", 0L)

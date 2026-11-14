@@ -15,14 +15,13 @@ import android.os.ParcelFileDescriptor
 import android.util.LruCache
 import kotlin.math.sqrt
 import java.io.Closeable
-import java.util.concurrent.Executors
 
 /**
  * Rasterises pages of a notebook's PDFs. PdfRenderer is not thread-safe, so every call
  * runs on one private thread; open renderers are kept until [close].
  */
 class PdfPages(private val repo: NotebookRepository) : Closeable {
-    private val exec = Executors.newSingleThreadExecutor { r -> Thread(r, "pdf-render") }
+    private val exec = dev.inknotes.data.idleExecutor("pdf-render")
     private val main = Handler(Looper.getMainLooper())
     private val open = HashMap<String, Pair<ParcelFileDescriptor, PdfRenderer>>()
     private val cache = object : LruCache<String, Bitmap>(CACHE_BYTES) {
@@ -60,6 +59,23 @@ class PdfPages(private val repo: NotebookRepository) : Closeable {
                 }.getOrNull()
             }.get()
         }.getOrNull()
+    }
+
+    /**
+     * Lets go of what is held for speed: rendered pages and open PDF files. Opened again by the
+     * next render (a tab going to the background calls this).
+     */
+    fun trim() {
+        cache.evictAll()
+        runCatching {
+            exec.execute {
+                for ((fd, pdf) in open.values) {
+                    runCatching { pdf.close() }
+                    runCatching { fd.close() }
+                }
+                open.clear()
+            }
+        }
     }
 
     override fun close() {

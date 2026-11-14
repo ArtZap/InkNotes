@@ -4,6 +4,8 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkHorizontally
@@ -324,15 +326,23 @@ fun EditorScreen(
         SoundBar(controller)
         PdfPickBar(controller)
         // Hidden tools come back by themselves for a selection: its options are needed then.
-        if (!compact || !controller.toolsHidden || controller.selectionCount > 0) ToolRow(
-            controller,
-            tools = layout.tools.mapNotNull(actions::get),
-            placing = placing,
-            onPickColor = { showPicker = true },
-            onHatchSettings = { showHatch = true },
-            onSelectionSize = { showSelectionSize = true },
-            compact = compact,
-        )
+        // They fold up towards the top bar (where the button that brings them back is) and
+        // unfold from there, so it is seen where they went.
+        AnimatedVisibility(
+            !compact || !controller.toolsHidden || controller.selectionCount > 0,
+            enter = expandVertically(tween(TOOLS_FOLD_MS), expandFrom = Alignment.Top) + fadeIn(tween(TOOLS_FOLD_MS)),
+            exit = shrinkVertically(tween(TOOLS_FOLD_MS), shrinkTowards = Alignment.Top) + fadeOut(tween(TOOLS_FOLD_MS)),
+        ) {
+            ToolRow(
+                controller,
+                tools = layout.tools.mapNotNull(actions::get),
+                placing = placing,
+                onPickColor = { showPicker = true },
+                onHatchSettings = { showHatch = true },
+                onSelectionSize = { showSelectionSize = true },
+                compact = compact,
+            )
+        }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         Row(Modifier.fillMaxSize()) {
             // Slides in and out; the page beside it keeps its place (see PageEditorView.refit).
@@ -725,15 +735,7 @@ private fun TopRow(
             }
             StudyTimerChip(onClick = onTimer)
             Row(verticalAlignment = Alignment.CenterVertically) { BarButtons(c, shown, placing, BarCatalog.GROUP_GAP) }
-            if (compact) {
-                // Hidden, the button shows the tool in hand, so it is clear what the pen does.
-                IconAction(
-                    if (c.toolsHidden) toolIcon(c.tool) else InkIcons.ToolsHide,
-                    if (c.toolsHidden) "Показать инструменты" else "Скрыть инструменты (больше места для страницы)",
-                    { c.toolsHidden = !c.toolsHidden },
-                    selected = if (c.toolsHidden) true else null,
-                )
-            }
+            if (compact) ToolsToggle(c)
             Box {
                 IconAction(InkIcons.More, "Ещё", { menuOpen = true })
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
@@ -1422,6 +1424,58 @@ private fun ArrowRow(
 }
 
 private const val ARROW_SCROLL_MS = 450
+private const val TOOLS_FOLD_MS = 260
+
+/**
+ * Hides the tools of a narrow pane, and brings them back. Shown: a plain "fold up" button.
+ * Hidden: a tinted chip with the tool in hand and an arrow down, that pulses as the tools fold
+ * into it — it is where they went, and a tap brings them out again.
+ */
+@Composable
+private fun ToolsToggle(c: EditorController) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val hidden = c.toolsHidden
+    val pulse = remember { androidx.compose.animation.core.Animatable(1f) }
+    LaunchedEffect(hidden) {
+        if (hidden) {
+            kotlinx.coroutines.delay(TOOLS_FOLD_MS.toLong() - 60)
+            pulse.animateTo(1.18f, tween(140))
+            pulse.animateTo(1f, androidx.compose.animation.core.spring(dampingRatio = 0.4f, stiffness = 500f))
+        }
+    }
+    val toggle = {
+        c.toolsHidden = !c.toolsHidden
+        if (c.toolsHidden) {
+            val prefs = AppServices.get(context).prefs
+            if (prefs.toolsHiddenHints < 3) {
+                prefs.toolsHiddenHints = prefs.toolsHiddenHints + 1
+                c.showStatus("Инструменты спрятаны в кнопку справа сверху — коснитесь её, чтобы вернуть")
+            }
+        }
+    }
+    if (!hidden) {
+        IconAction(InkIcons.ToolsHide, "Скрыть инструменты (больше места для страницы)", toggle)
+        return
+    }
+    Row(
+        Modifier
+            .padding(horizontal = 4.dp)
+            .graphicsLayer {
+                scaleX = pulse.value
+                scaleY = pulse.value
+            }
+            .clip(RoundedCornerShape(18.dp))
+            .background(MaterialTheme.colorScheme.secondaryContainer)
+            .clickable(onClick = toggle)
+            .semantics { contentDescription = "Показать инструменты" }
+            .padding(horizontal = 8.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        InkIcon(toolIcon(c.tool), contentDescription = null, modifier = Modifier.size(20.dp))
+        InkIcon(InkIcons.ToolsShow, contentDescription = null, modifier = Modifier.size(16.dp))
+    }
+}
 private const val TAB_SLIDE_MS = 220
 private const val ARROW_FADE_MS = 180
 
