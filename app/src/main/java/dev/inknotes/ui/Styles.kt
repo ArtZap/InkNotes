@@ -418,7 +418,8 @@ private fun StylePreview(style: UiStyle, dark: Boolean, modifier: Modifier) {
 @Composable
 private fun LanguageChoice() {
     val context = androidx.compose.ui.platform.LocalContext.current
-    val activity = context as? android.app.Activity
+    // In a dialog the context is a wrapper around the screen, not the screen itself.
+    val activity = Language.activityOf(context)
     val chosen = remember { Language.chosen(context) }
     Text("Язык · Language", style = MaterialTheme.typography.titleMedium)
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

@@ -92,6 +92,16 @@ object Language {
         Runtime.getRuntime().exit(0)
     }
 
+    /** The screen behind [context]: a dialog's context only wraps it. */
+    fun activityOf(context: Context): Activity? {
+        var c: Context? = context
+        while (c != null) {
+            if (c is Activity) return c
+            c = (c as? android.content.ContextWrapper)?.baseContext
+        }
+        return null
+    }
+
     private fun prefs(context: Context) = context.getSharedPreferences("language", Context.MODE_PRIVATE)
 
     private const val KEY = "language"
