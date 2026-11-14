@@ -541,4 +541,27 @@ class MathPageTest {
         assertTrue(answers.joinToString { text(it) + if (it.unsure) "?" else "" }, answers.any { it.unsure && it.others.isNotEmpty() })
         assertTrue("low: plain", !answers.first().unsure)
     }
+
+    @Test
+    fun unsureWhenTheReaderIsUnsure() {
+        // 7+1 = : the reader reads the 7 also as 1 and is not sure: 8, grey, 2 offered.
+        val s = Sheet()
+        s.glyph("7", 100f, 100f)
+        s.glyph("+", 118f, 106f, 12f, 12f)
+        s.glyph("1", 134f, 100f)
+        s.equals(156f, 112f)
+        val base = s.reader(mapOf("7+1" to listOf("7+1", "1+1")))
+        fun answer(sure: Boolean) = MathPage.analyze(
+            s.strokes,
+            object : RunReader {
+                override fun read(strokes: List<Ink>, lineHeight: Float) = base.read(strokes, lineHeight)
+                override fun sure(strokes: List<Ink>) = sure
+            },
+        ).single()
+        val unsure = answer(false)
+        assertEquals("8", text(unsure))
+        assertTrue(unsure.unsure)
+        assertEquals(listOf("2"), unsure.others)
+        assertTrue(!answer(true).unsure)
+    }
 }

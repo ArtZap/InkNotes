@@ -161,7 +161,9 @@ object MathPage {
                     PageAnswer(at, eq.cy, eq.h, valuesOnly(Calc.solve(equation, envAt(asking.index))), steps = Steps.of(equation, envAt(asking.index)))
                 } else {
                     val answer = Calc.evaluate(l, envAt(i)) ?: continue
-                    PageAnswer(at, eq.cy, eq.h, answer, others = otherAnswers(answer) { shift -> readTrimmed(left, eq, reader, known, shift)?.let { Calc.evaluate(it, envAt(i)) } })
+                    val others = otherAnswers(answer) { shift -> readTrimmed(left, eq, reader, known, shift)?.let { Calc.evaluate(it, envAt(i)) } }
+                        .ifEmpty { if (readSure(left, eq, reader)) emptyList() else otherReadings(answer, left, eq, reader, known) { Calc.evaluate(it, envAt(i)) } }
+                    PageAnswer(at, eq.cy, eq.h, answer, others = others)
                 }
             } catch (e: MathError) {
                 PageAnswer(at, eq.cy, eq.h, Answer.Text(listOf(e.message ?: "?")), error = true)
@@ -572,6 +574,27 @@ object MathPage {
             if (score(e) == 0) break
         }
         return best
+    }
+
+    /** The reader was sure of every run of the formula left of [eq]. */
+    private fun readSure(left: List<Ink>, eq: Equals, reader: RunReader): Boolean {
+        val holes = runCatching { MathLayout.formula(left, eq.h, eq.cy) }.getOrNull()?.filterIsInstance<Piece.Hole>() ?: return true
+        return holes.all { reader.sure(it.strokes) }
+    }
+
+    /**
+     * When the reader was unsure: the answers of the next readings that differ from [answer],
+     * as the other possible answers (the answer is then shown unsure, these offered).
+     */
+    private fun otherReadings(answer: Answer, left: List<Ink>, eq: Equals, reader: RunReader, known: (String) -> Boolean, value: (Expr) -> Answer?): List<String> {
+        val text = (answer as? Answer.Text)?.lines ?: return emptyList()
+        val out = LinkedHashSet<String>()
+        for (e in readings(left, eq.h, eq.cy, reader, Prefer.NUMBERS, known).drop(1)) {
+            val other = runCatching { value(e) }.getOrNull() as? Answer.Text ?: continue
+            if (other.lines != text) out += other.lines.joinToString("; ")
+            if (out.size >= MAX_OTHERS) break
+        }
+        return out.toList()
     }
 
     /**

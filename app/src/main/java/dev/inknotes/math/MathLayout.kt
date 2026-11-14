@@ -41,6 +41,9 @@ class Box(var left: Float, var top: Float, var right: Float, var bottom: Float) 
 /** Reads a run of handwriting on one level (digits, letters, operators); candidates best first. */
 fun interface RunReader {
     fun read(strokes: List<Ink>, lineHeight: Float): List<String>
+
+    /** Whether the reader was sure of its first guess for [strokes], read before: true when it cannot tell. */
+    fun sure(strokes: List<Ink>): Boolean = true
 }
 
 /** A formula as text with gaps: [Text] is structure found from the layout, [Hole] a run to read. */
