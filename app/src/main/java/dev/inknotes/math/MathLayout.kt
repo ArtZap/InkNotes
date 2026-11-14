@@ -807,12 +807,17 @@ object MathLayout {
                 pool.removeAll(inner.toSet() + bar + tick)
                 pool += Root(Box.ofBoxes(inner.map { it.box } + bb + tick.box), inner)
             }
-            for (r in pool.filterIsInstance<G>().filter { (it.glyph.strokes.size == 1 && isRadical(it.glyph.strokes[0], h)) || radicalOfParts(it.glyph, h) }) {
+            // Narrowest first: a root inside another is whole before the outer one takes it in.
+            val radicals = pool.filterIsInstance<G>().filter { (it.glyph.strokes.size == 1 && isRadical(it.glyph.strokes[0], h)) || radicalOfParts(it.glyph, h) }
+            for (r in radicals.sortedBy { it.box.width }) {
                 if (r !in pool) continue
                 val rb = r.box
                 val degree = degreeOf(pool, r, rb)
+                // The content starts after the bottom of the tick, however wide the root: the 1
+                // of √(1 + √2) sits right after it.
+                val start = min(tickBottomX(r.glyph) ?: (rb.left + 0.25f * rb.width), rb.left + 0.25f * rb.width)
                 val inner = pool.filter {
-                    it !== r && it !in degree && it.box.cx > rb.left + 0.25f * rb.width && it.box.cx < rb.right + 0.1f * h &&
+                    it !== r && it !in degree && it.box.cx > start && it.box.cx < rb.right + 0.1f * h &&
                         it.box.cy > rb.top && it.box.cy < rb.bottom + 0.2f * h
                 }
                 if (inner.isEmpty()) continue
@@ -820,6 +825,14 @@ object MathLayout {
                 pool += Root(Box.ofBoxes(inner.map { it.box } + degree.map { it.box } + rb), inner, degree)
             }
             return pool
+        }
+
+        /** Where the tick of a √ bottoms out: the lowest point of its first stroke. */
+        private fun tickBottomX(g: Glyph): Float? {
+            val k = g.strokes.maxByOrNull { it.height } ?: return null
+            var low = 0
+            for (i in k.ys.indices) if (k.ys[i] > k.ys[low]) low = i
+            return k.xs[low]
         }
 
         private fun talls(pool: MutableList<Item>): List<Item> {
