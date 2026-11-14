@@ -78,7 +78,7 @@ jobs:
             adb pull /sdcard/Android/data/dev.inknotes/files/level0/report.txt level0-report.txt || true
             adb pull /sdcard/Android/data/dev.inknotes/files/level1/report.txt level1-report.txt || true
             cat level0-report.txt level1-report.txt || adb logcat -d | grep -i "SymbolReadTest\|FormulaReadTest\|mlkit\|digitalink" | tail -60
-            grep -q "^OK (" math-ru.txt
+            grep -q "^OK (" math-ru.txt && grep -q "^OK (" math-en.txt
       - uses: actions/upload-artifact@v4
         if: always()
         with:
