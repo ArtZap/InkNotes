@@ -65,7 +65,16 @@ class HandwritingIndex(private val repo: NotebookRepository, private val enabled
 
     private val exec = Executors.newSingleThreadExecutor { r -> Thread(r, "handwriting") }
     private val main = Handler(Looper.getMainLooper())
-    private val model = DigitalInkRecognitionModel.builder(DigitalInkRecognitionModelIdentifier.RU).build()
+    /** Handwriting is read in the interface language: Russian, or English for everyone else. */
+    private val model = DigitalInkRecognitionModel.builder(
+        if (dev.inknotes.data.Lang.english) DigitalInkRecognitionModelIdentifier.EN_US else DigitalInkRecognitionModelIdentifier.RU,
+    ).build()
+
+    /**
+     * Added to the file stamp of each page whose text was read in English: after the language
+     * changes, every page is read again with the other model (Russian keeps the old stamps).
+     */
+    private val langMark = if (dev.inknotes.data.Lang.english) "#en" else ""
     private val scheduled = HashMap<String, Runnable>() // main thread
 
     // Index thread only.
@@ -154,7 +163,7 @@ class HandwritingIndex(private val repo: NotebookRepository, private val enabled
             // A page whose file is as it was when its text was read is not opened at all.
             val todo = notebooks.associateWith { nb ->
                 val text = load(nb.id)
-                nb.pageIds.map { it to repo.pageStamp(nb, it) }.filter { (id, stamp) -> text[id]?.stamp != stamp }
+                nb.pageIds.map { it to repo.pageStamp(nb, it) + langMark }.filter { (id, stamp) -> text[id]?.stamp != stamp }
             }.filterValues { it.isNotEmpty() }
             main.post { pendingPages = todo.values.sumOf { it.size } }
             for ((nb, pages) in todo) {
