@@ -510,10 +510,15 @@ object MathLayout {
                 out += Piece.Hole(run.sortedBy { it.box.left }.flatMap { g -> g.strokes.sortedBy { it.order } }, h)
                 run.clear()
             }
+            // An exponent of an exponent (e^{−x²}, a^{b^c}): the last symbol at each depth of
+            // the exponent being written, to tell when the next one is raised over it again.
+            val supRefs = ArrayList<Box>()
             // Raised and lowered parts are wrapped in ^{…} and _{…}.
             fun enter(level: Level) {
                 if (level == cur) return
                 flush()
+                if (cur == Level.SUP) repeat(supRefs.size - 1) { text("}") }
+                supRefs.clear()
                 if (cur != Level.BASE) text("}")
                 when (level) {
                     Level.SUP -> text("^{")
@@ -598,6 +603,23 @@ object MathLayout {
                     continue
                 }
                 enter(level)
+                if (level == Level.SUP) {
+                    // Deeper while raised over the last symbol of each depth reached so far.
+                    var depth = 1
+                    while (depth < supRefs.size + 1 && depth <= supRefs.size && raisedOver(b, supRefs[depth - 1])) depth++
+                    val now = max(supRefs.size, 1)
+                    if (depth > now) {
+                        flush()
+                        repeat(depth - now) { text("^{") }
+                    } else if (depth < now) {
+                        flush()
+                        repeat(now - depth) { text("}") }
+                    }
+                    while (supRefs.size > depth) supRefs.removeAt(supRefs.size - 1)
+                    if (!item.glyph.isDash) {
+                        if (supRefs.size < depth) supRefs += b else supRefs[depth - 1] = b
+                    }
+                }
                 run += item.glyph
                 if (level == Level.BASE && !item.glyph.isDash && b.height >= 0.35f * h) {
                     ref = b
@@ -607,6 +629,10 @@ object MathLayout {
             enter(Level.BASE)
             flush()
         }
+
+        /** [b] is an exponent of [r], a symbol of an exponent: up at its top, not taller than it. */
+        private fun raisedOver(b: Box, r: Box): Boolean =
+            b.left > r.cx && b.height < Tune.nestSize * r.height && b.bottom < r.top + Tune.nestBottom * r.height && b.cy < r.top + Tune.nestMiddle * r.height
 
         /** "+" (a short upright and a dash crossing near both middles) or "-" (a lone short dash). */
         private fun sign(g: Glyph): String? {
@@ -1005,6 +1031,13 @@ object Tune {
 
     /** …and below this part of it: in the crook, not wholly above the √ (the upper limit of an ∫ before it). */
     @JvmField var degreeTop = 0.1f
+
+    /** An exponent of an exponent, measured on the symbol of the exponent before it: smaller than this… */
+    @JvmField var nestSize = 1.0f
+
+    /** …its bottom above this part of that symbol's height, its middle above this part. */
+    @JvmField var nestBottom = 0.55f
+    @JvmField var nestMiddle = 0.2f
 
     /** An index: smaller than this, its top below the middle line by [subTop], its bottom by [subBottom]. */
     @JvmField var subSize = 1.03f
