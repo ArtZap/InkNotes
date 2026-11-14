@@ -2,11 +2,12 @@
 # Formula recognition bench on CROHME handwritten formulas (per-symbol labels).
 # Downloads the data (≈60 MB, CC BY-NC-SA, not kept in the repo) to build/crohme on first use,
 # then runs FormulaBenchTest: the report is app/build/formula-report.json, and the test fails
-# on a regression against app/src/test/resources/formula-baseline.json.
+# formula by formula against app/src/test/resources/formula-outcomes.tsv.
 # Choosing layout thresholds: run dev.inknotes.math.LayoutTuner (a main in the unit tests)
 # with build/crohme/CROHME_full_v2/CROHME2013_data/TrainINKML and check sets as arguments.
 # --fetch: only download and check the data (CI does this, then runs all unit tests with
-# CROHME_DIR set).
+# CROHME_DIR set). --update: after the run, its outcomes become the baseline
+# (app/src/test/resources/formula-outcomes.tsv) — for an intended change.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 DATA=build/crohme/CROHME_full_v2
@@ -23,4 +24,6 @@ if [ ! -d "$DATA" ]; then
   (cd build/crohme && unzip -q full.zip && rm full.zip)
 fi
 if [ "${1:-}" = "--fetch" ]; then exit 0; fi
-CROHME_DIR="$PWD/$DATA" ./gradlew :app:testDebugUnitTest --tests 'dev.inknotes.math.FormulaBenchTest' --rerun
+CROHME_DIR="$PWD/$DATA" ./gradlew :app:testDebugUnitTest --tests 'dev.inknotes.math.FormulaBenchTest' --rerun || [ "${1:-}" = "--update" ]
+cat app/build/formula-report.txt
+if [ "${1:-}" = "--update" ]; then cp app/build/formula-outcomes.tsv app/src/test/resources/formula-outcomes.tsv; fi
