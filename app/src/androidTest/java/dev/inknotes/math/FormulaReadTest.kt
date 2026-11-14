@@ -56,7 +56,7 @@ class FormulaReadTest {
         val layout = sortedMapOf<String, Tally>()
         val page = sortedMapOf<String, Tally>()
         val wrongs = ArrayList<String>()
-        class Signal(val right: Boolean, val shifts: Boolean, val top2: Boolean, val top3: Boolean)
+        class Signal(val right: Boolean, val shifts: Boolean, val top2: Boolean, val top3: Boolean, val agree: Boolean, val margin: Float?)
         val signals = ArrayList<Signal>()
         val started = System.currentTimeMillis()
         try {
@@ -93,7 +93,10 @@ class FormulaReadTest {
                     val values = readings.take(3).mapNotNull { FormulaValues.fingerprint(it) }
                     val top2 = values.size >= 2 && !FormulaValues.sameFingerprint(values[0], values[1])
                     val top3 = values.drop(1).any { !FormulaValues.sameFingerprint(values[0], it) }
-                    signals += Signal(right, o == "UNSURE", top2, top3)
+                    // How sure the reader was of each run it read for this formula.
+                    val holes = runCatching { MathLayout.formula(strokes, h, ax).filterIsInstance<Piece.Hole>() }.getOrDefault(emptyList())
+                    val ds = holes.mapNotNull { math.doubt(it.strokes) }
+                    signals += Signal(right, o == "UNSURE", top2, top3, ds.all { it.agree }, ds.mapNotNull { it.margin }.minOrNull())
                 }
                 if (o == "WRONG" && wrongs.size < 60) wrongs += "$set/$id  →  ${runCatching { Printer.expr(got!!) }.getOrDefault("?")}"
                 if (pageWant.isEmpty()) continue
@@ -134,6 +137,13 @@ class FormulaReadTest {
             line("первые три прочтения", { it.top3 })
             line("сдвиги или два прочтения", { it.shifts || it.top2 })
             line("сдвиги или три прочтения", { it.shifts || it.top3 })
+            line("оба прочтения ML Kit согласны", { !it.agree })
+            line("сдвиги или ML Kit не согласен", { it.shifts || !it.agree })
+            append("  с оценками ML Kit: ${signals.count { it.margin != null }} из ${signals.size}\n")
+            for (t in listOf(0.5f, 1f, 2f, 3f, 5f, 8f)) {
+                line("отрыв первого ≥ $t", { (it.margin ?: 0f) < t })
+                line("отрыв ≥ $t и согласны", { (it.margin ?: 0f) < t || !it.agree })
+            }
             append("== неверные ответы (первые ${wrongs.size})\n")
             for (x in wrongs) append("  $x\n")
         }
