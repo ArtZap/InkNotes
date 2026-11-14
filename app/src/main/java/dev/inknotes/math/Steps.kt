@@ -1,5 +1,6 @@
 package dev.inknotes.math
 
+import dev.inknotes.data.tr
 import kotlin.math.abs
 import kotlin.math.sqrt
 
@@ -42,15 +43,15 @@ object Steps {
         val name = Printer.name(x)
         val (a, b, c) = quadratic(r, x)?.toList() ?: return null
         val out = ArrayList<String>()
-        runCatching { Printer.expr(Algebra.simplify(r)) }.getOrNull()?.let { out += "Переносим всё в левую часть: $it = 0" }
+        runCatching { Printer.expr(Algebra.simplify(r)) }.getOrNull()?.let { out += tr("Переносим всё в левую часть: $it = 0", "Move everything to the left side: $it = 0") }
         when {
             abs(a) > 1e-12 -> {
-                out += "Квадратное уравнение: a = ${value(a)}, b = ${value(b)}, c = ${value(c)}"
+                out += tr("Квадратное уравнение: a = ${value(a)}, b = ${value(b)}, c = ${value(c)}", "Quadratic equation: a = ${value(a)}, b = ${value(b)}, c = ${value(c)}")
                 val d = b * b - 4 * a * c
                 out += "D = b² − 4ac = ${paren(b)}² − 4·${paren(a)}·${paren(c)} = ${value(d)}"
                 when {
-                    d < -1e-12 -> out += "D < 0: действительных корней нет"
-                    abs(d) <= 1e-12 -> out += "D = 0: один корень $name = −b / 2a = ${value(-b / (2 * a))}"
+                    d < -1e-12 -> out += tr("D < 0: действительных корней нет", "D < 0: no real roots")
+                    abs(d) <= 1e-12 -> out += tr("D = 0: один корень $name = −b / 2a = ${value(-b / (2 * a))}", "D = 0: one root $name = −b / 2a = ${value(-b / (2 * a))}")
                     else -> {
                         val s = sqrt(d)
                         out += "$name₁,₂ = (−b ± √D) / 2a = (${value(-b)} ± ${value(s)}) / ${value(2 * a)}"
@@ -59,10 +60,10 @@ object Steps {
                 }
             }
             abs(b) > 1e-12 -> {
-                out += "Линейное уравнение: ${value(b)}·$name = ${value(-c)}"
+                out += tr("Линейное уравнение: ${value(b)}·$name = ${value(-c)}", "Linear equation: ${value(b)}·$name = ${value(-c)}")
                 out += "$name = ${value(-c)} / ${paren(b)} = ${value(-c / b)}"
             }
-            else -> out += if (abs(c) < 1e-12) "0 = 0: подходит любое $name" else "${value(c)} = 0 неверно: решений нет"
+            else -> out += if (abs(c) < 1e-12) tr("0 = 0: подходит любое $name", "0 = 0: any $name fits") else tr("${value(c)} = 0 неверно: решений нет", "${value(c)} = 0 is false: no solutions")
         }
         return out
     }
@@ -91,7 +92,7 @@ object Steps {
         val names = unknowns.map(Printer::name)
         val n = names.size
         val out = ArrayList<String>()
-        out += "Линейная система, решаем по формулам Крамера:"
+        out += tr("Линейная система, решаем по формулам Крамера:", "Linear system, solved by Cramer's rule:")
         for (i in 0 until n) out += row(a[i], names) + " = " + value(rhs[i])
         fun det(m: Array<DoubleArray>): Double = if (n == 2) {
             m[0][0] * m[1][1] - m[0][1] * m[1][0]
@@ -102,7 +103,7 @@ object Steps {
         val d = det(a)
         out += "Δ = ${value(d)}" + if (n == 2) "  (${value(a[0][0])}·${paren(a[1][1])} − ${paren(a[0][1])}·${paren(a[1][0])})" else ""
         if (abs(d) < 1e-12) {
-            out += "Δ = 0: решений нет или их бесконечно много"
+            out += tr("Δ = 0: решений нет или их бесконечно много", "Δ = 0: no solutions or infinitely many")
             return out
         }
         for (j in 0 until n) {

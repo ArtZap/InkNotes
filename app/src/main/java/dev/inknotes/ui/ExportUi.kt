@@ -1,5 +1,6 @@
 package dev.inknotes.ui
 
+import dev.inknotes.data.tr
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -71,33 +72,33 @@ fun ExportDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = { Icon(InkIcons.Export, null) },
-        title = { Text("Экспорт") },
+        title = { Text(tr("Экспорт", "Export")) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Формат", style = MaterialTheme.typography.labelLarge)
+                Text(tr("Формат", "Format"), style = MaterialTheme.typography.labelLarge)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterChip(selected = format == ExportFormat.PDF, onClick = { format = ExportFormat.PDF }, label = { Text("PDF") })
-                    FilterChip(selected = format == ExportFormat.PNG, onClick = { format = ExportFormat.PNG }, label = { Text("PNG, картинки") })
+                    FilterChip(selected = format == ExportFormat.PNG, onClick = { format = ExportFormat.PNG }, label = { Text(tr("PNG, картинки", "PNG, pictures")) })
                 }
-                Text("Страницы", style = MaterialTheme.typography.labelLarge)
+                Text(tr("Страницы", "Pages"), style = MaterialTheme.typography.labelLarge)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(selected = which == "all", onClick = { which = "all" }, label = { Text("Все ($pageCount)") })
-                    FilterChip(selected = which == "page", onClick = { which = "page" }, label = { Text("Эта (${currentPage + 1})") })
-                    if (pageCount > 1) FilterChip(selected = which == "range", onClick = { which = "range" }, label = { Text("Диапазон") })
+                    FilterChip(selected = which == "all", onClick = { which = "all" }, label = { Text(tr("Все ($pageCount)", "All ($pageCount)")) })
+                    FilterChip(selected = which == "page", onClick = { which = "page" }, label = { Text(tr("Эта (${currentPage + 1})", "This one (${currentPage + 1})")) })
+                    if (pageCount > 1) FilterChip(selected = which == "range", onClick = { which = "range" }, label = { Text(tr("Диапазон", "Range")) })
                 }
                 if (which == "range") {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(from, { from = it.filter(Char::isDigit).take(4) }, Modifier.width(96.dp), label = { Text("с") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
-                        OutlinedTextField(to, { to = it.filter(Char::isDigit).take(4) }, Modifier.width(96.dp), label = { Text("по") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+                        OutlinedTextField(from, { from = it.filter(Char::isDigit).take(4) }, Modifier.width(96.dp), label = { Text(tr("с", "from")) }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+                        OutlinedTextField(to, { to = it.filter(Char::isDigit).take(4) }, Modifier.width(96.dp), label = { Text(tr("по", "to")) }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
                     }
-                    if (!rangeOk) Text("Номера страниц от 1 до $pageCount", color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
+                    if (!rangeOk) Text(tr("Номера страниц от 1 до $pageCount", "Page numbers from 1 to $pageCount"), color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
                 }
                 Text(
                     when {
                         pages == null -> ""
-                        format == ExportFormat.PDF -> "Один PDF, страниц: $count."
-                        count == 1 -> "Одна картинка PNG."
-                        else -> "Картинок PNG: $count, по одной на страницу. Сохраняются в выбранную папку."
+                        format == ExportFormat.PDF -> tr("Один PDF, страниц: $count.", "One PDF, pages: $count.")
+                        count == 1 -> tr("Одна картинка PNG.", "One PNG picture.")
+                        else -> tr("Картинок PNG: $count, по одной на страницу. Сохраняются в выбранную папку.", "PNG pictures: $count, one per page. Saved to the chosen folder.")
                     },
                     fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -105,11 +106,11 @@ fun ExportDialog(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(enabled = pages != null, onClick = { go(onPrint) }) {
                         Icon(InkIcons.Print, null)
-                        Text("  Печать")
+                        Text(tr("  Печать", "  Print"))
                     }
                     OutlinedButton(enabled = pages != null, onClick = { go { onSave(format, it) } }) {
                         Icon(InkIcons.Save, null)
-                        Text("  Сохранить…")
+                        Text(tr("  Сохранить…", "  Save…"))
                     }
                 }
             }
@@ -117,9 +118,9 @@ fun ExportDialog(
         confirmButton = {
             Button(enabled = pages != null, onClick = { go { onShare(format, it) } }) {
                 Icon(InkIcons.Share, null)
-                Text("  Отправить")
+                Text(tr("  Отправить", "  Share"))
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(tr("Отмена", "Cancel")) } },
     )
 }

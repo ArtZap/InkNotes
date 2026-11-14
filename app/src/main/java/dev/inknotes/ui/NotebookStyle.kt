@@ -1,5 +1,6 @@
 package dev.inknotes.ui
 
+import dev.inknotes.data.tr
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -49,9 +50,9 @@ import androidx.compose.ui.unit.sp
 
 /** The plastic covers of the notebook style, in the order of the cover picker. */
 enum class PlasticKind(val title: String) {
-    FROSTED("Матовая на пружине"),
-    SCHOOL("Школьная под плёнкой"),
-    HOLO("Голограмма на кольцах"),
+    FROSTED(tr("Матовая на пружине", "Matte, spiral-bound")),
+    SCHOOL(tr("Школьная под плёнкой", "School, laminated")),
+    HOLO(tr("Голограмма на кольцах", "Hologram, ring-bound")),
     ;
 
     companion object {
@@ -162,11 +163,11 @@ private fun Frosted(c: Color, title: String, pages: Int, compact: Boolean, see: 
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
                 )
-                Text("лист бумаги белой", color = Color.White.copy(alpha = 0.9f), fontSize = 11.sp, letterSpacing = 0.2.sp)
+                Text(tr("лист бумаги белой", "a sheet of white paper"), color = Color.White.copy(alpha = 0.9f), fontSize = 11.sp, letterSpacing = 0.2.sp)
             }
             Column(Modifier.align(Alignment.BottomEnd).padding(end = (w * 0.09f).dp, bottom = (w * 0.08f).dp), horizontalAlignment = Alignment.End) {
-                Text("СТРАНИЦ: $pages", color = Color.White.copy(alpha = 0.95f), fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
-                Text("всё получится", color = Color.White.copy(alpha = 0.9f), fontSize = 11.sp)
+                Text(tr("СТРАНИЦ: $pages", "PAGES: $pages"), color = Color.White.copy(alpha = 0.95f), fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                Text(tr("всё получится", "you've got this"), color = Color.White.copy(alpha = 0.9f), fontSize = 11.sp)
             }
         }
     }
@@ -192,7 +193,7 @@ private fun School(c: Color, title: String, pages: Int, compact: Boolean, see: B
             )
             if (!compact) {
                 Text(
-                    "ТЕТРАДЬ",
+                    tr("ТЕТРАДЬ", "NOTEBOOK"),
                     modifier = Modifier.offset(x = (w * 0.34f).dp, y = (w * 0.38f).dp),
                     color = Color(0xFF3A3A48),
                     fontSize = (w * 0.07f).coerceIn(10f, 18f).sp,
@@ -281,7 +282,7 @@ private fun School(c: Color, title: String, pages: Int, compact: Boolean, see: B
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Text("$pages", color = Color.White, fontSize = (w * 0.085f).coerceIn(11f, 22f).sp, fontWeight = FontWeight.ExtraBold, lineHeight = (w * 0.09f).coerceIn(12f, 24f).sp)
-                Text("СТР.", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                Text(tr("СТР.", "P."), color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
             }
             if (see) {
                 Text(
@@ -403,7 +404,7 @@ fun PlasticFolder(count: Int, modifier: Modifier = Modifier) {
     ) {
         Column(Modifier.padding(top = 40.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Text("$count", fontSize = 46.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = (-1).sp, color = lerp(tint, Color.Black, 0.35f))
-            Text("тетрадей", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = lerp(tint, Color.Black, 0.2f))
+            Text(tr("тетрадей", "notebooks"), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = lerp(tint, Color.Black, 0.2f))
         }
     }
 }

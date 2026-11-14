@@ -1,5 +1,6 @@
 package dev.inknotes.ui
 
+import dev.inknotes.data.tr
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -139,7 +140,7 @@ fun GlassFolder(count: Int, dark: Boolean, modifier: Modifier = Modifier) {
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("$count", fontSize = 44.sp, fontWeight = FontWeight.SemiBold, letterSpacing = (-1).sp, color = MaterialTheme.colorScheme.onSurface)
-                Text("тетрадей", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(tr("тетрадей", "notebooks"), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }

@@ -1,5 +1,6 @@
 package dev.inknotes.search
 
+import dev.inknotes.data.tr
 import android.graphics.RectF
 import android.os.Handler
 import android.os.Looper
@@ -100,7 +101,7 @@ class HandwritingIndex(private val repo: NotebookRepository, private val enabled
         }
         val failed = {
             if (mine == attempt && state == State.Downloading) {
-                state = State.Failed("Не удалось загрузить модель распознавания. Нужен интернет; без сервисов Google загрузка может не работать.")
+                state = State.Failed(tr("Не удалось загрузить модель распознавания. Нужен интернет; без сервисов Google загрузка может не работать.", "Could not download the recognition model. An internet connection is needed; without Google services the download may not work."))
             }
         }
         // A repeated download request of a present model may never complete: ask first,

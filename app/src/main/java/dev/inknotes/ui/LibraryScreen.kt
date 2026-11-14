@@ -1,5 +1,6 @@
 package dev.inknotes.ui
 
+import dev.inknotes.data.tr
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
@@ -166,9 +167,9 @@ fun LibraryScreen(
         val what = exporting
         exporting = null
         if (uri == null || what == null) return@rememberLauncherForActivityResult
-        importStatus = "Сохраняю тетради…"
+        importStatus = tr("Сохраняю тетради…", "Saving notebooks…")
         repo.exportBundleAsync(what.first, what.second, { context.contentResolver.openOutputStream(uri, "wt") }) { ok ->
-            importStatus = if (ok) "Сохранено тетрадей: ${what.first.size}" + (if (what.second.isNotEmpty()) ", папок: ${what.second.size}" else "") else "Не удалось сохранить файл"
+            importStatus = if (ok) tr("Сохранено тетрадей: ${what.first.size}", "Notebooks saved: ${what.first.size}") + (if (what.second.isNotEmpty()) tr(", папок: ${what.second.size}", ", folders: ${what.second.size}") else "") else tr("Не удалось сохранить файл", "Could not save the file")
         }
     }
     /** Starts saving: the folders with everything inside them, plus single notebooks. */
@@ -178,15 +179,15 @@ fun LibraryScreen(
         val nbs = notebooks.filter { it.id in notebookIds || it.folder in inFolders }
         if (nbs.isEmpty() && fs.isEmpty()) return
         exporting = nbs to fs
-        exportLauncher.launch("${name.replace(Regex("[\\\\/:*?\"<>|\\n\\r\\t]"), "_").trim().take(60).ifEmpty { "Тетради" }}.inknotes")
+        exportLauncher.launch(tr("${name.replace(Regex("[\\\\/:*?\"<>|\\n\\r\\t]"), "_").trim().take(60).ifEmpty { "Тетради" }}.inknotes", "${name.replace(Regex("[\\\\/:*?\"<>|\\n\\r\\t]"), "_").trim().take(60).ifEmpty { "Notebooks" }}.inknotes"))
     }
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
-        importStatus = "Импортирую PDF…"
+        importStatus = tr("Импортирую PDF…", "Importing the PDF…")
         val into = folderId
         repo.importPdfAsync(displayName(context, uri), uri, context.contentResolver, outline = { dev.inknotes.data.PdfText.outlineOf(context, it) }) { nb ->
             if (nb == null) {
-                importStatus = "Не удалось открыть PDF"
+                importStatus = tr("Не удалось открыть PDF", "Could not open the PDF")
             } else {
                 importStatus = null
                 onOpen(if (into != null) repo.moveToFolder(nb, into) else nb)
@@ -229,12 +230,12 @@ fun LibraryScreen(
             Spacer(Modifier.width(8.dp))
             val actions: @Composable () -> Unit = {
                 ThemeButton(themeMode, onThemeModeChange)
-                IconAction(InkIcons.Settings, "Настройки: стиль интерфейса и тема", { settings = true })
+                IconAction(InkIcons.Settings, tr("Настройки: стиль интерфейса и тема", "Settings: interface style, theme and language"), { settings = true })
                 Box {
                     var importMenu by remember { mutableStateOf(false) }
-                    IconAction(InkIcons.Import, "Импорт: файл тетради или PDF", { importMenu = true })
+                    IconAction(InkIcons.Import, tr("Импорт: файл тетради или PDF", "Import: a notebook file or a PDF"), { importMenu = true })
                     DropdownMenu(expanded = importMenu, onDismissRequest = { importMenu = false }) {
-                        DropdownMenuItem(text = { Text("Файлы тетрадей (.inknote, .inknotes)…") }, onClick = {
+                        DropdownMenuItem(text = { Text(tr("Файлы тетрадей (.inknote, .inknotes)…", "Notebook files (.inknote, .inknotes)…")) }, onClick = {
                             importMenu = false
                             fileLauncher.launch(arrayOf("*/*"))
                         })
@@ -244,42 +245,42 @@ fun LibraryScreen(
                         })
                     }
                 }
-                IconAction(InkIcons.NewFolder, "Новая папка", { creatingFolder = true })
+                IconAction(InkIcons.NewFolder, tr("Новая папка", "New folder"), { creatingFolder = true })
                 Box {
                     var moreMenu by remember { mutableStateOf(false) }
-                    IconAction(InkIcons.More, "Ещё", { moreMenu = true })
+                    IconAction(InkIcons.More, tr("Ещё", "More"), { moreMenu = true })
                     DropdownMenu(expanded = moreMenu, onDismissRequest = { moreMenu = false }) {
-                        DropdownMenuItem(text = { Text("Справка: все инструменты") }, onClick = {
+                        DropdownMenuItem(text = { Text(tr("Справка: все инструменты", "Help: all tools")) }, onClick = {
                             moreMenu = false
                             helpOpen = true
                         })
-                        DropdownMenuItem(text = { Text("Выбрать несколько (переместить, экспорт)") }, onClick = {
+                        DropdownMenuItem(text = { Text(tr("Выбрать несколько (переместить, экспорт)", "Select several (move, export)")) }, onClick = {
                             moreMenu = false
                             selecting = true
                             selNotebooks = emptySet()
                             selFolders = emptySet()
                         })
-                        DropdownMenuItem(text = { Text("Экспорт всех тетрадей…") }, onClick = {
+                        DropdownMenuItem(text = { Text(tr("Экспорт всех тетрадей…", "Export all notebooks…")) }, onClick = {
                             moreMenu = false
-                            export(folders.filter { it.parent == null }.map { it.id }.toSet(), notebooks.map { it.id }.toSet(), "Все тетради")
+                            export(folders.filter { it.parent == null }.map { it.id }.toSet(), notebooks.map { it.id }.toSet(), tr("Все тетради", "All notebooks"))
                         })
-                        DropdownMenuItem(text = { Text("Google Диск…") }, onClick = {
+                        DropdownMenuItem(text = { Text(tr("Google Диск…", "Google Drive…")) }, onClick = {
                             moreMenu = false
                             syncOpen = true
                         })
-                        DropdownMenuItem(text = { Text("Корзина…") }, onClick = {
+                        DropdownMenuItem(text = { Text(tr("Корзина…", "Trash…")) }, onClick = {
                             moreMenu = false
                             trashOpen = true
                         })
                         if (backup != null) {
-                            DropdownMenuItem(text = { Text("Автокопия…") }, onClick = {
+                            DropdownMenuItem(text = { Text(tr("Автокопия…", "Auto backup…")) }, onClick = {
                                 moreMenu = false
                                 backupOpen = true
                             })
                         }
                         // A developer tool: only in debug builds.
                         if (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) {
-                            DropdownMenuItem(text = { Text("Зонд пера") }, onClick = {
+                            DropdownMenuItem(text = { Text(tr("Зонд пера", "Pen probe")) }, onClick = {
                                 moreMenu = false
                                 onProbe()
                             })
@@ -296,7 +297,7 @@ fun LibraryScreen(
             Button(onClick = { creating = true }) {
                 InkIcon(InkIcons.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
-                Text("Тетрадь")
+                Text(tr("Тетрадь", "Notebook"))
             }
         }
         if (premium) {
@@ -321,7 +322,7 @@ fun LibraryScreen(
             Spacer(Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    "Выбрано: тетрадей ${selNotebooks.size}, папок ${selFolders.size}",
+                    tr("Выбрано: тетрадей ${selNotebooks.size}, папок ${selFolders.size}", "Selected: notebooks ${selNotebooks.size}, folders ${selFolders.size}"),
                     fontWeight = FontWeight.Medium,
                     modifier = Modifier.weight(1f),
                 )
@@ -329,14 +330,14 @@ fun LibraryScreen(
                     val folderIds = folders.map(Folder::id).toSet()
                     selNotebooks = selNotebooks + notebooks.filter { it.folder == folderId || (folderId == null && it.folder !in folderIds) }.map { it.id }
                     selFolders = selFolders + folders.filter { it.parent == folderId }.map { it.id }
-                }) { Text("Выбрать все здесь") }
+                }) { Text(tr("Выбрать все здесь", "Select all here")) }
                 Button(enabled = selNotebooks.isNotEmpty() || selFolders.isNotEmpty(), onClick = {
-                    val name = if (selNotebooks.isEmpty() && selFolders.size == 1) folders.first { it.id in selFolders }.name else "Тетради"
+                    val name = if (selNotebooks.isEmpty() && selFolders.size == 1) folders.first { it.id in selFolders }.name else tr("Тетради", "Notebooks")
                     export(selFolders, selNotebooks, name)
                     selecting = false
-                }) { Text("Экспорт…") }
-                Button(enabled = selNotebooks.isNotEmpty() || selFolders.isNotEmpty(), onClick = { moving = true }) { Text("Переместить…") }
-                TextButton(onClick = { selecting = false }) { Text("Отмена") }
+                }) { Text(tr("Экспорт…", "Export…")) }
+                Button(enabled = selNotebooks.isNotEmpty() || selFolders.isNotEmpty(), onClick = { moving = true }) { Text(tr("Переместить…", "Move…")) }
+                TextButton(onClick = { selecting = false }) { Text(tr("Отмена", "Cancel")) }
             }
         }
         (message ?: importStatus)?.let {
@@ -349,16 +350,16 @@ fun LibraryScreen(
             onValueChange = { query = it },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
-            placeholder = { Text("Поиск по названиям и рукописному тексту") },
+            placeholder = { Text(tr("Поиск по названиям и рукописному тексту", "Search titles and handwriting")) },
             leadingIcon = { InkIcon(InkIcons.Search, contentDescription = null) },
-            trailingIcon = { if (query.isNotEmpty()) IconAction(InkIcons.Close, "Очистить поиск", { query = "" }) },
+            trailingIcon = { if (query.isNotEmpty()) IconAction(InkIcons.Close, tr("Очистить поиск", "Clear search"), { query = "" }) },
         )
         HandwritingStatus(handwriting)
         Row(verticalAlignment = Alignment.CenterVertically) {
             Spacer(Modifier.weight(1f))
             Box {
                 var sortMenu by remember { mutableStateOf(false) }
-                TextButton(onClick = { sortMenu = true }) { Text("Сортировка: ${sort.title}") }
+                TextButton(onClick = { sortMenu = true }) { Text(tr("Сортировка: ${sort.title}", "Sort: ${sort.title}")) }
                 DropdownMenu(expanded = sortMenu, onDismissRequest = { sortMenu = false }) {
                     for (option in LibrarySort.entries) {
                         DropdownMenuItem(
@@ -376,7 +377,7 @@ fun LibraryScreen(
         Spacer(Modifier.height(4.dp))
 
         if (query.isNotBlank()) {
-            SearchResults(hits, emptyText = "Ничего не найдено", showNotebook = true, onClick = onOpenHit)
+            SearchResults(hits, emptyText = tr("Ничего не найдено", "Nothing found"), showNotebook = true, onClick = onOpenHit)
             return@Column
         }
         val folderIds = folders.map(Folder::id).toSet()
@@ -394,11 +395,11 @@ fun LibraryScreen(
         if (library == null) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 androidx.compose.material3.CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                Text("Загружаю тетради…", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(tr("Загружаю тетради…", "Loading notebooks…"), color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         } else if (shown.isEmpty() && subfolders.isEmpty()) {
             Text(
-                if (folderId != null) "В этой папке пока нет тетрадей." else "Пока нет ни одной тетради.",
+                if (folderId != null) tr("В этой папке пока нет тетрадей.", "No notebooks in this folder yet.") else tr("Пока нет ни одной тетради.", "No notebooks yet."),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
@@ -422,7 +423,7 @@ fun LibraryScreen(
                 NotebookCard(
                     number = i + 1,
                     nb = nb,
-                    subtitle = "${nb.pageIds.size} стр. · ${dateFormat.format(Date(nb.updatedAt))}",
+                    subtitle = tr("${nb.pageIds.size} стр. · ${dateFormat.format(Date(nb.updatedAt))}", "${nb.pageIds.size} p. · ${dateFormat.format(Date(nb.updatedAt))}"),
                     onClick = { if (selecting) selNotebooks = if (nb.id in selNotebooks) selNotebooks - nb.id else selNotebooks + nb.id else onOpen(nb) },
                     onLongClick = { editing = nb },
                     selected = if (selecting) nb.id in selNotebooks else null,
@@ -443,9 +444,9 @@ fun LibraryScreen(
     }
     if (creatingFolder) {
         NameDialog(
-            title = "Новая папка",
+            title = tr("Новая папка", "New folder"),
             initial = "",
-            confirm = "Создать",
+            confirm = tr("Создать", "Create"),
             onDismiss = { creatingFolder = false },
             onConfirm = { name ->
                 val parent = folderId
@@ -474,7 +475,7 @@ fun LibraryScreen(
         TrashDialog(
             repo = repo,
             onRestored = { nb ->
-                importStatus = "Восстановлена «${nb.title}»"
+                importStatus = tr("Восстановлена «${nb.title}»", "Restored “${nb.title}”")
                 reload()
             },
             onDismiss = { trashOpen = false },
@@ -506,10 +507,10 @@ fun LibraryScreen(
                 val chosenFolders = selFolders
                 moving = false
                 selecting = false
-                val where = folders.find { it.id == into }?.name?.let { "в «$it»" } ?: "на верхний уровень"
+                val where = folders.find { it.id == into }?.name?.let { tr("в «$it»", "to “$it”") } ?: tr("на верхний уровень", "to the top level")
                 scope.launch {
                     val (moved, movedFolders) = repo.io { moveAll(chosen, chosenFolders, into) }
-                    importStatus = "Перемещено $where: тетрадей ${moved.size}" + (if (movedFolders > 0) ", папок $movedFolders" else "")
+                    importStatus = tr("Перемещено $where: тетрадей ${moved.size}", "Moved $where: notebooks ${moved.size}") + (if (movedFolders > 0) tr(", папок $movedFolders", ", folders $movedFolders") else "")
                     repo.refreshLibrary()
                 }
             },
@@ -557,7 +558,7 @@ fun LibraryScreen(
                 repo.delete(nb)
                 notebooks = notebooks.filter { it.id != nb.id }
                 editing = null
-                importStatus = "«${nb.title}» в корзине: меню «Ещё» → «Корзина…», чтобы вернуть"
+                importStatus = tr("«${nb.title}» в корзине: меню «Ещё» → «Корзина…», чтобы вернуть", "“${nb.title}” is in the trash: menu “More” → “Trash…” to bring it back")
             },
         )
     }
@@ -569,16 +570,16 @@ fun HandwritingStatus(handwriting: HandwritingIndex) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     when (val state = handwriting.state) {
         HandwritingIndex.State.Off -> Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Поиск по рукописному тексту выключен.", color = muted, modifier = Modifier.weight(1f, fill = false))
-            TextButton(onClick = handwriting::enable) { Text("Включить (загрузит модель ≈ 15 МБ)") }
+            Text(tr("Поиск по рукописному тексту выключен.", "Handwriting search is off."), color = muted, modifier = Modifier.weight(1f, fill = false))
+            TextButton(onClick = handwriting::enable) { Text(tr("Включить (загрузит модель ≈ 15 МБ)", "Turn on (downloads a ≈ 15 MB model)")) }
         }
-        HandwritingIndex.State.Downloading -> Text("Загружаю модель распознавания почерка…", color = muted, modifier = Modifier.padding(vertical = 8.dp))
+        HandwritingIndex.State.Downloading -> Text(tr("Загружаю модель распознавания почерка…", "Downloading the handwriting recognition model…"), color = muted, modifier = Modifier.padding(vertical = 8.dp))
         is HandwritingIndex.State.Failed -> Row(verticalAlignment = Alignment.CenterVertically) {
             Text(state.message, color = MaterialTheme.colorScheme.error, modifier = Modifier.weight(1f, fill = false))
-            TextButton(onClick = handwriting::enable) { Text("Повторить") }
+            TextButton(onClick = handwriting::enable) { Text(tr("Повторить", "Retry")) }
         }
         HandwritingIndex.State.Ready -> if (handwriting.pendingPages > 0) {
-            Text("Распознаю почерк: осталось страниц ${handwriting.pendingPages}", color = muted, modifier = Modifier.padding(vertical = 8.dp))
+            Text(tr("Распознаю почерк: осталось страниц ${handwriting.pendingPages}", "Recognising handwriting: pages left ${handwriting.pendingPages}"), color = muted, modifier = Modifier.padding(vertical = 8.dp))
         }
     }
 }
@@ -608,7 +609,7 @@ fun SearchResults(hits: List<SearchHit>, emptyText: String, showNotebook: Boolea
                     Spacer(Modifier.width(12.dp))
                 }
                 Column(Modifier.weight(1f)) {
-                    val where = if (hit.line == null) "название тетради" else "стр. ${hit.pageIndex + 1}"
+                    val where = if (hit.line == null) tr("название тетради", "notebook title") else tr("стр. ${hit.pageIndex + 1}", "p. ${hit.pageIndex + 1}")
                     Text(
                         if (showNotebook) "${hit.notebook.title} · $where" else where,
                         fontSize = 13.sp,
@@ -658,7 +659,7 @@ private fun Breadcrumbs(path: List<Folder>, onOpen: (String?) -> Unit, modifier:
                 modifier = if (last) Modifier else Modifier.clickable { onOpen(id) },
             )
         }
-        title("Тетради", path.isEmpty(), null)
+        title(tr("Тетради", "Notebooks"), path.isEmpty(), null)
         path.forEachIndexed { i, f ->
             Text("  ›  ", fontSize = 22.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             title(f.name, i == path.lastIndex, f.id)
@@ -694,7 +695,7 @@ private fun FolderPicker(folders: List<Folder>, selected: String?, exclude: Set<
                 )
             }
         }
-        row("Верхний уровень (без папки)", 0, null, true)
+        row(tr("Верхний уровень (без папки)", "Top level (no folder)"), 0, null, true)
         for ((f, depth) in FolderTree.flatten(folders)) row(f.name, depth + 1, f.id, f.id !in exclude)
     }
 }
@@ -751,7 +752,7 @@ private fun FolderCard(
         Spacer(Modifier.height(6.dp))
         CardTitle(folder.name)
         Text(
-            "тетрадей: $notebooks" + if (subfolders > 0) " · папок: $subfolders" else "",
+            tr("тетрадей: $notebooks", "notebooks: $notebooks") + if (subfolders > 0) tr(" · папок: $subfolders", " · folders: $subfolders") else "",
             fontSize = 12.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -905,31 +906,31 @@ private fun CreateNotebookDialog(onDismiss: () -> Unit, onCreate: (String, PageB
     var more by remember { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Новая тетрадь") },
+        title = { Text(tr("Новая тетрадь", "New notebook")) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
-                    label = { Text("Название") },
+                    label = { Text(tr("Название", "Title")) },
                     singleLine = true,
                 )
-                Text("Цвет тетради")
+                Text(tr("Цвет тетради", "Notebook colour"))
                 CoverChoices(cover) { cover = it }
                 CoverArtChoices(cover, art, plastic, { art = it }, { plastic = it })
                 // Paper, format and ruling: most notebooks keep the defaults, so they wait behind a button.
                 TextButton(onClick = { more = !more }, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 0.dp)) {
-                    Text(if (more) "Скрыть дополнительные настройки ▴" else "Дополнительные настройки ▾")
+                    Text(if (more) tr("Скрыть дополнительные настройки ▴", "Hide more settings ▴") else tr("Дополнительные настройки ▾", "More settings ▾"))
                 }
                 if (!more) {
                     Text(
-                        (if (canvas) "Холст" else "${format.title}, ${if (landscape) "альбомная" else "книжная"}") + " · ${template.title}",
+                        (if (canvas) tr("Холст", "Canvas") else tr("${format.title}, ${if (landscape) "альбомная" else "книжная"}", "${format.title}, ${if (landscape) "landscape" else "portrait"}")) + " · ${template.title}",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 13.sp,
                     )
                 } else {
                     PaperSizeChoices(format, landscape, onFormat = { format = it }, onLandscape = { landscape = it }, canvas = canvas, onCanvas = { canvas = it })
-                    Text("Фон страниц")
+                    Text(tr("Фон страниц", "Page background"))
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         // Photo backgrounds are set from inside the notebook ("Фон").
                         for (t in PaperKind.entries - PaperKind.PHOTO) {
@@ -941,9 +942,9 @@ private fun CreateNotebookDialog(onDismiss: () -> Unit, onCreate: (String, PageB
             }
         },
         confirmButton = {
-            Button(onClick = { onCreate(title.trim().ifEmpty { "Без названия" }, PageBackground(template, lines = lines), if (canvas) PageSize.CANVAS else PageSize(format, landscape), cover, art.ordinal, plastic.ordinal) }) { Text("Создать") }
+            Button(onClick = { onCreate(title.trim().ifEmpty { tr("Без названия", "Untitled") }, PageBackground(template, lines = lines), if (canvas) PageSize.CANVAS else PageSize(format, landscape), cover, art.ordinal, plastic.ordinal) }) { Text(tr("Создать", "Create")) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(tr("Отмена", "Cancel")) } },
     )
 }
 
@@ -964,24 +965,24 @@ private fun EditNotebookDialog(
     var confirmDelete by remember { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (confirmDelete) "Удалить «${nb.title}»?" else "Тетрадь") },
+        title = { Text(if (confirmDelete) tr("Удалить «${nb.title}»?", "Delete “${nb.title}”?") else tr("Тетрадь", "Notebook")) },
         text = {
             if (confirmDelete) {
-                Text("Тетрадь попадёт в корзину: её можно восстановить в течение 30 дней (меню «Ещё» → «Корзина…»).")
+                Text(tr("Тетрадь попадёт в корзину: её можно восстановить в течение 30 дней (меню «Ещё» → «Корзина…»).", "The notebook goes to the trash: it can be restored within 30 days (menu “More” → “Trash…”)."))
             } else {
                 Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     OutlinedTextField(
                         value = title,
                         onValueChange = { title = it },
-                        label = { Text("Название") },
+                        label = { Text(tr("Название", "Title")) },
                         singleLine = true,
                     )
-                    FilterChip(selected = favorite, onClick = { favorite = !favorite }, label = { Text(if (favorite) "★ В избранном" else "☆ В избранное") })
-                    Text("Обложка")
+                    FilterChip(selected = favorite, onClick = { favorite = !favorite }, label = { Text(if (favorite) tr("★ В избранном", "★ Favourite") else tr("☆ В избранное", "☆ Add to favourites")) })
+                    Text(tr("Обложка", "Cover"))
                     CoverChoices(cover) { cover = it }
                     CoverArtChoices(cover, art, plastic, { art = it }, { plastic = it })
                     if (folders.isNotEmpty()) {
-                        Text("Папка")
+                        Text(tr("Папка", "Folder"))
                         FolderPicker(folders, folder) { folder = it }
                     }
                 }
@@ -989,15 +990,15 @@ private fun EditNotebookDialog(
         },
         confirmButton = {
             if (confirmDelete) {
-                Button(onClick = onDelete) { Text("Удалить") }
+                Button(onClick = onDelete) { Text(tr("Удалить", "Delete")) }
             } else {
-                Button(onClick = { onSave(title.trim().ifEmpty { nb.title }, cover, folder, favorite, art, plastic) }) { Text("Сохранить") }
+                Button(onClick = { onSave(title.trim().ifEmpty { nb.title }, cover, folder, favorite, art, plastic) }) { Text(tr("Сохранить", "Save")) }
             }
         },
         dismissButton = {
             Row {
-                if (!confirmDelete) TextButton(onClick = { confirmDelete = true }) { Text("Удалить…", color = MaterialTheme.colorScheme.error) }
-                TextButton(onClick = onDismiss) { Text("Отмена") }
+                if (!confirmDelete) TextButton(onClick = { confirmDelete = true }) { Text(tr("Удалить…", "Delete…"), color = MaterialTheme.colorScheme.error) }
+                TextButton(onClick = onDismiss) { Text(tr("Отмена", "Cancel")) }
             }
         },
     )
@@ -1008,7 +1009,7 @@ private fun EditNotebookDialog(
 private fun CoverArtChoices(color: Int, art: CoverArt, plastic: PlasticKind, onArt: (CoverArt) -> Unit, onPlastic: (PlasticKind) -> Unit) {
     val style = LocalUiStyle.current
     if (style != UiStyle.MYSTIC && style != UiStyle.NOTEBOOK) return
-    Text(if (style == UiStyle.MYSTIC) "Вид обложки (цвета — как у оригинала)" else "Вид обложки")
+    Text(if (style == UiStyle.MYSTIC) tr("Вид обложки (цвета — как у оригинала)", "Cover look (colours as in the original)") else tr("Вид обложки", "Cover look"))
     @Composable
     fun choice(title: String, on: Boolean, onClick: () -> Unit, cover: @Composable (Modifier) -> Unit) {
         Column(Modifier.width(80.dp).clickable(onClick = onClick), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -1064,33 +1065,33 @@ private fun FolderDialog(
     val parentName = folders.find { it.id == folder.parent }?.name
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (confirmDelete) "Удалить папку «${folder.name}»?" else "Папка") },
+        title = { Text(if (confirmDelete) tr("Удалить папку «${folder.name}»?", "Delete the folder “${folder.name}”?") else tr("Папка", "Folder")) },
         text = {
             if (confirmDelete) {
                 Text(
-                    "Тетради и вложенные папки не удалятся, а переместятся " +
-                        (if (parentName != null) "в папку «$parentName»." else "на верхний уровень."),
+                    tr("Тетради и вложенные папки не удалятся, а переместятся ", "Notebooks and subfolders are not deleted but moved ") +
+                        (if (parentName != null) tr("в папку «$parentName».", "to the folder “$parentName”.") else tr("на верхний уровень.", "to the top level.")),
                 )
             } else {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Название") }, singleLine = true)
-                    Text("Находится в")
+                    OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text(tr("Название", "Title")) }, singleLine = true)
+                    Text(tr("Находится в", "Located in"))
                     FolderPicker(folders, parent, exclude = FolderTree.subtree(folders, folder.id)) { parent = it }
                 }
             }
         },
         confirmButton = {
             if (confirmDelete) {
-                Button(onClick = onDelete) { Text("Удалить папку") }
+                Button(onClick = onDelete) { Text(tr("Удалить папку", "Delete folder")) }
             } else {
-                Button(onClick = { onSave(name.trim().ifEmpty { folder.name }, parent) }) { Text("Сохранить") }
+                Button(onClick = { onSave(name.trim().ifEmpty { folder.name }, parent) }) { Text(tr("Сохранить", "Save")) }
             }
         },
         dismissButton = {
             Row {
-                if (!confirmDelete) TextButton(onClick = { confirmDelete = true }) { Text("Удалить…", color = MaterialTheme.colorScheme.error) }
-                if (!confirmDelete) TextButton(onClick = onExport) { Text("Экспорт…") }
-                TextButton(onClick = onDismiss) { Text("Отмена") }
+                if (!confirmDelete) TextButton(onClick = { confirmDelete = true }) { Text(tr("Удалить…", "Delete…"), color = MaterialTheme.colorScheme.error) }
+                if (!confirmDelete) TextButton(onClick = onExport) { Text(tr("Экспорт…", "Export…")) }
+                TextButton(onClick = onDismiss) { Text(tr("Отмена", "Cancel")) }
             }
         },
     )
@@ -1111,22 +1112,22 @@ private fun MoveDialog(
     var naming by remember { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Переместить ($count)") },
+        title = { Text(tr("Переместить ($count)", "Move ($count)")) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Куда")
+                Text(tr("Куда", "Where to"))
                 FolderPicker(folders, target, exclude = exclude) { target = it }
-                TextButton(onClick = { naming = true }) { Text("Новая папка здесь…") }
+                TextButton(onClick = { naming = true }) { Text(tr("Новая папка здесь…", "New folder here…")) }
             }
         },
-        confirmButton = { Button(onClick = { onMove(target) }) { Text("Переместить") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } },
+        confirmButton = { Button(onClick = { onMove(target) }) { Text(tr("Переместить", "Move")) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(tr("Отмена", "Cancel")) } },
     )
     if (naming) {
         NameDialog(
-            title = "Новая папка",
+            title = tr("Новая папка", "New folder"),
             initial = "",
-            confirm = "Создать",
+            confirm = tr("Создать", "Create"),
             onDismiss = { naming = false },
             onConfirm = { name ->
                 target = onCreateFolder(name, target)
@@ -1142,9 +1143,9 @@ private fun NameDialog(title: String, initial: String, confirm: String, onDismis
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
-        text = { OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Название") }, singleLine = true) },
-        confirmButton = { Button(onClick = { onConfirm(name.trim().ifEmpty { "Папка" }) }) { Text(confirm) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } },
+        text = { OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text(tr("Название", "Title")) }, singleLine = true) },
+        confirmButton = { Button(onClick = { onConfirm(name.trim().ifEmpty { tr("Папка", "Folder") }) }) { Text(confirm) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(tr("Отмена", "Cancel")) } },
     )
 }
 

@@ -1,5 +1,6 @@
 package dev.inknotes.ui
 
+import dev.inknotes.data.tr
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RectF
@@ -100,7 +101,7 @@ fun HatchDialog(c: EditorController, onDismiss: () -> Unit) {
     val set = { s: HatchStyle -> c.changeFillStyle(s) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Штриховка") },
+        title = { Text(tr("Штриховка", "Hatching")) },
         text = {
             Column(
                 Modifier.verticalScroll(rememberScrollState()),
@@ -131,7 +132,7 @@ fun HatchDialog(c: EditorController, onDismiss: () -> Unit) {
                 Text(c.fillPattern.title, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 val lined = c.fillPattern != FillPattern.SOLID && c.fillPattern != FillPattern.INK
                 val withLines = c.fillPattern in LINE_PATTERNS
-                Text("Тип линии", color = if (withLines) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(tr("Тип линии", "Line type"), color = if (withLines) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
                 Row(
                     Modifier.horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -142,13 +143,13 @@ fun HatchDialog(c: EditorController, onDismiss: () -> Unit) {
                         }
                     }
                 }
-                SettingSlider("Толщина", "%.1f".format(style.width), style.width, HatchStyle.MIN_WIDTH..HatchStyle.MAX_WIDTH, lined && c.fillPattern != FillPattern.CHECKER) {
+                SettingSlider(tr("Толщина", "Width"), "%.1f".format(style.width), style.width, HatchStyle.MIN_WIDTH..HatchStyle.MAX_WIDTH, lined && c.fillPattern != FillPattern.CHECKER) {
                     set(style.copy(width = it))
                 }
-                SettingSlider("Расстояние", "%.0f".format(style.spacing), style.spacing, HatchStyle.MIN_SPACING..HatchStyle.MAX_SPACING, lined) {
+                SettingSlider(tr("Расстояние", "Spacing"), "%.0f".format(style.spacing), style.spacing, HatchStyle.MIN_SPACING..HatchStyle.MAX_SPACING, lined) {
                     set(style.copy(spacing = it))
                 }
-                SettingSlider("Угол", "${style.angle.roundToInt()}°", style.angle, 0f..179f, lined) {
+                SettingSlider(tr("Угол", "Angle"), "${style.angle.roundToInt()}°", style.angle, 0f..179f, lined) {
                     set(style.copy(angle = it.roundToInt().toFloat()))
                 }
                 androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -161,10 +162,10 @@ fun HatchDialog(c: EditorController, onDismiss: () -> Unit) {
                         )
                     }
                 }
-                SettingSlider("Масштаб", "×%.1f".format(style.scale), style.scale, HatchStyle.MIN_SCALE..HatchStyle.MAX_SCALE, lined) {
+                SettingSlider(tr("Масштаб", "Scale"), "×%.1f".format(style.scale), style.scale, HatchStyle.MIN_SCALE..HatchStyle.MAX_SCALE, lined) {
                     set(style.copy(scale = it))
                 }
-                SettingSlider("Непрозрачность", "${(style.opacity * 100).roundToInt()}%", style.opacity, HatchStyle.MIN_OPACITY..1f, true) {
+                SettingSlider(tr("Непрозрачность", "Opacity"), "${(style.opacity * 100).roundToInt()}%", style.opacity, HatchStyle.MIN_OPACITY..1f, true) {
                     set(style.copy(opacity = it))
                 }
             }
@@ -175,12 +176,12 @@ fun HatchDialog(c: EditorController, onDismiss: () -> Unit) {
                     TextButton(onClick = {
                         c.restyleSelection()
                         onDismiss()
-                    }) { Text("К выделенному (${c.selectedFills})") }
+                    }) { Text(tr("К выделенному (${c.selectedFills})", "To selection (${c.selectedFills})")) }
                 }
-                Button(onClick = onDismiss) { Text("Готово") }
+                Button(onClick = onDismiss) { Text(tr("Готово", "Done")) }
             }
         },
-        dismissButton = { TextButton(onClick = { set(HatchStyle.DEFAULT) }) { Text("Сбросить") } },
+        dismissButton = { TextButton(onClick = { set(HatchStyle.DEFAULT) }) { Text(tr("Сбросить", "Reset")) } },
     )
 }
 

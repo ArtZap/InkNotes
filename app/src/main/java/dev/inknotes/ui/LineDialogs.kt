@@ -1,5 +1,6 @@
 package dev.inknotes.ui
 
+import dev.inknotes.data.tr
 import android.graphics.DashPathEffect
 import android.graphics.Paint
 import androidx.compose.foundation.Canvas
@@ -85,7 +86,7 @@ fun DashDialog(c: EditorController, applyLabel: String, onApply: (DashStyle) -> 
     val paint = remember { Paint() }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Пунктир") },
+        title = { Text(tr("Пунктир", "Dashes")) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 val paper = PaperStyle.of(c.dark, c.notebook.background(c.dark).color).paper
@@ -117,15 +118,15 @@ fun DashDialog(c: EditorController, applyLabel: String, onApply: (DashStyle) -> 
                     }
                 }
                 SettingSlider(
-                    "Длина штриха",
-                    "%.1f мм".format(mm(style.dash)),
+                    tr("Длина штриха", "Dash length"),
+                    tr("%.1f мм", "%.1f mm").format(mm(style.dash)),
                     mm(style.dash),
                     MIN_MM..MAX_MM,
                     enabled = style.pattern != DashPattern.DOT,
                 ) { style = style.copy(dash = units(it)) }
                 SettingSlider(
-                    "Промежуток",
-                    "%.1f мм".format(mm(style.gap)),
+                    tr("Промежуток", "Gap"),
+                    tr("%.1f мм", "%.1f mm").format(mm(style.gap)),
                     mm(style.gap),
                     MIN_MM..MAX_MM,
                     enabled = true,
@@ -140,8 +141,8 @@ fun DashDialog(c: EditorController, applyLabel: String, onApply: (DashStyle) -> 
         },
         dismissButton = {
             Row {
-                TextButton(onClick = { style = DashStyle.DEFAULT }) { Text("Сбросить") }
-                TextButton(onClick = onDismiss) { Text("Отмена") }
+                TextButton(onClick = { style = DashStyle.DEFAULT }) { Text(tr("Сбросить", "Reset")) }
+                TextButton(onClick = onDismiss) { Text(tr("Отмена", "Cancel")) }
             }
         },
     )
@@ -151,8 +152,8 @@ fun DashDialog(c: EditorController, applyLabel: String, onApply: (DashStyle) -> 
 @Composable
 fun DashSettingsButton(c: EditorController) {
     var open by remember { mutableStateOf(false) }
-    TextButton(onClick = { open = true }) { Text("Узор: ${c.dashStyle.pattern.title}") }
-    if (open) DashDialog(c, "Готово", onApply = c::changeDashStyle, onDismiss = { open = false })
+    TextButton(onClick = { open = true }) { Text(tr("Узор: ${c.dashStyle.pattern.title}", "Pattern: ${c.dashStyle.pattern.title}")) }
+    if (open) DashDialog(c, tr("Готово", "Done"), onApply = c::changeDashStyle, onDismiss = { open = false })
 }
 
 /** Selection with dashed lines: gives them a pattern (it becomes the pen's too). */
@@ -160,9 +161,9 @@ fun DashSettingsButton(c: EditorController) {
 fun SelectionDashButton(c: EditorController) {
     if (InkKind.DASHED !in c.selectionLineKinds) return
     var open by remember { mutableStateOf(false) }
-    TextButton(onClick = { open = true }) { Text("Пунктир…") }
+    TextButton(onClick = { open = true }) { Text(tr("Пунктир…", "Dashes…")) }
     if (open) {
-        DashDialog(c, "Применить", onApply = {
+        DashDialog(c, tr("Применить", "Apply"), onApply = {
             c.changeDashStyle(it)
             c.applyDashToSelection()
         }, onDismiss = { open = false })
@@ -175,7 +176,7 @@ fun SelectionWidthButton(c: EditorController) {
     val width = c.selectionLineWidth ?: return
     var open by remember { mutableStateOf(false) }
     Box {
-        TextButton(onClick = { open = true }) { Text("Толщина ${"%.1f".format(width)} ▾") }
+        TextButton(onClick = { open = true }) { Text(tr("Толщина ${"%.1f".format(width)} ▾", "Width ${"%.1f".format(width)} ▾")) }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             Row(
                 Modifier.padding(horizontal = 16.dp, vertical = 8.dp),

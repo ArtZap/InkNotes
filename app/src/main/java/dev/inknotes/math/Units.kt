@@ -1,5 +1,6 @@
 package dev.inknotes.math
 
+import dev.inknotes.data.tr
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -35,32 +36,32 @@ object Units {
     class Unit(val name: String, val factor: Double, val dim: Dim, val shown: String)
 
     private val UNITS = listOf(
-        Unit("m", 1.0, dim(m = 1), "м"),
-        Unit("km", 1000.0, dim(m = 1), "км"),
-        Unit("cm", 0.01, dim(m = 1), "см"),
-        Unit("mm", 0.001, dim(m = 1), "мм"),
-        Unit("kg", 1.0, dim(kg = 1), "кг"),
-        Unit("g", 0.001, dim(kg = 1), "г"),
-        Unit("s", 1.0, dim(s = 1), "с"),
-        Unit("min", 60.0, dim(s = 1), "мин"),
-        Unit("h", 3600.0, dim(s = 1), "ч"),
-        Unit("N", 1.0, dim(m = 1, kg = 1, s = -2), "Н"),
-        Unit("kN", 1000.0, dim(m = 1, kg = 1, s = -2), "кН"),
-        Unit("J", 1.0, dim(m = 2, kg = 1, s = -2), "Дж"),
-        Unit("kJ", 1000.0, dim(m = 2, kg = 1, s = -2), "кДж"),
-        Unit("W", 1.0, dim(m = 2, kg = 1, s = -3), "Вт"),
-        Unit("kW", 1000.0, dim(m = 2, kg = 1, s = -3), "кВт"),
-        Unit("Pa", 1.0, dim(m = -1, kg = 1, s = -2), "Па"),
-        Unit("kPa", 1000.0, dim(m = -1, kg = 1, s = -2), "кПа"),
-        Unit("MPa", 1e6, dim(m = -1, kg = 1, s = -2), "МПа"),
-        Unit("Hz", 1.0, dim(s = -1), "Гц"),
-        Unit("A", 1.0, dim(a = 1), "А"),
-        Unit("C", 1.0, dim(s = 1, a = 1), "Кл"),
-        Unit("V", 1.0, dim(m = 2, kg = 1, s = -3, a = -1), "В"),
-        Unit("Ohm", 1.0, dim(m = 2, kg = 1, s = -3, a = -2), "Ом"),
-        Unit("K", 1.0, dim(k = 1), "К"),
-        Unit("mol", 1.0, dim(mol = 1), "моль"),
-        Unit("eV", 1.602176634e-19, dim(m = 2, kg = 1, s = -2), "эВ"),
+        Unit("m", 1.0, dim(m = 1), tr("м", "m")),
+        Unit("km", 1000.0, dim(m = 1), tr("км", "km")),
+        Unit("cm", 0.01, dim(m = 1), tr("см", "cm")),
+        Unit("mm", 0.001, dim(m = 1), tr("мм", "mm")),
+        Unit("kg", 1.0, dim(kg = 1), tr("кг", "kg")),
+        Unit("g", 0.001, dim(kg = 1), tr("г", "g")),
+        Unit("s", 1.0, dim(s = 1), tr("с", "s")),
+        Unit("min", 60.0, dim(s = 1), tr("мин", "min")),
+        Unit("h", 3600.0, dim(s = 1), tr("ч", "h")),
+        Unit("N", 1.0, dim(m = 1, kg = 1, s = -2), tr("Н", "N")),
+        Unit("kN", 1000.0, dim(m = 1, kg = 1, s = -2), tr("кН", "kN")),
+        Unit("J", 1.0, dim(m = 2, kg = 1, s = -2), tr("Дж", "J")),
+        Unit("kJ", 1000.0, dim(m = 2, kg = 1, s = -2), tr("кДж", "kJ")),
+        Unit("W", 1.0, dim(m = 2, kg = 1, s = -3), tr("Вт", "W")),
+        Unit("kW", 1000.0, dim(m = 2, kg = 1, s = -3), tr("кВт", "kW")),
+        Unit("Pa", 1.0, dim(m = -1, kg = 1, s = -2), tr("Па", "Pa")),
+        Unit("kPa", 1000.0, dim(m = -1, kg = 1, s = -2), tr("кПа", "kPa")),
+        Unit("MPa", 1e6, dim(m = -1, kg = 1, s = -2), tr("МПа", "MPa")),
+        Unit("Hz", 1.0, dim(s = -1), tr("Гц", "Hz")),
+        Unit("A", 1.0, dim(a = 1), tr("А", "A")),
+        Unit("C", 1.0, dim(s = 1, a = 1), tr("Кл", "C")),
+        Unit("V", 1.0, dim(m = 2, kg = 1, s = -3, a = -1), tr("В", "V")),
+        Unit("Ohm", 1.0, dim(m = 2, kg = 1, s = -3, a = -2), tr("Ом", "Ω")),
+        Unit("K", 1.0, dim(k = 1), tr("К", "K")),
+        Unit("mol", 1.0, dim(mol = 1), tr("моль", "mol")),
+        Unit("eV", 1.602176634e-19, dim(m = 2, kg = 1, s = -2), tr("эВ", "eV")),
     ).associateBy { it.name }
 
     /** Spellings, as the reader gives them, of each unit (Cyrillic handwriting read as Latin). */
@@ -119,12 +120,12 @@ object Units {
         } catch (x: NotQuantity) {
             return null
         }
-        if (!q.v.isFinite()) throw MathError("не определено")
+        if (!q.v.isFinite()) throw MathError(tr("не определено", "undefined"))
         return Answer.Text(listOf(format(q, used)))
     }
 
     private fun eval(e: Expr, env: Env, depth: Int): Q {
-        if (depth > 60) throw MathError("слишком глубоко")
+        if (depth > 60) throw MathError(tr("слишком глубоко", "nested too deep"))
         return when (e) {
             is Expr.Num -> Q(e.v, NONE)
             is Expr.Sym -> when {
@@ -136,14 +137,14 @@ object Units {
             is Expr.Add -> {
                 val terms = e.terms.map { eval(it, env, depth + 1) }
                 val d = terms[0].dim
-                terms.firstOrNull { it.dim != d }?.let { throw MathError("нельзя сложить ${text(d)} и ${text(it.dim)}") }
+                terms.firstOrNull { it.dim != d }?.let { throw MathError(tr("нельзя сложить ${text(d)} и ${text(it.dim)}", "cannot add ${text(d)} and ${text(it.dim)}")) }
                 Q(terms.sumOf { it.v }, d)
             }
             is Expr.Mul -> e.factors.map { eval(it, env, depth + 1) }.reduce { a, b -> Q(a.v * b.v, a.dim + b.dim) }
             is Expr.Pow -> {
                 val b = eval(e.base, env, depth + 1)
                 val x = eval(e.exp, env, depth + 1)
-                if (!x.dim.none) throw MathError("показатель степени с единицами")
+                if (!x.dim.none) throw MathError(tr("показатель степени с единицами", "exponent with units"))
                 power(b, x.v)
             }
             is Expr.Fn -> {
@@ -151,7 +152,7 @@ object Units {
                 when {
                     e.name == "sqrt" && args.size == 1 -> power(args[0], 0.5)
                     e.name == "abs" && args.size == 1 -> Q(abs(args[0].v), args[0].dim)
-                    args.any { !it.dim.none } -> throw MathError("${e.name} от величины с единицами")
+                    args.any { !it.dim.none } -> throw MathError(tr("${e.name} от величины с единицами", "${e.name} of a quantity with units"))
                     e.name in Angles.UNITS -> Q(args[0].v * Math.PI / 180, NONE)
                     else -> Q(Numeric.function(e.name, args.map { it.v }), NONE)
                 }
@@ -163,15 +164,15 @@ object Units {
     private fun power(b: Q, k: Double): Q {
         if (b.dim.none) return Q(Numeric.pow(b.v, k), NONE)
         val p = DoubleArray(N) { b.dim.p[it] * k }
-        if (p.any { abs(it - it.roundToInt()) > 1e-9 }) throw MathError("дробная степень единиц")
+        if (p.any { abs(it - it.roundToInt()) > 1e-9 }) throw MathError(tr("дробная степень единиц", "fractional power of units"))
         return Q(Numeric.pow(b.v, k), Dim(IntArray(N) { p[it].roundToInt() }))
     }
 
-    private val BASE = listOf("м", "кг", "с", "А", "К", "моль")
+    private val BASE = listOf(tr("м", "m"), tr("кг", "kg"), tr("с", "s"), tr("А", "A"), tr("К", "K"), tr("моль", "mol"))
 
     /** м/с², кг·м²/с², 1/с. */
     fun text(d: Dim): String {
-        if (d.none) return "без единиц"
+        if (d.none) return tr("без единиц", "no units")
         fun part(signs: Int) = d.p.indices.filter { d.p[it] * signs > 0 }.joinToString("·") { i ->
             val k = abs(d.p[i])
             BASE[i] + if (k > 1) Printer.superscript(k.toString()) else ""

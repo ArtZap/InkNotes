@@ -1,5 +1,6 @@
 package dev.inknotes.ui
 
+import dev.inknotes.data.tr
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -91,59 +92,59 @@ object BarCatalog {
     class Entry(val title: String, val icon: () -> ImageVector, val group: Int)
 
     val entries: Map<String, Entry> = mapOf(
-        "pen" to Entry("Ручка", { InkIcons.Pen }, 0),
-        "highlighter" to Entry("Маркер", { InkIcons.Highlighter }, 0),
-        "neon" to Entry("Неон", { InkIcons.Neon }, 0),
-        "eraser" to Entry("Ластик", { InkIcons.Eraser }, 0),
-        "lasso" to Entry("Лассо", { InkIcons.Lasso }, 0),
-        "area" to Entry("Область", { InkIcons.Area }, 0),
-        "spoiler" to Entry("Маркер подсказок", { InkIcons.Spoiler }, 0),
-        "laser" to Entry("Указка", { InkIcons.Laser }, 0),
-        "picture" to Entry("Картинка", { InkIcons.Picture }, 1),
-        "table" to Entry("Таблица", { InkIcons.Table }, 1),
-        "stamps" to Entry("Штампы", { InkIcons.Stamp }, 1),
-        "ruler" to Entry("Линейка", { InkIcons.RulerTool }, 1),
-        "protractor" to Entry("Транспортир", { InkIcons.Protractor }, 1),
-        "compass" to Entry("Циркуль", { InkIcons.Compass }, 1),
-        "zoom-window" to Entry("Окно увеличения", { InkIcons.ZoomWindow }, 1),
-        "scan" to Entry("Сканировать документ", { InkIcons.Scan }, 1),
-        "text" to Entry("Печатный текст", { InkIcons.TextBox }, 1),
-        "space" to Entry("Вставить место", { InkIcons.InsertSpace }, 1),
-        "undo" to Entry("Отменить", { InkIcons.Undo }, 2),
-        "redo" to Entry("Повторить", { InkIcons.Redo }, 2),
-        "pages" to Entry("Страницы", { InkIcons.Pages }, 3),
-        "search" to Entry("Поиск", { InkIcons.Search }, 3),
-        "page-nav" to Entry("Листать страницы", { InkIcons.PageNav }, 3),
-        "add-page" to Entry("Новая страница", { InkIcons.AddPage }, 3),
-        "toc" to Entry("Оглавление", { InkIcons.Toc }, 3),
-        "page-text" to Entry("Текст страницы", { InkIcons.PageText }, 3),
-        "math" to Entry("Ответы после «=»", { InkIcons.Calc }, 4),
-        "fractions" to Entry("Дроби в ответах", { InkIcons.Fraction }, 4),
-        "units" to Entry("Единицы измерения", { InkIcons.Units }, 4),
-        "formula" to Entry("Формула печатной", { InkIcons.Formula }, 4),
-        "layers" to Entry("Слои", { InkIcons.Layers }, 5),
-        "cards" to Entry("Карточки", { InkIcons.Cards }, 5),
-        "timer" to Entry("Таймер учёбы", { InkIcons.Timer }, 5),
-        "record" to Entry("Записать звук", { InkIcons.Mic }, 6),
-        "recordings" to Entry("Записи звука", { InkIcons.Recordings }, 6),
-        "background" to Entry("Фон", { InkIcons.Paper }, 7),
-        "page-size" to Entry("Размер страницы", { InkIcons.PageSize }, 7),
-        "page-shift" to Entry("Отступ страницы", { InkIcons.PageShift }, 7),
-        "share" to Entry("Поделиться", { InkIcons.Share }, 8),
-        "save" to Entry("Сохранить файл", { InkIcons.Save }, 8),
-        "pdf" to Entry("Экспорт: PDF, PNG", { InkIcons.Export }, 8),
-        "pdf-share" to Entry("PDF сразу", { InkIcons.PdfShare }, 8),
-        "print" to Entry("Печать", { InkIcons.Print }, 8),
-        "pdf-text" to Entry("Текст PDF", { InkIcons.PdfText }, 10),
-        "pdf-page" to Entry("Страница PDF", { InkIcons.PdfPage }, 10),
-        "pdf-dark" to Entry("Тёмный PDF", { InkIcons.PdfDark }, 10),
-        "side" to Entry("Рядом", { InkIcons.SideBySide }, 11),
-        "swap" to Entry("Поменять местами", { InkIcons.Swap }, 11),
-        "theme" to Entry("Тема", { InkIcons.AutoTheme }, 9),
-        "pen-button" to Entry("Кнопка пера", { InkIcons.PenButton }, 9),
-        "pressure" to Entry("Нажим ручки", { InkIcons.Pressure }, 9),
-        "scribble" to Entry("Стирание зачёркиванием", { InkIcons.Scribble }, 9),
-        "help" to Entry("Справка", { InkIcons.Help }, 9),
+        "pen" to Entry(tr("Ручка", "Pen"), { InkIcons.Pen }, 0),
+        "highlighter" to Entry(tr("Маркер", "Highlighter"), { InkIcons.Highlighter }, 0),
+        "neon" to Entry(tr("Неон", "Neon"), { InkIcons.Neon }, 0),
+        "eraser" to Entry(tr("Ластик", "Eraser"), { InkIcons.Eraser }, 0),
+        "lasso" to Entry(tr("Лассо", "Lasso"), { InkIcons.Lasso }, 0),
+        "area" to Entry(tr("Область", "Area"), { InkIcons.Area }, 0),
+        "spoiler" to Entry(tr("Маркер подсказок", "Hint highlighter"), { InkIcons.Spoiler }, 0),
+        "laser" to Entry(tr("Указка", "Pointer"), { InkIcons.Laser }, 0),
+        "picture" to Entry(tr("Картинка", "Picture"), { InkIcons.Picture }, 1),
+        "table" to Entry(tr("Таблица", "Table"), { InkIcons.Table }, 1),
+        "stamps" to Entry(tr("Штампы", "Stamps"), { InkIcons.Stamp }, 1),
+        "ruler" to Entry(tr("Линейка", "Ruler"), { InkIcons.RulerTool }, 1),
+        "protractor" to Entry(tr("Транспортир", "Protractor"), { InkIcons.Protractor }, 1),
+        "compass" to Entry(tr("Циркуль", "Compass"), { InkIcons.Compass }, 1),
+        "zoom-window" to Entry(tr("Окно увеличения", "Zoom window"), { InkIcons.ZoomWindow }, 1),
+        "scan" to Entry(tr("Сканировать документ", "Scan document"), { InkIcons.Scan }, 1),
+        "text" to Entry(tr("Печатный текст", "Typed text"), { InkIcons.TextBox }, 1),
+        "space" to Entry(tr("Вставить место", "Insert space"), { InkIcons.InsertSpace }, 1),
+        "undo" to Entry(tr("Отменить", "Undo"), { InkIcons.Undo }, 2),
+        "redo" to Entry(tr("Повторить", "Redo"), { InkIcons.Redo }, 2),
+        "pages" to Entry(tr("Страницы", "Pages"), { InkIcons.Pages }, 3),
+        "search" to Entry(tr("Поиск", "Search"), { InkIcons.Search }, 3),
+        "page-nav" to Entry(tr("Листать страницы", "Turn pages"), { InkIcons.PageNav }, 3),
+        "add-page" to Entry(tr("Новая страница", "New page"), { InkIcons.AddPage }, 3),
+        "toc" to Entry(tr("Оглавление", "Contents"), { InkIcons.Toc }, 3),
+        "page-text" to Entry(tr("Текст страницы", "Page text"), { InkIcons.PageText }, 3),
+        "math" to Entry(tr("Ответы после «=»", "Answers after “=”"), { InkIcons.Calc }, 4),
+        "fractions" to Entry(tr("Дроби в ответах", "Fractions in answers"), { InkIcons.Fraction }, 4),
+        "units" to Entry(tr("Единицы измерения", "Units"), { InkIcons.Units }, 4),
+        "formula" to Entry(tr("Формула печатной", "Typeset formula"), { InkIcons.Formula }, 4),
+        "layers" to Entry(tr("Слои", "Layers"), { InkIcons.Layers }, 5),
+        "cards" to Entry(tr("Карточки", "Cards"), { InkIcons.Cards }, 5),
+        "timer" to Entry(tr("Таймер учёбы", "Study timer"), { InkIcons.Timer }, 5),
+        "record" to Entry(tr("Записать звук", "Record sound"), { InkIcons.Mic }, 6),
+        "recordings" to Entry(tr("Записи звука", "Sound recordings"), { InkIcons.Recordings }, 6),
+        "background" to Entry(tr("Фон", "Background"), { InkIcons.Paper }, 7),
+        "page-size" to Entry(tr("Размер страницы", "Page size"), { InkIcons.PageSize }, 7),
+        "page-shift" to Entry(tr("Отступ страницы", "Page margin"), { InkIcons.PageShift }, 7),
+        "share" to Entry(tr("Поделиться", "Share"), { InkIcons.Share }, 8),
+        "save" to Entry(tr("Сохранить файл", "Save file"), { InkIcons.Save }, 8),
+        "pdf" to Entry(tr("Экспорт: PDF, PNG", "Export: PDF, PNG"), { InkIcons.Export }, 8),
+        "pdf-share" to Entry(tr("PDF сразу", "PDF now"), { InkIcons.PdfShare }, 8),
+        "print" to Entry(tr("Печать", "Print"), { InkIcons.Print }, 8),
+        "pdf-text" to Entry(tr("Текст PDF", "PDF text"), { InkIcons.PdfText }, 10),
+        "pdf-page" to Entry(tr("Страница PDF", "PDF page"), { InkIcons.PdfPage }, 10),
+        "pdf-dark" to Entry(tr("Тёмный PDF", "Dark PDF"), { InkIcons.PdfDark }, 10),
+        "side" to Entry(tr("Рядом", "Side by side"), { InkIcons.SideBySide }, 11),
+        "swap" to Entry(tr("Поменять местами", "Swap"), { InkIcons.Swap }, 11),
+        "theme" to Entry(tr("Тема", "Theme"), { InkIcons.AutoTheme }, 9),
+        "pen-button" to Entry(tr("Кнопка пера", "Pen button"), { InkIcons.PenButton }, 9),
+        "pressure" to Entry(tr("Нажим ручки", "Pen pressure"), { InkIcons.Pressure }, 9),
+        "scribble" to Entry(tr("Стирание зачёркиванием", "Scribble to erase"), { InkIcons.Scribble }, 9),
+        "help" to Entry(tr("Справка", "Help"), { InkIcons.Help }, 9),
     )
 
     fun title(id: String) = entries[id]?.title ?: id
@@ -230,10 +231,10 @@ fun PlaceMenu(expanded: Boolean, id: String, name: String, placing: Placing, onD
         for (z in Zone.entries) {
             if (z == now || z !in Toolbars.allowed(id)) continue
             val label = when (z) {
-                Zone.TOOLS -> "На панель инструментов"
-                Zone.TOP -> "На верхнюю панель"
-                Zone.MENU -> "Убрать в меню ⋮"
-                Zone.HIDDEN -> "Скрыть"
+                Zone.TOOLS -> tr("На панель инструментов", "To the tool bar")
+                Zone.TOP -> tr("На верхнюю панель", "To the top bar")
+                Zone.MENU -> tr("Убрать в меню ⋮", "Move to the ⋮ menu")
+                Zone.HIDDEN -> tr("Скрыть", "Hide")
             }
             DropdownMenuItem(text = { Text(label) }, onClick = {
                 onDismiss()
@@ -242,7 +243,7 @@ fun PlaceMenu(expanded: Boolean, id: String, name: String, placing: Placing, onD
         }
         HorizontalDivider()
         DropdownMenuItem(
-            text = { Text("Настроить панели…") },
+            text = { Text(tr("Настроить панели…", "Customise bars…")) },
             onClick = {
                 onDismiss()
                 placing.customize()
@@ -300,11 +301,11 @@ fun MenuRows(actions: List<BarAction>, placing: Placing?, close: () -> Unit) {
 fun AllFunctionsDialog(hidden: List<BarAction>, placing: Placing, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Все функции") },
+        title = { Text(tr("Все функции", "All functions")) },
         text = {
             Column(Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState())) {
                 Text(
-                    "Скрытые с панелей и из меню. Долгое нажатие — вернуть на панель или в меню.",
+                    tr("Скрытые с панелей и из меню. Долгое нажатие — вернуть на панель или в меню.", "Hidden from the bars and the menu. Long press to bring one back to a bar or the menu."),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -312,12 +313,12 @@ fun AllFunctionsDialog(hidden: List<BarAction>, placing: Placing, onDismiss: () 
                 MenuRows(hidden, placing, onDismiss)
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Закрыть") } },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(tr("Закрыть", "Close")) } },
         dismissButton = {
             TextButton(onClick = {
                 onDismiss()
                 placing.customize()
-            }) { Text("Настроить панели…") }
+            }) { Text(tr("Настроить панели…", "Customise bars…")) }
         },
     )
 }
@@ -329,18 +330,18 @@ fun AllFunctionsDialog(hidden: List<BarAction>, placing: Placing, onDismiss: () 
 fun ToolbarIntroDialog(onPick: (Toolbars.Preset) -> Unit, onCustomize: () -> Unit, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Какие инструменты показывать?") },
+        title = { Text(tr("Какие инструменты показывать?", "Which tools to show?")) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    "Выберите набор — потом любую кнопку можно передвинуть: долгое нажатие на неё или «⋮ → Настроить панели».",
+                    tr("Выберите набор — потом любую кнопку можно передвинуть: долгое нажатие на неё или «⋮ → Настроить панели».", "Pick a set — any button can be moved later: long press it or “⋮ → Customise bars”."),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 for (p in Toolbars.Preset.entries) PresetCard(p, onClick = { onPick(p) })
             }
         },
-        confirmButton = { TextButton(onClick = onCustomize) { Text("Настроить подробно…") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Оставить как есть") } },
+        confirmButton = { TextButton(onClick = onCustomize) { Text(tr("Настроить подробно…", "Customise in detail…")) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(tr("Оставить как есть", "Keep as is")) } },
     )
 }
 
@@ -393,7 +394,7 @@ fun CustomizeBarsDialog(initial: ToolbarLayout, onChange: (ToolbarLayout) -> Uni
         dragging = null
         val zone = sections.entries.firstOrNull { it.value.contains(pointer) }?.key ?: return
         if (zone !in Toolbars.allowed(id)) {
-            message = "«${BarCatalog.title(id)}» всегда остаётся на панели"
+            message = tr("«${BarCatalog.title(id)}» всегда остаётся на панели", "“${BarCatalog.title(id)}” always stays on the bar")
             return
         }
         // Chips before the drop point, row by row.
@@ -410,17 +411,17 @@ fun CustomizeBarsDialog(initial: ToolbarLayout, onChange: (ToolbarLayout) -> Uni
             Box(Modifier.fillMaxSize().onGloballyPositioned { rootInWindow = it.positionInWindow() }) {
                 Column(Modifier.fillMaxSize().padding(20.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Панели и меню", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-                        TextButton(onClick = { set(initial); message = null }) { Text("Отменить изменения") }
-                        Button(onClick = onDismiss) { Text("Готово") }
+                        Text(tr("Панели и меню", "Bars and menu"), style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+                        TextButton(onClick = { set(initial); message = null }) { Text(tr("Отменить изменения", "Undo changes")) }
+                        Button(onClick = onDismiss) { Text(tr("Готово", "Done")) }
                     }
                     Text(
-                        "Удерживайте кнопку и перетащите её на другую панель, в меню или в «Скрыто»; так же меняется порядок. Касание кнопки — выбрать место из списка.",
+                        tr("Удерживайте кнопку и перетащите её на другую панель, в меню или в «Скрыто»; так же меняется порядок. Касание кнопки — выбрать место из списка.", "Hold a button and drag it to another bar, the menu or “Hidden”; the order changes the same way. Tap a button to pick a place from a list."),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Column(Modifier.weight(1f).verticalScroll(rememberScrollState(), enabled = dragging == null).padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text("Готовые наборы", style = MaterialTheme.typography.titleSmall)
+                        Text(tr("Готовые наборы", "Ready-made sets"), style = MaterialTheme.typography.titleSmall)
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             for (p in Toolbars.Preset.entries) {
                                 Box(Modifier.weight(1f)) { PresetCard(p, selected = layout == p.layout, onClick = { set(p.layout) }) }
@@ -445,10 +446,10 @@ fun CustomizeBarsDialog(initial: ToolbarLayout, onChange: (ToolbarLayout) -> Uni
                                     Text(zone.title, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                                     Text(
                                         when (zone) {
-                                            Zone.TOP -> if (overflow.isEmpty()) "всё помещается" else "не помещается: ${overflow.size} — будут в начале меню"
-                                            Zone.TOOLS -> "перед толщиной и цветами"
-                                            Zone.MENU -> "по группам, с разделителями"
-                                            Zone.HIDDEN -> "доступны в «⋮ → Все функции…»"
+                                            Zone.TOP -> if (overflow.isEmpty()) tr("всё помещается", "everything fits") else tr("не помещается: ${overflow.size} — будут в начале меню", "does not fit: ${overflow.size} — they go to the top of the menu")
+                                            Zone.TOOLS -> tr("перед толщиной и цветами", "before width and colours")
+                                            Zone.MENU -> tr("по группам, с разделителями", "in groups, with dividers")
+                                            Zone.HIDDEN -> tr("доступны в «⋮ → Все функции…»", "available in “⋮ → All functions…”")
                                         },
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -459,7 +460,7 @@ fun CustomizeBarsDialog(initial: ToolbarLayout, onChange: (ToolbarLayout) -> Uni
                                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                                     verticalArrangement = Arrangement.spacedBy(6.dp),
                                 ) {
-                                    if (ids.isEmpty()) Text("Пусто — перетащите сюда", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(8.dp))
+                                    if (ids.isEmpty()) Text(tr("Пусто — перетащите сюда", "Empty — drag here"), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(8.dp))
                                     for (id in ids) {
                                         androidx.compose.runtime.key(id) {
                                             DraggableChip(
@@ -468,7 +469,7 @@ fun CustomizeBarsDialog(initial: ToolbarLayout, onChange: (ToolbarLayout) -> Uni
                                                 note = if (zone == Zone.TOP && id in overflow) "→ ⋮" else null,
                                                 layout = layout,
                                                 onPlace = { z ->
-                                                    if (z in Toolbars.allowed(id)) set(layout.moved(id, z)) else message = "«${BarCatalog.title(id)}» всегда остаётся на панели"
+                                                    if (z in Toolbars.allowed(id)) set(layout.moved(id, z)) else message = tr("«${BarCatalog.title(id)}» всегда остаётся на панели", "“${BarCatalog.title(id)}” always stays on the bar")
                                                 },
                                                 onBounds = { chips[id] = it },
                                                 onDragStart = { at ->
@@ -577,14 +578,14 @@ private fun BarsPreview(layout: ToolbarLayout, fits: List<String>, overflow: Lis
             .padding(vertical = 6.dp),
     ) {
         Text(
-            "Так будет выглядеть",
+            tr("Так будет выглядеть", "This is how it will look"),
             Modifier.padding(horizontal = 12.dp),
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             PreviewIcon(InkIcons.Back)
-            Text("Тетрадь", fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f).padding(start = 4.dp), maxLines = 1)
+            Text(tr("Тетрадь", "Notebook"), fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f).padding(start = 4.dp), maxLines = 1)
             var last = -1
             for (id in fits) {
                 if (last >= 0 && BarCatalog.group(id) != last) Spacer(Modifier.width(BarCatalog.GROUP_GAP))
@@ -613,7 +614,7 @@ private fun BarsPreview(layout: ToolbarLayout, fits: List<String>, overflow: Lis
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             for (id in layout.tools) PreviewIcon(BarCatalog.icon(id))
             Spacer(Modifier.width(12.dp))
-            Text("толщина и цвета", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(tr("толщина и цвета", "width and colours"), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -628,6 +629,6 @@ val TOP_BAR_RESERVED = 48.dp + 140.dp + 48.dp + 16.dp
 
 /** Lines of the menu for the page arrows when they are not on a bar. */
 fun pageNavMenu(c: EditorController): List<BarAction> = listOf(
-    BarAction("page-nav", "Предыдущая страница", "Предыдущая страница", InkIcons.Previous, { c.goToPage(c.pageIndex - 1) }, enabled = c.pageIndex > 0),
-    BarAction("page-nav", "Следующая страница", "Следующая страница", InkIcons.Next, { c.goToPage(c.pageIndex + 1) }, enabled = c.pageIndex < c.notebook.pageIds.lastIndex),
+    BarAction("page-nav", tr("Предыдущая страница", "Previous page"), tr("Предыдущая страница", "Previous page"), InkIcons.Previous, { c.goToPage(c.pageIndex - 1) }, enabled = c.pageIndex > 0),
+    BarAction("page-nav", tr("Следующая страница", "Next page"), tr("Следующая страница", "Next page"), InkIcons.Next, { c.goToPage(c.pageIndex + 1) }, enabled = c.pageIndex < c.notebook.pageIds.lastIndex),
 )

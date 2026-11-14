@@ -1,5 +1,6 @@
 package dev.inknotes.ui
 
+import dev.inknotes.data.tr
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
@@ -135,7 +136,7 @@ fun Splash(onDone: () -> Unit) {
             }
             Spacer(Modifier.height(12.dp))
             Text(
-                "РУКОПИСНЫЕ ТЕТРАДИ",
+                tr("РУКОПИСНЫЕ ТЕТРАДИ", "HANDWRITTEN NOTEBOOKS"),
                 fontSize = 12.sp,
                 letterSpacing = 6.sp,
                 color = colors.onSurfaceVariant,

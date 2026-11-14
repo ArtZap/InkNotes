@@ -1,5 +1,6 @@
 package dev.inknotes.ui
 
+import dev.inknotes.data.tr
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.Canvas
@@ -49,11 +50,11 @@ fun TableDialog(onDismiss: () -> Unit, onInsert: (rows: Int, cols: Int) -> Unit)
     val line = MaterialTheme.colorScheme.onSurface
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Таблица") },
+        title = { Text(tr("Таблица", "Table")) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Stepper("Строк", rows, 1..30) { rows = it }
-                Stepper("Столбцов", cols, 1..10) { cols = it }
+                Stepper(tr("Строк", "Rows"), rows, 1..30) { rows = it }
+                Stepper(tr("Столбцов", "Columns"), cols, 1..10) { cols = it }
                 Canvas(
                     Modifier
                         .fillMaxWidth()
@@ -66,14 +67,14 @@ fun TableDialog(onDismiss: () -> Unit, onInsert: (rows: Int, cols: Int) -> Unit)
                     for (c in 0..cols) drawLine(line, androidx.compose.ui.geometry.Offset(c * cw, 0f), androidx.compose.ui.geometry.Offset(c * cw, rows * rh), stroke)
                 }
                 Text(
-                    "Таблица рисуется линиями текущего цвета и толщины ручки. После вставки она выделена: перетащите её на место, уголком измените размер.",
+                    tr("Таблица рисуется линиями текущего цвета и толщины ручки. После вставки она выделена: перетащите её на место, уголком измените размер.", "The table is drawn with lines in the current pen colour and width. After inserting it is selected: drag it into place, resize it by the corner."),
                     fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         },
-        confirmButton = { Button(onClick = { onInsert(rows, cols) }) { Text("Вставить") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } },
+        confirmButton = { Button(onClick = { onInsert(rows, cols) }) { Text(tr("Вставить", "Insert")) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(tr("Отмена", "Cancel")) } },
     )
 }
 
@@ -81,9 +82,9 @@ fun TableDialog(onDismiss: () -> Unit, onInsert: (rows: Int, cols: Int) -> Unit)
 internal fun Stepper(label: String, value: Int, range: IntRange, onChange: (Int) -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(label, Modifier.width(110.dp))
-        IconAction(InkIcons.Minus, "Меньше", { onChange((value - 1).coerceIn(range)) }, enabled = value > range.first)
+        IconAction(InkIcons.Minus, tr("Меньше", "Fewer"), { onChange((value - 1).coerceIn(range)) }, enabled = value > range.first)
         Text("$value", Modifier.width(40.dp), textAlign = TextAlign.Center, fontSize = 18.sp)
-        IconAction(InkIcons.Add, "Больше", { onChange((value + 1).coerceIn(range)) }, enabled = value < range.last)
+        IconAction(InkIcons.Add, tr("Больше", "More"), { onChange((value + 1).coerceIn(range)) }, enabled = value < range.last)
     }
 }
 
@@ -93,7 +94,7 @@ fun StampDialog(onDismiss: () -> Unit, onPick: (Stamps.Stamp) -> Unit) {
     val ink = MaterialTheme.colorScheme.onSurface
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Штампы") },
+        title = { Text(tr("Штампы", "Stamps")) },
         text = {
             LazyVerticalGrid(
                 columns = GridCells.Adaptive(112.dp),
@@ -149,6 +150,6 @@ fun StampDialog(onDismiss: () -> Unit, onPick: (Stamps.Stamp) -> Unit) {
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Закрыть") } },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(tr("Закрыть", "Close")) } },
     )
 }

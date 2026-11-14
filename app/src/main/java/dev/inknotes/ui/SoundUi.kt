@@ -1,5 +1,6 @@
 package dev.inknotes.ui
 
+import dev.inknotes.data.tr
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -58,9 +59,9 @@ fun SoundBar(c: EditorController) {
     ) {
         if (since != null) {
             Text("●", color = Color(0xFFE53935))
-            Text("Запись ${clock(now - since)}", fontWeight = FontWeight.Medium)
-            Text("Пишите — написанное запомнит момент", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
-            Button(onClick = { c.stopRecording() }) { Text("Стоп") }
+            Text(tr("Запись ${clock(now - since)}", "Recording ${clock(now - since)}"), fontWeight = FontWeight.Medium)
+            Text(tr("Пишите — написанное запомнит момент", "Write — your writing remembers the moment"), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+            Button(onClick = { c.stopRecording() }) { Text(tr("Стоп", "Stop")) }
         } else if (rec != null) {
             Text(if (c.playPaused) "❚❚" else "▶")
             Text("${clock(position)} / ${clock(rec.durationMs)}")
@@ -70,9 +71,9 @@ fun SoundBar(c: EditorController) {
                 valueRange = 0f..rec.durationMs.toFloat().coerceAtLeast(1f),
                 modifier = Modifier.weight(1f),
             )
-            TextButton(onClick = { c.seekPlaying(position - 10_000) }) { Text("−10 с") }
-            TextButton(onClick = { c.togglePause() }) { Text(if (c.playPaused) "Дальше" else "Пауза") }
-            TextButton(onClick = { c.stopPlaying() }) { Text("Стоп") }
+            TextButton(onClick = { c.seekPlaying(position - 10_000) }) { Text(tr("−10 с", "−10 s")) }
+            TextButton(onClick = { c.togglePause() }) { Text(if (c.playPaused) tr("Дальше", "Resume") else tr("Пауза", "Pause")) }
+            TextButton(onClick = { c.stopPlaying() }) { Text(tr("Стоп", "Stop")) }
         }
     }
 }
@@ -83,14 +84,14 @@ fun RecordingsDialog(c: EditorController, onRecord: () -> Unit, onDismiss: () ->
     val dates = remember { java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Записи звука") },
+        title = { Text(tr("Записи звука", "Sound recordings")) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        Text("Слушать касанием написанного")
+                        Text(tr("Слушать касанием написанного", "Listen by touching your writing"))
                         Text(
-                            "Коснитесь пальцем слова — запись включится с момента, когда оно писалось. Такие места подчёркнуты.",
+                            tr("Коснитесь пальцем слова — запись включится с момента, когда оно писалось. Такие места подчёркнуты.", "Touch a word with your finger — the recording plays from the moment it was written. Such places are underlined."),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -99,7 +100,7 @@ fun RecordingsDialog(c: EditorController, onRecord: () -> Unit, onDismiss: () ->
                 }
                 HorizontalDivider()
                 if (c.notebook.recordings.isEmpty()) {
-                    Text("Записей пока нет.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(tr("Записей пока нет.", "No recordings yet."), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 } else {
                     LazyColumn(Modifier.heightIn(max = 320.dp)) {
                         items(c.notebook.recordings.reversed()) { rec ->
@@ -107,7 +108,7 @@ fun RecordingsDialog(c: EditorController, onRecord: () -> Unit, onDismiss: () ->
                                 Column(Modifier.weight(1f)) {
                                     Text(dates.format(Date(rec.startedAt)))
                                     Text(
-                                        clock(rec.durationMs) + " · отметок: ${c.notebook.audioMarks.count { it.file == rec.file }}",
+                                        clock(rec.durationMs) + tr(" · отметок: ${c.notebook.audioMarks.count { it.file == rec.file }}", " · marks: ${c.notebook.audioMarks.count { it.file == rec.file }}"),
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
@@ -124,8 +125,8 @@ fun RecordingsDialog(c: EditorController, onRecord: () -> Unit, onDismiss: () ->
             Button(enabled = c.recordingSince == null, onClick = {
                 onRecord()
                 onDismiss()
-            }) { Text("● Записать") }
+            }) { Text(tr("● Записать", "● Record")) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Закрыть") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(tr("Закрыть", "Close")) } },
     )
 }

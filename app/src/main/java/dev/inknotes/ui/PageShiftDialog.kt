@@ -1,5 +1,6 @@
 package dev.inknotes.ui
 
+import dev.inknotes.data.tr
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -27,17 +28,17 @@ fun PageShiftDialog(c: EditorController, onDismiss: () -> Unit) {
     val percent = (abs(shift) * 100).roundToInt()
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Отступ страницы") },
+        title = { Text(tr("Отступ страницы", "Page margin")) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
-                    "Свободное место сбоку от страницы — например, чтобы положить руку. Страница уменьшается и встаёт в оставшуюся часть экрана.",
+                    tr("Свободное место сбоку от страницы — например, чтобы положить руку. Страница уменьшается и встаёт в оставшуюся часть экрана.", "Free space beside the page — to rest your hand, for example. The page shrinks and fits into the rest of the screen."),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(selected = shift > 0f, onClick = { c.changePageShift(abs(shift).takeIf { it > 0f } ?: DEFAULT_SHIFT) }, label = { Text("Слева") })
-                    FilterChip(selected = shift == 0f, onClick = { c.changePageShift(0f) }, label = { Text("Нет") })
-                    FilterChip(selected = shift < 0f, onClick = { c.changePageShift(-(abs(shift).takeIf { it > 0f } ?: DEFAULT_SHIFT)) }, label = { Text("Справа") })
+                    FilterChip(selected = shift > 0f, onClick = { c.changePageShift(abs(shift).takeIf { it > 0f } ?: DEFAULT_SHIFT) }, label = { Text(tr("Слева", "Left")) })
+                    FilterChip(selected = shift == 0f, onClick = { c.changePageShift(0f) }, label = { Text(tr("Нет", "None")) })
+                    FilterChip(selected = shift < 0f, onClick = { c.changePageShift(-(abs(shift).takeIf { it > 0f } ?: DEFAULT_SHIFT)) }, label = { Text(tr("Справа", "Right")) })
                 }
                 // The page goes the way the slider does: to the right leaves room on the left.
                 InkSlider(
@@ -48,14 +49,14 @@ fun PageShiftDialog(c: EditorController, onDismiss: () -> Unit) {
                 )
                 Text(
                     when {
-                        shift > 0f -> "Слева: $percent% ширины экрана"
-                        shift < 0f -> "Справа: $percent% ширины экрана"
-                        else -> "Без отступа: страница по ширине экрана"
+                        shift > 0f -> tr("Слева: $percent% ширины экрана", "Left: $percent% of the screen width")
+                        shift < 0f -> tr("Справа: $percent% ширины экрана", "Right: $percent% of the screen width")
+                        else -> tr("Без отступа: страница по ширине экрана", "No margin: the page fills the screen width")
                     },
                 )
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Готово") } },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(tr("Готово", "Done")) } },
     )
 }
 

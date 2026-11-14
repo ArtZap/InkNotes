@@ -1,5 +1,6 @@
 package dev.inknotes.editor
 
+import dev.inknotes.data.tr
 import android.content.Context
 import android.view.KeyEvent
 
@@ -34,8 +35,8 @@ class PenButtonBinding(context: Context) {
     private fun alphabetic(e: KeyEvent) = e.device?.keyboardType == android.view.InputDevice.KEYBOARD_TYPE_ALPHABETIC
 
     fun describe(): String =
-        if (keyCode == KeyEvent.KEYCODE_UNKNOWN) "не назначена"
-        else "${KeyEvent.keyCodeToString(keyCode)} (${deviceName ?: "любое устройство"})"
+        if (keyCode == KeyEvent.KEYCODE_UNKNOWN) tr("не назначена", "not assigned")
+        else tr("${KeyEvent.keyCodeToString(keyCode)} (${deviceName ?: "любое устройство"})", "${KeyEvent.keyCodeToString(keyCode)} (${deviceName ?: "any device"})")
 
     private companion object {
         const val KEY_CODE = "keyCode"

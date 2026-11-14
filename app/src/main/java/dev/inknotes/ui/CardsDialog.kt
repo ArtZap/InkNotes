@@ -1,5 +1,6 @@
 package dev.inknotes.ui
 
+import dev.inknotes.data.tr
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -58,47 +59,47 @@ fun CardsDialog(c: EditorController, cards: List<EditorController.StudyCard>, on
         Surface(Modifier.fillMaxSize().padding(24.dp), shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surface) {
             Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Повторение", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+                    Text(tr("Повторение", "Review"), style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
                     if (cards.isNotEmpty()) {
                         Text(
-                            "Сегодня: ${queue.size} · пройдено $done · всего карточек ${cards.size}",
+                            tr("Сегодня: ${queue.size} · пройдено $done · всего карточек ${cards.size}", "Today: ${queue.size} · done $done · cards in all ${cards.size}"),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    TextButton(onClick = onDismiss) { Text("Закрыть") }
+                    TextButton(onClick = onDismiss) { Text(tr("Закрыть", "Close")) }
                 }
                 val card = queue.firstOrNull()
                 when {
                     cards.isEmpty() -> Message(
-                        "В тетради нет карточек",
-                        "Закройте маркером подсказок (кнопка с перечёркнутым глазом) то, что нужно запомнить: " +
-                            "определение, формулу, ответ. Каждая полоса станет карточкой — вопросом будет строка вокруг неё.",
+                        tr("В тетради нет карточек", "No cards in this notebook"),
+                        tr("Закройте маркером подсказок (кнопка с перечёркнутым глазом) то, что нужно запомнить: ", "Cover what you need to remember with the hint highlighter (the crossed-out eye button): ") +
+                            tr("определение, формулу, ответ. Каждая полоса станет карточкой — вопросом будет строка вокруг неё.", "a definition, a formula, an answer. Each band becomes a card — the line around it is the question."),
                     )
                     card == null -> {
                         val next = cards.mapNotNull { c.cardStates[it.key]?.due }.filter { it > today }.minOrNull()
                         Message(
-                            "На сегодня всё",
-                            (if (done > 0) "Пройдено карточек: $done. " else "") +
-                                (next?.let { "Следующие — через ${it - today} дн." } ?: ""),
+                            tr("На сегодня всё", "That's all for today"),
+                            (if (done > 0) tr("Пройдено карточек: $done. ", "Cards done: $done. ") else "") +
+                                (next?.let { tr("Следующие — через ${it - today} дн.", "Next ones in ${it - today} d.") } ?: ""),
                         )
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
                             OutlinedButton(onClick = {
                                 queue.addAll(cards)
                                 shown = false
-                            }) { Text("Повторить все сейчас") }
+                            }) { Text(tr("Повторить все сейчас", "Review all now")) }
                         }
                     }
                     else -> {
                         CardImage(c, card, shown, Modifier.weight(1f).fillMaxWidth())
                         Text(
-                            "Страница ${card.pageIndex + 1}",
+                            tr("Страница ${card.pageIndex + 1}", "Page ${card.pageIndex + 1}"),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             style = MaterialTheme.typography.bodySmall,
                         )
                         if (!shown) {
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally)) {
-                                TextButton(onClick = { c.showCard(card) }) { Text("Открыть страницу") }
-                                Button(onClick = { shown = true }, modifier = Modifier.heightIn(min = 48.dp)) { Text("Показать") }
+                                TextButton(onClick = { c.showCard(card) }) { Text(tr("Открыть страницу", "Open the page")) }
+                                Button(onClick = { shown = true }, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Показать", "Show")) }
                             }
                         } else {
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -154,7 +155,7 @@ private fun CardImage(c: EditorController, card: EditorController.StudyCard, rev
                 Modifier.clip(RoundedCornerShape(8.dp)).border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
                     .background(MaterialTheme.colorScheme.surfaceVariant),
             ) {
-                Image(img, contentDescription = if (revealed) "Ответ" else "Вопрос", contentScale = ContentScale.Fit)
+                Image(img, contentDescription = if (revealed) tr("Ответ", "Answer") else tr("Вопрос", "Question"), contentScale = ContentScale.Fit)
             }
         }
     }

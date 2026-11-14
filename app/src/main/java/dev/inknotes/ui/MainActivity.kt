@@ -1,5 +1,6 @@
 package dev.inknotes.ui
 
+import dev.inknotes.data.tr
 import android.content.Intent
 import android.graphics.Color
 import android.net.Uri
@@ -450,10 +451,10 @@ class MainActivity : ComponentActivity() {
      * "Поделиться"): asked before anything is added, as the app is offered for any binary file.
      */
     private fun importFiles(uris: List<Uri>, into: String?, outside: Boolean) {
-        libraryMessage = "Открываю " + if (uris.size == 1) "файл…" else "файлы (${uris.size})…"
+        libraryMessage = tr("Открываю ", "Opening ") + if (uris.size == 1) tr("файл…", "the file…") else tr("файлы (${uris.size})…", "files (${uris.size})…")
         repo.readImportsAsync(uris.map { uri -> { contentResolver.openInputStream(uri) } }) { set ->
             when {
-                set.items.isEmpty() -> (set.failures.firstOrNull() ?: "Не удалось открыть файл").let { m ->
+                set.items.isEmpty() -> (set.failures.firstOrNull() ?: tr("Не удалось открыть файл", "Could not open the file")).let { m ->
                     libraryMessage = m
                     editor?.showStatus(m)
                 }
@@ -481,12 +482,12 @@ class MainActivity : ComponentActivity() {
         repo.commitImportsAsync(set, replace, into) { added ->
             handwriting.indexAll()
             libraryVersion++
-            val failed = if (set.failures.isNotEmpty()) " Не открылись файлы: ${set.failures.size}." else ""
+            val failed = if (set.failures.isNotEmpty()) tr(" Не открылись файлы: ${set.failures.size}.", " Files not opened: ${set.failures.size}.") else ""
             when {
-                added.isEmpty() -> libraryMessage = "Не удалось добавить тетради.$failed"
+                added.isEmpty() -> libraryMessage = tr("Не удалось добавить тетради.$failed", "Could not add the notebooks.$failed")
                 // One shared notebook opens right away, as before.
                 added.size == 1 && set.folders.isEmpty() && failed.isEmpty() -> openNotebook(added[0])
-                else -> libraryMessage = "Добавлено тетрадей: ${added.size}" + (if (set.folders.isNotEmpty()) ", папок: ${set.folders.size}" else "") + ".$failed"
+                else -> libraryMessage = tr("Добавлено тетрадей: ${added.size}", "Notebooks added: ${added.size}") + (if (set.folders.isNotEmpty()) tr(", папок: ${set.folders.size}", ", folders: ${set.folders.size}") else "") + ".$failed"
             }
         }
     }
@@ -498,15 +499,15 @@ class MainActivity : ComponentActivity() {
             // From another app, nothing to replace: only "add or not".
             AlertDialog(
                 onDismissRequest = {},
-                title = { Text(if (single != null) "Добавить тетрадь «${single.notebook.title}»?" else "Добавить тетради: ${set.items.size}?") },
-                text = { Text("Файл открыт из другого приложения. Тетради добавятся в библиотеку, ваши не изменятся.") },
-                confirmButton = { Button(onClick = { commit(set, into, replace = false) }) { Text("Добавить") } },
+                title = { Text(if (single != null) tr("Добавить тетрадь «${single.notebook.title}»?", "Add the notebook “${single.notebook.title}”?") else tr("Добавить тетради: ${set.items.size}?", "Add notebooks: ${set.items.size}?")) },
+                text = { Text(tr("Файл открыт из другого приложения. Тетради добавятся в библиотеку, ваши не изменятся.", "The file was opened from another app. The notebooks are added to the library; yours stay as they are.")) },
+                confirmButton = { Button(onClick = { commit(set, into, replace = false) }) { Text(tr("Добавить", "Add")) } },
                 dismissButton = {
                     TextButton(onClick = {
                         pendingImport = null
                         libraryMessage = null
                         repo.discardImports(set)
-                    }) { Text("Отмена") }
+                    }) { Text(tr("Отмена", "Cancel")) }
                 },
             )
             return
@@ -514,18 +515,18 @@ class MainActivity : ComponentActivity() {
         AlertDialog(
             onDismissRequest = {},
             title = {
-                Text(if (single != null) "Тетрадь «${single.notebook.title}» уже есть" else "Некоторые тетради уже есть: ${set.conflicts} из ${set.items.size}")
+                Text(if (single != null) tr("Тетрадь «${single.notebook.title}» уже есть", "The notebook “${single.notebook.title}” is already here") else tr("Некоторые тетради уже есть: ${set.conflicts} из ${set.items.size}", "Some notebooks are already here: ${set.conflicts} of ${set.items.size}"))
             },
             text = {
                 Text(
-                    "Заменить ваши версии полученными (ваши несохранённые в файл изменения пропадут) " +
-                        "или сохранить полученные как отдельные копии? Новые тетради добавятся в любом случае.",
+                    tr("Заменить ваши версии полученными (ваши несохранённые в файл изменения пропадут) ", "Replace your versions with the received ones (your changes not saved to a file will be lost) ") +
+                        tr("или сохранить полученные как отдельные копии? Новые тетради добавятся в любом случае.", "or keep the received ones as separate copies? New notebooks are added either way."),
                 )
             },
             confirmButton = {
                 Column {
-                    Button(onClick = { commit(set, into, replace = true) }) { Text("Заменить") }
-                    OutlinedButton(onClick = { commit(set, into, replace = false) }) { Text("Сохранить копии") }
+                    Button(onClick = { commit(set, into, replace = true) }) { Text(tr("Заменить", "Replace")) }
+                    OutlinedButton(onClick = { commit(set, into, replace = false) }) { Text(tr("Сохранить копии", "Keep copies")) }
                 }
             },
             dismissButton = {
@@ -533,7 +534,7 @@ class MainActivity : ComponentActivity() {
                     pendingImport = null
                     libraryMessage = null
                     repo.discardImports(set)
-                }) { Text("Отмена") }
+                }) { Text(tr("Отмена", "Cancel")) }
             },
         )
     }
@@ -662,7 +663,7 @@ class MainActivity : ComponentActivity() {
             return
         }
         if (target.size >= MAX_TABS) {
-            (focused ?: editor)?.showStatus("В той половине уже $MAX_TABS вкладок — закройте одну, чтобы перенести сюда ещё")
+            (focused ?: editor)?.showStatus(tr("В той половине уже $MAX_TABS вкладок — закройте одну, чтобы перенести сюда ещё", "That half already has $MAX_TABS tabs — close one to move another there"))
             return
         }
         t.flush()
@@ -731,7 +732,7 @@ class MainActivity : ComponentActivity() {
                     contentAlignment = androidx.compose.ui.Alignment.Center,
                 ) {
                     Text(
-                        if (side != null) "Отпустите — вкладка переедет сюда" else "Отпустите — тетрадь откроется рядом",
+                        if (side != null) tr("Отпустите — вкладка переедет сюда", "Release — the tab moves here") else tr("Отпустите — тетрадь откроется рядом", "Release — the notebook opens side by side"),
                         color = accent,
                         modifier = androidx.compose.ui.Modifier.padding(16.dp),
                     )

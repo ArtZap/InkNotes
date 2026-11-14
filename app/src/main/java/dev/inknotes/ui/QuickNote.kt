@@ -1,5 +1,6 @@
 package dev.inknotes.ui
 
+import dev.inknotes.data.tr
 import android.app.KeyguardManager
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
@@ -28,7 +29,7 @@ import kotlinx.coroutines.launch
 
 /** The notebook of quick notes: made the first time, an empty page at its end to write on. */
 object QuickNotes {
-    const val TITLE = "Быстрые заметки"
+    val TITLE: String get() = tr("Быстрые заметки", "Quick notes")
 
     /** Asked to open a notebook (from the widget): its id. */
     const val EXTRA_NOTEBOOK = "dev.inknotes.NOTEBOOK"
@@ -101,7 +102,7 @@ class QuickNoteActivity : ComponentActivity() {
             val dark = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
             controller = EditorController(services.repo, nb, penButton, prefs, dark, services.handwriting, services.math).also {
                 it.openAtPage = nb.pageIds.lastIndex
-                it.showStatus(if (locked) "Быстрая заметка поверх экрана блокировки: видна только эта страница. Она допишется в «Быстрые заметки», остальное — после разблокировки" else "Быстрая заметка: пишите, она сохранится сама")
+                it.showStatus(if (locked) tr("Быстрая заметка поверх экрана блокировки: видна только эта страница. Она допишется в «Быстрые заметки», остальное — после разблокировки", "Quick note over the lock screen: only this page is visible. It will be added to “Quick notes”; everything else after unlocking") else tr("Быстрая заметка: пишите, она сохранится сама", "Quick note: just write, it saves itself"))
             }
         }
         setContent {

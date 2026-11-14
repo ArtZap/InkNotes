@@ -36,12 +36,12 @@ class DriveError(message: String, val code: Int = 0) : IOException(message) {
     fun friendly(): String {
         val m = message.orEmpty()
         return when {
-            m.contains("storageQuotaExceeded") || m.contains("quotaExceeded") && code == 403 -> "На Google Диске закончилось место"
-            code == 429 || m.contains("rateLimitExceeded") -> "Google Диск просит подождать: синхронизация продолжится позже"
-            code in 500..599 -> "Google Диск сейчас недоступен, синхронизация продолжится позже"
-            code == 401 || code == 403 -> "Нет доступа к Google Диску — войдите снова"
-            code == 404 -> "Файл на Google Диске не найден — синхронизация продолжится в следующий раз"
-            code != 0 -> "Ошибка Google Диска (код $code)"
+            m.contains("storageQuotaExceeded") || m.contains("quotaExceeded") && code == 403 -> tr("На Google Диске закончилось место", "Your Google Drive is full")
+            code == 429 || m.contains("rateLimitExceeded") -> tr("Google Диск просит подождать: синхронизация продолжится позже", "Google Drive asks to wait: syncing will continue later")
+            code in 500..599 -> tr("Google Диск сейчас недоступен, синхронизация продолжится позже", "Google Drive is unavailable right now, syncing will continue later")
+            code == 401 || code == 403 -> tr("Нет доступа к Google Диску — войдите снова", "No access to Google Drive — sign in again")
+            code == 404 -> tr("Файл на Google Диске не найден — синхронизация продолжится в следующий раз", "A file on Google Drive was not found — syncing will continue next time")
+            code != 0 -> tr("Ошибка Google Диска (код $code)", "Google Drive error (code $code)")
             else -> m.take(200)
         }
     }
@@ -269,8 +269,8 @@ class DriveClient(private val token: () -> String, private val refresh: () -> St
                         val page = if (reply == GoogleAuth.Reply.Other) "" else
                             "<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width'>" +
                                 "<body style='font:18px sans-serif;padding:32px;text-align:center'>" +
-                                (if (ok) "<h2>Готово</h2><p>InkNotes подключён к Google Диску.</p>" else "<h2>Вход не выполнен</h2>") +
-                                "<p><a href='inknotes://sync' style='font-size:20px'>Вернуться в InkNotes</a></p></body>"
+                                (if (ok) tr("<h2>Готово</h2><p>InkNotes подключён к Google Диску.</p>", "<h2>Done</h2><p>InkNotes is connected to Google Drive.</p>") else tr("<h2>Вход не выполнен</h2>", "<h2>Sign-in failed</h2>")) +
+                                tr("<p><a href='inknotes://sync' style='font-size:20px'>Вернуться в InkNotes</a></p></body>", "<p><a href='inknotes://sync' style='font-size:20px'>Back to InkNotes</a></p></body>")
                         val status = if (reply == GoogleAuth.Reply.Other) "404 Not Found" else "200 OK"
                         val bytes = page.toByteArray()
                         s.getOutputStream().apply {

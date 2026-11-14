@@ -26,17 +26,17 @@ import java.util.zip.ZipOutputStream
 import kotlin.math.max
 
 enum class PaperKind(val title: String) {
-    BLANK("Чистая"),
-    LINED("Линейка"),
-    FINE_LINED("Мелкая линейка"),
-    GRID("Клетка"),
-    DASH_GRID("Клетка пунктиром"),
-    DOTS("Точки"),
-    MILLIMETER("Миллиметровка"),
-    MUSIC("Нотный стан"),
-    CORNELL("Конспект Корнелла"),
-    PLANNER("Неделя"),
-    PHOTO("Фото"),
+    BLANK(tr("Чистая", "Blank")),
+    LINED(tr("Линейка", "Lined")),
+    FINE_LINED(tr("Мелкая линейка", "Narrow lined")),
+    GRID(tr("Клетка", "Grid")),
+    DASH_GRID(tr("Клетка пунктиром", "Dotted grid")),
+    DOTS(tr("Точки", "Dots")),
+    MILLIMETER(tr("Миллиметровка", "Graph paper")),
+    MUSIC(tr("Нотный стан", "Music staff")),
+    CORNELL(tr("Конспект Корнелла", "Cornell notes")),
+    PLANNER(tr("Неделя", "Week")),
+    PHOTO(tr("Фото", "Photo")),
 }
 
 /**
@@ -55,7 +55,7 @@ enum class PaperFormat(val title: String, val widthMm: Float, val heightMm: Floa
     B5("B5", 176f, 250f),
     LETTER("Letter", 215.9f, 279.4f),
     LEGAL("Legal", 215.9f, 355.6f),
-    SQUARE("Квадрат", 210f, 210f),
+    SQUARE(tr("Квадрат", "Square"), 210f, 210f),
 }
 
 /**
@@ -208,7 +208,7 @@ data class Notebook(
     fun coverColor(): Int = cover ?: DEFAULT_COVERS[(id.hashCode() and 0x7fffffff) % DEFAULT_COVERS.size]
 
     companion object {
-        const val MAIN_LAYER = "Основной"
+        val MAIN_LAYER: String get() = tr("Основной", "Main")
         const val PAGE_UNITS = 1000f
         const val MM_PER_POINT = 25.4f / 72f
 
@@ -413,7 +413,7 @@ class NotebookRepository(filesDir: File) {
             val created = pages.minOfOrNull { it.lastModified() } ?: now
             val bg = PageBackground(PaperKind.BLANK)
             val ids = pages.map { it.name.removeSuffix(".ink") }.ifEmpty { listOf(newId()) }
-            Notebook(dir.name, "Восстановленная тетрадь", bg, bg, created, now, ids).also(::writeMetaNow)
+            Notebook(dir.name, tr("Восстановленная тетрадь", "Recovered notebook"), bg, bg, created, now, ids).also(::writeMetaNow)
         }.onFailure { Log.e(TAG, "could not recover ${dir.name}", it) }.getOrNull()
     }
 
@@ -659,7 +659,7 @@ class NotebookRepository(filesDir: File) {
 
     /** The folder list, or null when it can't be read now (then nothing may be written over it). */
     private fun readFoldersOrNull(): List<Folder>? = runCatching { readFolders() }.getOrElse {
-        foldersProblem = "Не удалось прочитать список папок; изменения папок не сохранены. Попробуйте ещё раз."
+        foldersProblem = tr("Не удалось прочитать список папок; изменения папок не сохранены. Попробуйте ещё раз.", "Could not read the folder list; folder changes were not saved. Try again.")
         null
     }
 
@@ -742,7 +742,7 @@ class NotebookRepository(filesDir: File) {
             val aside = File(root, "$FOLDERS.broken-${System.currentTimeMillis()}")
             if (!file.renameTo(aside)) throw IOException("folder list damaged and can't be moved aside", e)
             Log.w(TAG, "folder list damaged, kept as ${aside.name}", e)
-            foldersProblem = "Список папок повреждён: тетради показаны без папок. Старый список сохранён в файле ${aside.name}."
+            foldersProblem = tr("Список папок повреждён: тетради показаны без папок. Старый список сохранён в файле ${aside.name}.", "The folder list is damaged: notebooks are shown without folders. The old list is kept in the file ${aside.name}.")
             emptyList()
         }
         // A missing parent or a loop (from a damaged file) puts the folder at the top level.
@@ -1379,14 +1379,14 @@ class NotebookRepository(filesDir: File) {
                         }
                     }
                 } catch (e: ArchiveError) {
-                    failures += e.message ?: "Не удалось открыть файл"
+                    failures += e.message ?: tr("Не удалось открыть файл", "Could not open the file")
                 } catch (e: Throwable) {
-                    failures += "Не удалось открыть файл"
+                    failures += tr("Не удалось открыть файл", "Could not open the file")
                 }
                 if (items.size > MAX_BUNDLE_NOTEBOOKS) {
                     items.forEach { deleteQuietly(it.ready.staging) }
                     items.clear()
-                    failures += "Слишком много тетрадей в файле"
+                    failures += tr("Слишком много тетрадей в файле", "Too many notebooks in the file")
                     break
                 }
             }
@@ -1436,7 +1436,7 @@ class NotebookRepository(filesDir: File) {
                         SafeFiles.replaceDir(ready.staging, dir(ready.notebook.id))
                         ready.notebook.copy(folder = folder, favorite = existing?.favorite == true).also { writeMetaNow(it) }
                     } else {
-                        val copy = ready.notebook.copy(id = newId(), title = "${ready.notebook.title} (копия)".take(MAX_TITLE), folder = folder)
+                        val copy = ready.notebook.copy(id = newId(), title = tr("${ready.notebook.title} (копия)", "${ready.notebook.title} (copy)").take(MAX_TITLE), folder = folder)
                         if (!ready.staging.renameTo(dir(copy.id))) throw IOException("rename failed")
                         writeMetaNow(copy)
                         copy
@@ -1471,7 +1471,7 @@ class NotebookRepository(filesDir: File) {
                 ZipInputStream(input.buffered()).use { zip ->
                     while (true) {
                         val entry = zip.nextEntry ?: break
-                        if (++entries > MAX_BUNDLE_NOTEBOOKS + 1) throw ArchiveError("Слишком много тетрадей в файле")
+                        if (++entries > MAX_BUNDLE_NOTEBOOKS + 1) throw ArchiveError(tr("Слишком много тетрадей в файле", "Too many notebooks in the file"))
                         val name = entry.name
                         when {
                             name == BUNDLE_MANIFEST && manifest == null -> {
@@ -1485,7 +1485,7 @@ class NotebookRepository(filesDir: File) {
                                 total += counted.count + readCapped(zip, MAX_ARCHIVE_ENTRY_BYTES, keep = false).size.toLong()
                                 if (total > MAX_BUNDLE_BYTES) {
                                     if (r is ArchiveImport.Ready) deleteQuietly(r.staging)
-                                    throw ArchiveError("Файл слишком большой")
+                                    throw ArchiveError(tr("Файл слишком большой", "The file is too large"))
                                 }
                                 when (r) {
                                     is ArchiveImport.Ready -> staged[name] = r
@@ -1500,14 +1500,14 @@ class NotebookRepository(filesDir: File) {
                     }
                 }
             }
-            val m = manifest ?: throw ArchiveError("Это не файл тетрадей InkNotes")
-            if (m.optString("format") != BUNDLE_FORMAT) throw ArchiveError("Это не файл тетрадей InkNotes")
-            if (m.optInt("version", Int.MAX_VALUE) > BUNDLE_VERSION) throw ArchiveError("Файл создан более новой версией приложения")
+            val m = manifest ?: throw ArchiveError(tr("Это не файл тетрадей InkNotes", "This is not an InkNotes notebooks file"))
+            if (m.optString("format") != BUNDLE_FORMAT) throw ArchiveError(tr("Это не файл тетрадей InkNotes", "This is not an InkNotes notebooks file"))
+            if (m.optInt("version", Int.MAX_VALUE) > BUNDLE_VERSION) throw ArchiveError(tr("Файл создан более новой версией приложения", "The file was made by a newer version of the app"))
             val folderJson = m.optJSONArray("folders") ?: JSONArray()
             val folders = (0 until minOf(folderJson.length(), MAX_BUNDLE_FOLDERS)).mapNotNull { i ->
                 val o = folderJson.optJSONObject(i) ?: return@mapNotNull null
                 val id = o.optString("id").takeIf { UUID_RE.matches(it) } ?: return@mapNotNull null
-                Folder(id, o.optString("name").take(MAX_TITLE).ifBlank { "Папка" }, o.optString("parent").takeIf { UUID_RE.matches(it) })
+                Folder(id, o.optString("name").take(MAX_TITLE).ifBlank { tr("Папка", "Folder") }, o.optString("parent").takeIf { UUID_RE.matches(it) })
             }.distinctBy { it.id }
             val ids = folders.map { it.id }.toSet()
             val list = m.optJSONArray("notebooks") ?: JSONArray()
@@ -1537,7 +1537,7 @@ class NotebookRepository(filesDir: File) {
             val r = input.read(buf)
             if (r < 0) break
             n += r
-            if (n > cap) throw ArchiveError("Файл слишком большой")
+            if (n > cap) throw ArchiveError(tr("Файл слишком большой", "The file is too large"))
             if (keep) out.write(buf, 0, r)
         }
         return out.toByteArray()
@@ -1577,18 +1577,18 @@ class NotebookRepository(filesDir: File) {
             staging.mkdirs()
             (open() ?: throw IOException("cannot open file")).use { unpack(it, staging, budget) }
             val manifest = File(staging, ARCHIVE_MANIFEST).takeIf { it.isFile }
-                ?.let { f -> JSONObject(String(f.inputStream().use { readCapped(it, MAX_JSON_BYTES) })) } ?: throw ArchiveError("Это не файл тетради InkNotes")
-            if (manifest.optString("format") != ARCHIVE_FORMAT) throw ArchiveError("Это не файл тетради InkNotes")
+                ?.let { f -> JSONObject(String(f.inputStream().use { readCapped(it, MAX_JSON_BYTES) })) } ?: throw ArchiveError(tr("Это не файл тетради InkNotes", "This is not an InkNotes notebook file"))
+            if (manifest.optString("format") != ARCHIVE_FORMAT) throw ArchiveError(tr("Это не файл тетради InkNotes", "This is not an InkNotes notebook file"))
             if (manifest.optInt("version", Int.MAX_VALUE) > ARCHIVE_VERSION) {
-                throw ArchiveError("Файл создан более новой версией приложения")
+                throw ArchiveError(tr("Файл создан более новой версией приложения", "The file was made by a newer version of the app"))
             }
-            val nb = runCatching { readMeta(staging).copy(folder = null) }.getOrElse { throw ArchiveError("Файл тетради повреждён") }
+            val nb = runCatching { readMeta(staging).copy(folder = null) }.getOrElse { throw ArchiveError(tr("Файл тетради повреждён", "The notebook file is damaged")) }
             for (pageId in nb.pageIds) {
                 val page = File(staging, "pages/$pageId.ink")
                 if (page.isFile) {
                     runCatching { PageCodec.read(page) }.getOrElse {
                         throw ArchiveError(
-                            if (it is NewerFormatException) "Файл создан более новой версией приложения — обновите InkNotes" else "Страница в файле повреждена",
+                            if (it is NewerFormatException) tr("Файл создан более новой версией приложения — обновите InkNotes", "The file was made by a newer version of the app — update InkNotes") else tr("Страница в файле повреждена", "A page in the file is damaged"),
                         )
                     }
                 }
@@ -1597,10 +1597,10 @@ class NotebookRepository(filesDir: File) {
             ArchiveImport.Ready(nb, staging, existing)
         } catch (e: ArchiveError) {
             deleteQuietly(staging)
-            ArchiveImport.Failed(e.message ?: "Не удалось открыть файл")
+            ArchiveImport.Failed(e.message ?: tr("Не удалось открыть файл", "Could not open the file"))
         } catch (e: Throwable) {
             deleteQuietly(staging)
-            ArchiveImport.Failed("Не удалось открыть файл")
+            ArchiveImport.Failed(tr("Не удалось открыть файл", "Could not open the file"))
         }
         return result
     }
@@ -1624,7 +1624,7 @@ class NotebookRepository(filesDir: File) {
                 } else {
                     val copy = ready.notebook.copy(
                         id = newId(),
-                        title = "${ready.notebook.title} (копия)".take(MAX_TITLE),
+                        title = tr("${ready.notebook.title} (копия)", "${ready.notebook.title} (copy)").take(MAX_TITLE),
                         folder = folder,
                     )
                     if (!ready.staging.renameTo(dir(copy.id))) throw IOException("rename failed")
@@ -1662,13 +1662,13 @@ class NotebookRepository(filesDir: File) {
         ZipInputStream(input.buffered()).use { zip ->
             while (true) {
                 val entry = zip.nextEntry ?: break
-                if (++entries > MAX_ARCHIVE_ENTRIES) throw ArchiveError("Файл слишком большой")
+                if (++entries > MAX_ARCHIVE_ENTRIES) throw ArchiveError(tr("Файл слишком большой", "The file is too large"))
                 budget.entry()
                 val name = entry.name
                 // Unknown entries are still read (with the same caps): ZipInputStream would
                 // otherwise inflate them in full, unbounded, when moving to the next entry.
                 val keep = !entry.isDirectory && isArchiveName(name)
-                if (keep && !seen.add(name)) throw ArchiveError("Файл тетради повреждён")
+                if (keep && !seen.add(name)) throw ArchiveError(tr("Файл тетради повреждён", "The notebook file is damaged"))
                 val target = if (keep) File(staging, name).also { it.parentFile?.mkdirs() } else null
                 (target?.outputStream() ?: DiscardStream).use { out ->
                     val buf = ByteArray(64 * 1024)
@@ -1678,7 +1678,7 @@ class NotebookRepository(filesDir: File) {
                         if (n < 0) break
                         written += n
                         total += n
-                        if (written > MAX_ARCHIVE_ENTRY_BYTES || total > MAX_ARCHIVE_BYTES) throw ArchiveError("Файл слишком большой")
+                        if (written > MAX_ARCHIVE_ENTRY_BYTES || total > MAX_ARCHIVE_BYTES) throw ArchiveError(tr("Файл слишком большой", "The file is too large"))
                         budget.spend(n)
                         out.write(buf, 0, n)
                     }
@@ -1691,11 +1691,11 @@ class NotebookRepository(filesDir: File) {
     private class Budget(private var bytes: Long, private var entries: Int) {
         fun spend(n: Int) {
             bytes -= n
-            if (bytes < 0) throw ArchiveError("Файл слишком большой")
+            if (bytes < 0) throw ArchiveError(tr("Файл слишком большой", "The file is too large"))
         }
 
         fun entry() {
-            if (--entries < 0) throw ArchiveError("Файл слишком большой")
+            if (--entries < 0) throw ArchiveError(tr("Файл слишком большой", "The file is too large"))
         }
     }
 
@@ -2104,7 +2104,7 @@ class NotebookRepository(filesDir: File) {
 
     private companion object {
         const val TRASH_DAYS = 30
-        private const val OLD_COPY = " (старая копия)"
+        private val OLD_COPY: String get() = tr(" (старая копия)", " (old copy)")
         const val TAG = "NotebookRepository"
         const val META = "notebook.json"
         private const val TOUCHED = "touched"

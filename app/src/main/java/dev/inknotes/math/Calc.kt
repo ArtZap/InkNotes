@@ -1,5 +1,6 @@
 package dev.inknotes.math
 
+import dev.inknotes.data.tr
 import dev.inknotes.math.Expr.Add
 import dev.inknotes.math.Expr.Apply
 import dev.inknotes.math.Expr.Deriv
@@ -98,13 +99,13 @@ object Calc {
             return when (val v = Numeric.eval(r)) {
                 is Scalar -> {
                     // ∞ only when it was written: 9^9^9 is just too big to show.
-                    if (v.v.isInfinite() && runCatching { Printer.expr(e) }.getOrNull()?.contains("∞") != true) throw MathError("слишком большое число")
+                    if (v.v.isInfinite() && runCatching { Printer.expr(e) }.getOrNull()?.contains("∞") != true) throw MathError(tr("слишком большое число", "number too large"))
                     Answer.Text(listOf(Angles.answer(e, v.v, env) ?: Printer.value(v.v)))
                 }
                 is Matrix -> Answer.Grid(List(v.rows) { i -> List(v.cols) { j -> Printer.value(v[i, j]) } })
             }
         }
-        if (containsMatrix(r)) throw MathError("матрица с неизвестными")
+        if (containsMatrix(r)) throw MathError(tr("матрица с неизвестными", "matrix with unknowns"))
         val s = Algebra.simplify(r)
         val text = Printer.expr(s) + if (flags.indefinite) " + C" else ""
         if (!flags.calculus && runCatching { Printer.expr(r) }.getOrNull() == text) return null
@@ -163,9 +164,9 @@ object Calc {
         val unknowns = residuals.flatMap { Algebra.freeVars(it) }.distinct().sorted()
         if (unknowns.isEmpty()) {
             val ok = residuals.all { kotlin.math.abs(Numeric.scalar(it, emptyMap())) < 1e-9 }
-            return Answer.Text(listOf(if (ok) "верно" else "неверно"))
+            return Answer.Text(listOf(if (ok) tr("верно", "true") else tr("неверно", "false")))
         }
-        if (unknowns.size > MAX_UNKNOWNS) throw MathError("слишком много неизвестных")
+        if (unknowns.size > MAX_UNKNOWNS) throw MathError(tr("слишком много неизвестных", "too many unknowns"))
         // sin x = 1/2: every solution, as x = π/6 + 2πk.
         if (unknowns.size == 1 && residuals.size == 1) {
             Angles.periodic(residuals[0], unknowns[0], inDegrees)?.let { return Answer.Text(it) }
@@ -186,8 +187,8 @@ object Calc {
         }
         val show: (Double) -> String = if (inDegrees) Angles::degrees else Printer::value
         return when (val res = Solver.solve(residuals, unknowns)) {
-            Solver.Result.NoSolution -> Answer.Text(listOf("нет решений"))
-            Solver.Result.Infinite -> Answer.Text(listOf("∞ решений"))
+            Solver.Result.NoSolution -> Answer.Text(listOf(tr("нет решений", "no solutions")))
+            Solver.Result.Infinite -> Answer.Text(listOf(tr("∞ решений", "∞ solutions")))
             is Solver.Result.Points -> {
                 val names = unknowns.map(Printer::name)
                 val lines = ArrayList<String>()
@@ -210,7 +211,7 @@ object Calc {
 
     /** Chains like f₂(x) = f₁(x)·f₁(x) double in size at every step; stop them early. */
     private fun bounded(e: Expr): Expr {
-        if (Algebra.size(e, MAX_NODES) > MAX_NODES) throw MathError("слишком длинно")
+        if (Algebra.size(e, MAX_NODES) > MAX_NODES) throw MathError(tr("слишком длинно", "too long"))
         return e
     }
 
@@ -246,11 +247,11 @@ object Calc {
      * differentiation variables are not replaced inside their own scope.
      */
     private fun resolve(e: Expr, env: Env, bound: Set<String>, flags: Flags): Expr {
-        if (++flags.depth > MAX_RESOLVE) throw MathError("слишком глубоко")
+        if (++flags.depth > MAX_RESOLVE) throw MathError(tr("слишком глубоко", "nested too deep"))
         // Letters naming letters (a = bb, b = cc…) double the work at each step: a total bound.
         if (++flags.visits > MAX_VISITS) {
             flags.depth--
-            throw MathError("слишком сложно")
+            throw MathError(tr("слишком сложно", "too complex"))
         }
         try {
             return when (e) {
@@ -283,13 +284,13 @@ object Calc {
                     val f = if (e.name in bound) null else env.function(e.name)
                     when {
                         f != null -> {
-                            if (args.size != 1) throw MathError("${e.name}: один аргумент")
+                            if (args.size != 1) throw MathError(tr("${e.name}: один аргумент", "${e.name}: one argument"))
                             var body = f.second
                             repeat(e.primes) { body = Algebra.derivative(body, f.first) }
                             bounded(Algebra.substitute(body, f.first, args[0]))
                         }
                         e.primes == 0 && args.size == 1 -> Mul(listOf(resolve(Sym(e.name), env, bound, flags), args[0]))
-                        else -> throw MathError("функция ${e.name} не задана")
+                        else -> throw MathError(tr("функция ${e.name} не задана", "function ${e.name} is not defined"))
                     }
                 }
                 is Deriv -> {
@@ -306,18 +307,18 @@ object Calc {
                     val body = resolve(e.body, env, bound + e.v, flags)
                     if (e.lo == null || e.hi == null) {
                         flags.indefinite = true
-                        Algebra.integrate(body, e.v) ?: throw MathError("не берётся в элементарных функциях")
+                        Algebra.integrate(body, e.v) ?: throw MathError(tr("не берётся в элементарных функциях", "has no elementary antiderivative"))
                     } else {
                         val lo = resolve(e.lo, env, bound, flags)
                         val hi = resolve(e.hi, env, bound, flags)
                         // Each point of an outer integral would run a whole inner one.
-                        if (Algebra.containsIntegral(body)) throw MathError("вложенный интеграл")
+                        if (Algebra.containsIntegral(body)) throw MathError(tr("вложенный интеграл", "nested integral"))
                         val params = Algebra.freeVars(body) - e.v
                         if (params.isEmpty()) {
                             Integral(body, e.v, lo, hi)
                         } else {
                             // Parameters left: F(b) − F(a) symbolically.
-                            val f = Algebra.integrate(body, e.v) ?: throw MathError("не берётся в элементарных функциях")
+                            val f = Algebra.integrate(body, e.v) ?: throw MathError(tr("не берётся в элементарных функциях", "has no elementary antiderivative"))
                             Expr.sub(Algebra.substitute(f, e.v, hi), Algebra.substitute(f, e.v, lo))
                         }
                     }

@@ -1,5 +1,6 @@
 package dev.inknotes.math
 
+import dev.inknotes.data.tr
 import dev.inknotes.math.Expr.Add
 import dev.inknotes.math.Expr.Apply
 import dev.inknotes.math.Expr.Deriv
@@ -224,7 +225,7 @@ object Algebra {
             var terms: List<Expr> = listOf(Expr.ONE)
             for (f in e.factors.map(::expand)) {
                 val parts = if (f is Add) f.terms else listOf(f)
-                if (terms.size * parts.size > MAX_EXPANDED_TERMS) throw MathError("слишком длинно")
+                if (terms.size * parts.size > MAX_EXPANDED_TERMS) throw MathError(tr("слишком длинно", "too long"))
                 terms = terms.flatMap { t -> parts.map { p -> mul(listOf(t, p)) } }
             }
             add(terms)
@@ -283,7 +284,7 @@ object Algebra {
             }
         }
         is Mat -> Mat(e.rows.map { r -> r.map { d(it, v) } })
-        is Integral, is Apply, is Deriv -> throw MathError("производная")
+        is Integral, is Apply, is Deriv -> throw MathError(tr("производная", "derivative"))
     }
 
     /** f'(u) for a function f(u). */
@@ -310,7 +311,7 @@ object Algebra {
             "exp" -> f
             "sqrt" -> Pow(mul(listOf(Num(2.0), f)), inv)
             "abs" -> mul(listOf(u, Pow(f, inv)))
-            else -> throw MathError("производная ${f.name}")
+            else -> throw MathError(tr("производная ${f.name}", "derivative of ${f.name}"))
         }
     }
 

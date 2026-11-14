@@ -1,5 +1,6 @@
 package dev.inknotes.math
 
+import dev.inknotes.data.tr
 import dev.inknotes.math.Expr.Add
 import dev.inknotes.math.Expr.Fn
 import dev.inknotes.math.Expr.Mul
@@ -93,7 +94,7 @@ object Angles {
     fun answer(e: Expr, v: Double, env: Env): String? {
         if (isAngle(e, env)) {
             // "30° =" alone asks for radians.
-            if (literal(e)) return (piForm(v) ?: Printer.number(v)) + " рад"
+            if (literal(e)) return (piForm(v) ?: Printer.number(v)) + tr(" рад", " rad")
             return degrees(v, dms = hasMinutes(e))
         }
         if (v != 0.0 && inverse(e)) {
@@ -127,7 +128,7 @@ object Angles {
 
     /** [rad] in degrees: 75°, 22,5°, or 60°30′ when minutes were written. */
     fun degrees(rad: Double, dms: Boolean = false): String {
-        if (!rad.isFinite()) throw MathError("не определено")
+        if (!rad.isFinite()) throw MathError(tr("не определено", "undefined"))
         val d = Solver.clean(rad * 180 / PI)
         if (!dms || d == floor(d)) return Printer.number(d) + "°"
         val sign = if (d < 0) Printer.MINUS else ""
@@ -175,7 +176,7 @@ object Angles {
             val v = if (full - m < 1e-7) 0.0 else m
             if (found.none { abs(it - v) < 1e-7 }) found += v
         }
-        if (found.isEmpty()) return listOf("нет решений")
+        if (found.isEmpty()) return listOf(tr("нет решений", "no solutions"))
         // The smallest period the roots repeat with: tg x = 1 has π, sin 2x = 0 has π/2.
         var n = 1
         for (k in MAX_DIVISOR downTo 2) {

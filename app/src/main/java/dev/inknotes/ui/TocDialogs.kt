@@ -1,5 +1,6 @@
 package dev.inknotes.ui
 
+import dev.inknotes.data.tr
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -38,11 +39,11 @@ fun TocDialog(c: EditorController, onDismiss: () -> Unit) {
     val toc = c.notebook.toc
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Оглавление") },
+        title = { Text(tr("Оглавление", "Contents")) },
         text = {
             if (toc.isEmpty()) {
                 Text(
-                    "Пока пусто. Выделите заголовок лассо и выберите «Ещё → В оглавление» или добавьте текущую страницу кнопкой ниже.",
+                    tr("Пока пусто. Выделите заголовок лассо и выберите «Ещё → В оглавление» или добавьте текущую страницу кнопкой ниже.", "Empty so far. Select a heading with the lasso and choose “More → To contents”, or add the current page with the button below."),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             } else {
@@ -58,7 +59,7 @@ fun TocDialog(c: EditorController, onDismiss: () -> Unit) {
                         ) {
                             Text(b.title, Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis)
                             Text("${page + 1}", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 8.dp))
-                            TextButton(onClick = { renaming = b }) { Text("Изм.") }
+                            TextButton(onClick = { renaming = b }) { Text(tr("Изм.", "Edit")) }
                             TextButton(onClick = { c.deleteBookmark(b) }) { Text("✕") }
                         }
                         HorizontalDivider()
@@ -66,12 +67,12 @@ fun TocDialog(c: EditorController, onDismiss: () -> Unit) {
                 }
             }
         },
-        confirmButton = { Button(onClick = { adding = true }) { Text(if (c.selectionCount > 0) "Добавить выделенное" else "Добавить эту страницу") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Закрыть") } },
+        confirmButton = { Button(onClick = { adding = true }) { Text(if (c.selectionCount > 0) tr("Добавить выделенное", "Add the selection") else tr("Добавить эту страницу", "Add this page")) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(tr("Закрыть", "Close")) } },
     )
     if (adding) AddBookmarkDialog(c, onDismiss = { adding = false })
     renaming?.let { b ->
-        TitleDialog("Название", b.title, onDismiss = { renaming = null }) {
+        TitleDialog(tr("Название", "Title"), b.title, onDismiss = { renaming = null }) {
             c.renameBookmark(b, it)
             renaming = null
         }
@@ -88,7 +89,7 @@ fun AddBookmarkDialog(c: EditorController, onDismiss: () -> Unit) {
         if (rect != null) c.selectionText { suggested = it; ready = true }
     }
     if (!ready) return
-    TitleDialog("В оглавление", suggested ?: "Страница ${page + 1}", onDismiss = onDismiss) { title ->
+    TitleDialog(tr("В оглавление", "To contents"), suggested ?: tr("Страница ${page + 1}", "Page ${page + 1}"), onDismiss = onDismiss) { title ->
         c.addBookmark(title, page, rect?.top ?: 0f)
         onDismiss()
     }
@@ -100,9 +101,9 @@ private fun TitleDialog(title: String, initial: String, onDismiss: () -> Unit, o
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
-        text = { OutlinedTextField(text, { text = it }, singleLine = true, label = { Text("Название") }, modifier = Modifier.fillMaxWidth()) },
-        confirmButton = { Button(onClick = { onDone(text) }) { Text("Готово") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } },
+        text = { OutlinedTextField(text, { text = it }, singleLine = true, label = { Text(tr("Название", "Title")) }, modifier = Modifier.fillMaxWidth()) },
+        confirmButton = { Button(onClick = { onDone(text) }) { Text(tr("Готово", "Done")) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(tr("Отмена", "Cancel")) } },
     )
 }
 
@@ -115,20 +116,20 @@ fun LinkDialog(c: EditorController, onDismiss: () -> Unit) {
     val target = number.toIntOrNull()?.takeIf { it in 1..pages }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Ссылка") },
+        title = { Text(tr("Ссылка", "Link")) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Касание выделенного пальцем откроет страницу.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(tr("Касание выделенного пальцем откроет страницу.", "Touching the selection with a finger opens the page."), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 OutlinedTextField(
                     number,
                     { number = it.filter(Char::isDigit).take(5) },
                     singleLine = true,
-                    label = { Text("Номер страницы (1–$pages)") },
+                    label = { Text(tr("Номер страницы (1–$pages)", "Page number (1–$pages)")) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth(),
                 )
                 if (c.notebook.toc.isNotEmpty()) {
-                    Text("Или раздел оглавления:", style = MaterialTheme.typography.labelLarge)
+                    Text(tr("Или раздел оглавления:", "Or a contents entry:"), style = MaterialTheme.typography.labelLarge)
                     LazyColumn(Modifier.heightIn(max = 260.dp)) {
                         items(c.notebook.toc) { b ->
                             val page = c.notebook.pageIds.indexOf(b.pageId)
@@ -148,7 +149,7 @@ fun LinkDialog(c: EditorController, onDismiss: () -> Unit) {
                     TextButton(onClick = {
                         c.removeLinks(existing)
                         onDismiss()
-                    }) { Text("Убрать ссылку отсюда", color = MaterialTheme.colorScheme.error) }
+                    }) { Text(tr("Убрать ссылку отсюда", "Remove the link from here"), color = MaterialTheme.colorScheme.error) }
                 }
             }
         },
@@ -156,8 +157,8 @@ fun LinkDialog(c: EditorController, onDismiss: () -> Unit) {
             Button(enabled = target != null, onClick = {
                 c.linkSelection(target!! - 1)
                 onDismiss()
-            }) { Text("Ссылка") }
+            }) { Text(tr("Ссылка", "Link")) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(tr("Отмена", "Cancel")) } },
     )
 }

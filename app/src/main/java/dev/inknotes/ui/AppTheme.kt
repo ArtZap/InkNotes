@@ -1,5 +1,6 @@
 package dev.inknotes.ui
 
+import dev.inknotes.data.tr
 import dev.inknotes.data.InkKind
 import android.content.Context
 import androidx.compose.ui.draw.drawWithCache
@@ -31,19 +32,19 @@ import dev.inknotes.data.HatchStyle
 import dev.inknotes.data.LineType
 
 enum class ThemeMode(val title: String) {
-    SYSTEM("Как в системе"),
-    LIGHT("Светлая"),
-    DARK("Тёмная"),
+    SYSTEM(tr("Как в системе", "System")),
+    LIGHT(tr("Светлая", "Light")),
+    DARK(tr("Тёмная", "Dark")),
 }
 
 /** Look of the whole interface, chosen in the library's settings. */
 enum class UiStyle(val title: String, val note: String) {
-    CLASSIC("Классический", "Светлый и простой: синие акценты, цветные обложки"),
-    PREMIUM("Премиум", "Слоновая кость или чёрный шёлк, шампанское золото, шрифт с засечками, кожаные обложки с тиснением"),
-    MINIMAL("Минимал", "Монохром, тонкие шрифты и линии, острые углы и много воздуха — сдержанно и дорого"),
-    MYSTIC("Загадочный", "Приглушённый бежевый пергамент или графит, золото, шесть обложек старинных книг: листья, арка, луна, овал, медальоны, венок"),
-    GLASS("Жидкое стекло", "Как в iPhone: полупрозрачные панели с бликами над цветным фоном, крупные скругления, иконки в два слоя"),
-    NOTEBOOK("Тетрадки", "Пастель и пластик: матовые обложки на пружине, школьные тетради под плёнкой, голографические папки"),
+    CLASSIC(tr("Классический", "Classic"), tr("Светлый и простой: синие акценты, цветные обложки", "Light and simple: blue accents, coloured covers")),
+    PREMIUM(tr("Премиум", "Premium"), tr("Слоновая кость или чёрный шёлк, шампанское золото, шрифт с засечками, кожаные обложки с тиснением", "Ivory or black silk, champagne gold, a serif typeface, embossed leather covers")),
+    MINIMAL(tr("Минимал", "Minimal"), tr("Монохром, тонкие шрифты и линии, острые углы и много воздуха — сдержанно и дорого", "Monochrome, thin type and lines, sharp corners and lots of air — restrained and refined")),
+    MYSTIC(tr("Загадочный", "Mystic"), tr("Приглушённый бежевый пергамент или графит, золото, шесть обложек старинных книг: листья, арка, луна, овал, медальоны, венок", "Muted beige parchment or graphite, gold, six antique book covers: leaves, arch, moon, oval, medallions, wreath")),
+    GLASS(tr("Жидкое стекло", "Liquid glass"), tr("Как в iPhone: полупрозрачные панели с бликами над цветным фоном, крупные скругления, иконки в два слоя", "iPhone-like: translucent glossy panels over a colourful background, large rounded corners, two-layer icons")),
+    NOTEBOOK(tr("Тетрадки", "Copybooks"), tr("Пастель и пластик: матовые обложки на пружине, школьные тетради под плёнкой, голографические папки", "Pastel and plastic: matte spiral covers, laminated school notebooks, holographic folders")),
     ;
 
     /** Gold accents in icons and titles. */
@@ -289,9 +290,9 @@ class AppPrefs(context: Context) {
 }
 
 enum class LibrarySort(val title: String) {
-    CHANGED("по изменению"),
-    CREATED("по созданию"),
-    TITLE("по названию"),
+    CHANGED(tr("по изменению", "by change")),
+    CREATED(tr("по созданию", "by creation")),
+    TITLE(tr("по названию", "by title")),
 }
 
 private val Accent = Color(0xFF3D63C9)

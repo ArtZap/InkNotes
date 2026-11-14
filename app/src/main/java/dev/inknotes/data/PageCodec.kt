@@ -103,12 +103,12 @@ object Layers {
 
 /** Marks a dashed line is made of, repeated; stored by ordinal (page format v11+): only append. */
 enum class DashPattern(val title: String) {
-    DASH("Штрихи"),
-    DOT("Точки"),
-    DASH_DOT("Штрих-точка"),
-    DASH_DOT_DOT("Штрих, две точки"),
-    LONG_SHORT("Длинный, короткий"),
-    DASH_DASH_DOT("Два штриха, точка"),
+    DASH(tr("Штрихи", "Dashes")),
+    DOT(tr("Точки", "Dots")),
+    DASH_DOT(tr("Штрих-точка", "Dash-dot")),
+    DASH_DOT_DOT(tr("Штрих, две точки", "Dash, two dots")),
+    LONG_SHORT(tr("Длинный, короткий", "Long, short")),
+    DASH_DASH_DOT(tr("Два штриха, точка", "Two dashes, dot")),
 }
 
 /**
@@ -153,27 +153,27 @@ data class DashStyle(
 
 /** Stored by ordinal (page format v3+): only append new entries. */
 enum class FillPattern(val title: String) {
-    SOLID("Сплошная"),
-    LINES("Линии"),
-    CROSS("Сетка"),
-    DOTS("Точки"),
-    WAVES("Волны"),
-    ZIGZAG("Зигзаг"),
-    BRICKS("Кирпич"),
-    CHECKER("Шахматы"),
+    SOLID(tr("Сплошная", "Solid")),
+    LINES(tr("Линии", "Lines")),
+    CROSS(tr("Сетка", "Grid")),
+    DOTS(tr("Точки", "Dots")),
+    WAVES(tr("Волны", "Waves")),
+    ZIGZAG(tr("Зигзаг", "Zigzag")),
+    BRICKS(tr("Кирпич", "Brick")),
+    CHECKER(tr("Шахматы", "Checkers")),
 
     /** Opaque, unlike [SOLID] (a light tint): arrowheads and anything filled in. Page format v10+. */
-    INK("Заливка"),
+    INK(tr("Заливка", "Fill")),
 }
 
 /** How the lines of a pattern are drawn; stored by ordinal (page format v4+): only append. */
 enum class LineType(val title: String) {
-    SOLID("Сплошная"),
-    DASHED("Пунктир"),
-    DASH_DOT("Штрихпунктир"),
-    SOLID_DASH_DOT("Сплошная + штрихпунктир"),
-    TWO_AND_GAP("Две линии, пропуск"),
-    SOLID_DASHED("Сплошная + пунктир"),
+    SOLID(tr("Сплошная", "Solid")),
+    DASHED(tr("Пунктир", "Dashed")),
+    DASH_DOT(tr("Штрихпунктир", "Dash-dotted")),
+    SOLID_DASH_DOT(tr("Сплошная + штрихпунктир", "Solid + dash-dot")),
+    TWO_AND_GAP(tr("Две линии, пропуск", "Two lines, gap")),
+    SOLID_DASHED(tr("Сплошная + пунктир", "Solid + dashed")),
 }
 
 /**
@@ -475,12 +475,12 @@ object PageCodec {
         val cuts = fills.sumOf { f -> f.cuts.count { it.points.size >= 2 } }
         val floats = fills.sumOf { f -> f.outline.size.toLong() + f.cuts.sumOf { it.points.size.toLong() } }
         return when {
-            content.strokes.size > l.elements -> "на странице больше ${l.elements} линий"
-            fills.size > l.fills -> "на странице больше ${l.fills} штриховок"
-            pictures > l.images -> "на странице больше ${l.images} картинок"
-            texts > l.images -> "на странице больше ${l.images} текстовых блоков"
+            content.strokes.size > l.elements -> tr("на странице больше ${l.elements} линий", "the page has more than ${l.elements} lines")
+            fills.size > l.fills -> tr("на странице больше ${l.fills} штриховок", "the page has more than ${l.fills} hatchings")
+            pictures > l.images -> tr("на странице больше ${l.images} картинок", "the page has more than ${l.images} pictures")
+            texts > l.images -> tr("на странице больше ${l.images} текстовых блоков", "the page has more than ${l.images} text boxes")
             cuts > l.cuts || floats > l.pageFloats || fills.any { f -> f.outline.size > l.floats || f.cuts.any { it.points.size > l.floats } } ->
-                "штриховки на странице слишком сложные (много стёртых мест)"
+                tr("штриховки на странице слишком сложные (много стёртых мест)", "the hatchings on the page are too complex (many erased spots)")
             else -> null
         }
     }
@@ -520,7 +520,7 @@ object PageCodec {
             data.writeFloat(if (size.isFinite() && size > 0f) size.coerceAtMost(MAX_BRUSH) else 1f)
             buffer.reset()
             s.stroke.inputs.encode(buffer)
-            if (buffer.size() > limits.strokeBytes) throw PageTooComplexException("на странице есть слишком длинная линия")
+            if (buffer.size() > limits.strokeBytes) throw PageTooComplexException(tr("на странице есть слишком длинная линия", "the page has a line that is too long"))
             data.writeInt(buffer.size())
             buffer.writeTo(data)
         }

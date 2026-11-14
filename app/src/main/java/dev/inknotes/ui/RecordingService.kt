@@ -1,5 +1,6 @@
 package dev.inknotes.ui
 
+import dev.inknotes.data.tr
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -54,8 +55,8 @@ class RecordingService : Service() {
         val manager = getSystemService(NotificationManager::class.java)
         if (manager.getNotificationChannel(CHANNEL) == null) {
             manager.createNotificationChannel(
-                NotificationChannel(CHANNEL, "Запись звука", NotificationManager.IMPORTANCE_LOW).apply {
-                    description = "Пока идёт запись лекции"
+                NotificationChannel(CHANNEL, tr("Запись звука", "Sound recording"), NotificationManager.IMPORTANCE_LOW).apply {
+                    description = tr("Пока идёт запись лекции", "While a lecture is being recorded")
                     setShowBadge(false)
                 },
             )
@@ -70,14 +71,14 @@ class RecordingService : Service() {
         val stop = PendingIntent.getService(this, 1, Intent(this, RecordingService::class.java).setAction(ACTION_STOP), flags)
         return Notification.Builder(this, CHANNEL)
             .setSmallIcon(R.drawable.ic_tile_note)
-            .setContentTitle("Идёт запись звука")
+            .setContentTitle(tr("Идёт запись звука", "Recording sound"))
             .setContentText(title.ifEmpty { "InkNotes" })
             .setOngoing(true)
             .setUsesChronometer(true)
             .setShowWhen(true)
             .setWhen(System.currentTimeMillis())
             .setContentIntent(open)
-            .addAction(Notification.Action.Builder(null as android.graphics.drawable.Icon?, "Остановить", stop).build())
+            .addAction(Notification.Action.Builder(null as android.graphics.drawable.Icon?, tr("Остановить", "Stop"), stop).build())
             .setCategory(Notification.CATEGORY_SERVICE)
             .build()
     }

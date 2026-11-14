@@ -1,5 +1,6 @@
 package dev.inknotes.ui
 
+import dev.inknotes.data.tr
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
@@ -182,7 +183,7 @@ fun EditorScreen(
     // The microphone, and on Android 13+ the notification that a recording is on (it shows how
     // long it has run and stops it; without it the recording still works).
     val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { granted ->
-        if (granted[android.Manifest.permission.RECORD_AUDIO] == true) controller.startRecording(context) else controller.showStatus("Без доступа к микрофону записать звук нельзя")
+        if (granted[android.Manifest.permission.RECORD_AUDIO] == true) controller.startRecording(context) else controller.showStatus(tr("Без доступа к микрофону записать звук нельзя", "Sound can't be recorded without microphone access"))
     }
     val record = {
         fun has(p: String) = androidx.core.content.ContextCompat.checkSelfPermission(context, p) == android.content.pm.PackageManager.PERMISSION_GRANTED
@@ -238,7 +239,7 @@ fun EditorScreen(
         } else {
             Intent(Intent.ACTION_SEND_MULTIPLE).setType(mime).putParcelableArrayListExtra(Intent.EXTRA_STREAM, ArrayList(uris))
         }.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        context.startActivity(Intent.createChooser(send, "Отправить"))
+        context.startActivity(Intent.createChooser(send, tr("Отправить", "Share")))
     }
     val shareExport = { format: EditorController.ExportFormat, pages: List<Int> ->
         controller.exportForSharing(context, pages, format) { uris -> sendFiles(uris, format.mime) }
@@ -252,7 +253,7 @@ fun EditorScreen(
         runCatching {
             scanFile.delete()
             scanLauncher.launch(androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.files", scanFile))
-        }.onFailure { controller.showStatus("Камера недоступна") }
+        }.onFailure { controller.showStatus(tr("Камера недоступна", "Camera unavailable")) }
         Unit
     }
     val saveLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
@@ -264,7 +265,7 @@ fun EditorScreen(
                 .setType("application/octet-stream")
                 .putExtra(Intent.EXTRA_STREAM, uri)
                 .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            context.startActivity(Intent.createChooser(send, "Отправить тетрадь"))
+            context.startActivity(Intent.createChooser(send, tr("Отправить тетрадь", "Share the notebook")))
         }
     }
 
@@ -400,9 +401,9 @@ fun EditorScreen(
     }
     if (showRecordings) RecordingsDialog(controller, onRecord = { record() }, onDismiss = { showRecordings = false })
     if (showLayers || controller.showLayersDialog) LayersDialog(controller, onDismiss = { showLayers = false; controller.showLayersDialog = false })
-    if (textNew) TypeTextDialog("Печатный текст", "", onDismiss = { textNew = false }) { controller.insertText(it) }
+    if (textNew) TypeTextDialog(tr("Печатный текст", "Typed text"), "", onDismiss = { textNew = false }) { controller.insertText(it) }
     if (controller.editingText) {
-        TypeTextDialog("Изменить текст", controller.selectedText.orEmpty(), onDismiss = { controller.editingText = false }) { controller.editSelectedText(it) }
+        TypeTextDialog(tr("Изменить текст", "Edit text"), controller.selectedText.orEmpty(), onDismiss = { controller.editingText = false }) { controller.editSelectedText(it) }
     }
     if (controller.showLinkDialog) LinkDialog(controller, onDismiss = { controller.showLinkDialog = false })
     if (controller.showAddBookmark) AddBookmarkDialog(controller, onDismiss = { controller.showAddBookmark = false })
@@ -411,7 +412,7 @@ fun EditorScreen(
     if (showPdfPage) {
         PdfPageDialog(
             controller,
-            onInsertPdf = { runCatching { pdfInsertLauncher.launch(arrayOf("application/pdf")) }.onFailure { controller.showStatus("Нет приложения для выбора файла") } },
+            onInsertPdf = { runCatching { pdfInsertLauncher.launch(arrayOf("application/pdf")) }.onFailure { controller.showStatus(tr("Нет приложения для выбора файла", "No app to pick a file")) } },
             onDismiss = { showPdfPage = false },
         )
     }
@@ -461,7 +462,7 @@ fun EditorScreen(
         PhotoEditorDialog(
             source = edit.bitmap,
             startMode = edit.mode,
-            doneLabel = if (edit.target == null) "Вставить" else "Готово",
+            doneLabel = if (edit.target == null) tr("Вставить", "Insert") else tr("Готово", "Done"),
             onCancel = controller::cancelPhotoEdit,
             onDone = controller::finishPhotoEdit,
         )
@@ -545,125 +546,125 @@ private fun barActions(
         id to BarAction(id, title, hint, icon, onClick, enabled, selected)
     fun tool(id: String, t: Tool, hint: String) = a(id, hint, { c.selectTool(t) }, selected = c.tool == t)
     val fountain = c.penIsFountain
-    val layer = c.notebook.layerList().getOrNull(c.notebook.activeLayer)?.name ?: "Основной"
+    val layer = c.notebook.layerList().getOrNull(c.notebook.activeLayer)?.name ?: tr("Основной", "Main")
     return mapOf(
         a(
             "pen",
-            if (fountain) "Перьевая ручка (вид — в «Ручка ▾»)" else "Ручка (вид — в «Ручка ▾»)",
+            if (fountain) tr("Перьевая ручка (вид — в «Ручка ▾»)", "Fountain pen (kind — in “Pen ▾”)") else tr("Ручка (вид — в «Ручка ▾»)", "Pen (kind — in “Pen ▾”)"),
             { c.selectTool(if (fountain) Tool.FOUNTAIN else Tool.PEN) },
             selected = c.tool == Tool.PEN || c.tool == Tool.FOUNTAIN,
-            title = if (fountain) "Перьевая ручка" else "Ручка",
+            title = if (fountain) tr("Перьевая ручка", "Fountain pen") else tr("Ручка", "Pen"),
             icon = if (fountain) InkIcons.Fountain else InkIcons.Pen,
         ),
-        tool("highlighter", Tool.HIGHLIGHTER, "Маркер"),
-        tool("neon", Tool.NEON, "Неон"),
-        tool("eraser", Tool.ERASER, "Ластик"),
-        tool("lasso", Tool.LASSO, "Лассо: выделить и двигать"),
-        tool("area", Tool.AREA, "Область: заштриховать"),
-        tool("spoiler", Tool.SPOILER, "Маркер подсказок: прячет текст, касание пальцем открывает"),
-        tool("laser", Tool.LASER, "Указка: след гаснет сам"),
-        a("picture", "Вставить картинку", onInsertImage, enabled = !c.importingImage, title = "Вставить картинку"),
-        a("table", "Вставить таблицу", onInsertTable, title = "Вставить таблицу"),
-        a("stamps", "Штампы: готовые рисунки", onInsertStamp),
-        a("ruler", "Линейка: положить на лист", c::toggleRuler, selected = c.rulerShown),
-        a("text", "Вставить печатный текст", onText, title = "Вставить печатный текст…"),
+        tool("highlighter", Tool.HIGHLIGHTER, tr("Маркер", "Highlighter")),
+        tool("neon", Tool.NEON, tr("Неон", "Neon")),
+        tool("eraser", Tool.ERASER, tr("Ластик", "Eraser")),
+        tool("lasso", Tool.LASSO, tr("Лассо: выделить и двигать", "Lasso: select and move")),
+        tool("area", Tool.AREA, tr("Область: заштриховать", "Area: hatch")),
+        tool("spoiler", Tool.SPOILER, tr("Маркер подсказок: прячет текст, касание пальцем открывает", "Hint highlighter: hides text, a finger touch reveals it")),
+        tool("laser", Tool.LASER, tr("Указка: след гаснет сам", "Pointer: the trail fades by itself")),
+        a("picture", tr("Вставить картинку", "Insert picture"), onInsertImage, enabled = !c.importingImage, title = tr("Вставить картинку", "Insert picture")),
+        a("table", tr("Вставить таблицу", "Insert table"), onInsertTable, title = tr("Вставить таблицу", "Insert table")),
+        a("stamps", tr("Штампы: готовые рисунки", "Stamps: ready-made drawings"), onInsertStamp),
+        a("ruler", tr("Линейка: положить на лист", "Ruler: lay it on the page"), c::toggleRuler, selected = c.rulerShown),
+        a("text", tr("Вставить печатный текст", "Insert typed text"), onText, title = tr("Вставить печатный текст…", "Insert typed text…")),
         a(
             "space",
-            "Вставить место: штрих вниз раздвигает строки, вверх — убирает пустое",
+            tr("Вставить место: штрих вниз раздвигает строки, вверх — убирает пустое", "Insert space: a stroke down spreads lines apart, up removes empty space"),
             c::toggleInsertSpace,
             selected = c.insertingSpace,
-            title = if (c.insertingSpace) "Вставить место: отменить" else "Вставить место (раздвинуть строки)",
+            title = if (c.insertingSpace) tr("Вставить место: отменить", "Insert space: cancel") else tr("Вставить место (раздвинуть строки)", "Insert space (spread lines)"),
         ),
-        a("undo", "Отменить", c::undo, enabled = c.canUndo),
-        a("redo", "Повторить", c::redo, enabled = c.canRedo),
-        a("pages", "Страницы", onTogglePages, selected = pagesShown),
-        a("search", "Поиск в тетради", onToggleSearch, selected = searchShown, title = "Поиск в тетради"),
-        a("page-nav", "Листать страницы", {}),
-        a("add-page", "Добавить страницу после текущей", c::addPageAfterCurrent, title = "Добавить страницу"),
-        a("toc", "Оглавление тетради", onToc, title = "Оглавление…"),
-        a("page-text", "Распознанный текст страницы", onPageText, title = "Распознанный текст страницы"),
+        a("undo", tr("Отменить", "Undo"), c::undo, enabled = c.canUndo),
+        a("redo", tr("Повторить", "Redo"), c::redo, enabled = c.canRedo),
+        a("pages", tr("Страницы", "Pages"), onTogglePages, selected = pagesShown),
+        a("search", tr("Поиск в тетради", "Search the notebook"), onToggleSearch, selected = searchShown, title = tr("Поиск в тетради", "Search the notebook")),
+        a("page-nav", tr("Листать страницы", "Turn pages"), {}),
+        a("add-page", tr("Добавить страницу после текущей", "Add a page after the current one"), c::addPageAfterCurrent, title = tr("Добавить страницу", "Add page")),
+        a("toc", tr("Оглавление тетради", "Notebook contents"), onToc, title = tr("Оглавление…", "Contents…")),
+        a("page-text", tr("Распознанный текст страницы", "Recognised text of the page"), onPageText, title = tr("Распознанный текст страницы", "Recognised text of the page")),
         a(
             "math",
-            "Ответы после «=»: вычисления, переменные, системы",
+            tr("Ответы после «=»: вычисления, переменные, системы", "Answers after “=”: calculations, variables, systems"),
             c::toggleMath,
             selected = math == MathNotes.State.Ready || math == MathNotes.State.Downloading,
-            title = "Ответы после «=»",
+            title = tr("Ответы после «=»", "Answers after “=”"),
         ),
         a(
             "fractions",
-            "Ответы обыкновенными или десятичными дробями",
+            tr("Ответы обыкновенными или десятичными дробями", "Answers as fractions or decimals"),
             c::toggleFractionAnswers,
-            title = if (c.fractionAnswers) "Ответы: обыкновенные дроби (1/3)" else "Ответы: десятичные дроби (0,333…)",
+            title = if (c.fractionAnswers) tr("Ответы: обыкновенные дроби (1/3)", "Answers: fractions (1/3)") else tr("Ответы: десятичные дроби (0,333…)", "Answers: decimals (0.333…)"),
         ),
         a(
             "units",
-            "Единицы измерения и физические константы в формулах",
+            tr("Единицы измерения и физические константы в формулах", "Units and physical constants in formulas"),
             c::toggleMathUnits,
             selected = c.mathUnits,
-            title = "Единицы и константы в формулах",
+            title = tr("Единицы и константы в формулах", "Units and constants in formulas"),
         ),
-        a("layers", "Слои (сейчас: $layer)", onLayers, title = "Слои (сейчас: $layer)…"),
-        a("cards", "Повторение: карточки из маркера подсказок", c::openCards, title = "Повторение: карточки"),
+        a("layers", tr("Слои (сейчас: $layer)", "Layers (now: $layer)"), onLayers, title = tr("Слои (сейчас: $layer)…", "Layers (now: $layer)…")),
+        a("cards", tr("Повторение: карточки из маркера подсказок", "Review: cards from the hint highlighter"), c::openCards, title = tr("Повторение: карточки", "Review: cards")),
         a(
             "record",
-            if (c.recordingSince == null) "Записать звук" else "Остановить запись",
+            if (c.recordingSince == null) tr("Записать звук", "Record sound") else tr("Остановить запись", "Stop recording"),
             onRecord,
             selected = c.recordingSince != null,
-            title = if (c.recordingSince == null) "Записать звук" else "Остановить запись",
+            title = if (c.recordingSince == null) tr("Записать звук", "Record sound") else tr("Остановить запись", "Stop recording"),
         ),
-        a("recordings", "Записи звука", onRecordings, title = "Записи звука…"),
-        a("background", "Фон страниц", onBackground),
-        a("page-size", "Размер и ориентация страницы", onPageSize, title = "Размер и ориентация страницы…"),
-        a("page-shift", "Отступ страницы слева или справа", onPageShift, title = "Отступ страницы слева или справа…"),
-        a("share", "Поделиться файлом тетради", onShare, title = "Поделиться файлом тетради"),
-        a("save", "Сохранить файл тетради", onSave, title = "Сохранить файл тетради…"),
-        a("pdf", "Экспорт: PDF или PNG, все страницы, эта или диапазон", onPdf, title = "Экспорт: PDF, PNG…"),
-        a("pdf-share", "Отправить тетрадь как PDF одним нажатием", onPdfShare, title = "Отправить как PDF"),
-        a("print", "Печать тетради", onPrint, title = "Печать…"),
-        a("zoom-window", "Окно увеличения: пишите крупно, на странице мелко", c::toggleZoomPad, selected = c.zoomPadOpen),
-        a("formula", "Формула печатной: выделите формулу лассо и нажмите", c::formulaFromSelection, title = "Формула печатной (выделенная)"),
-        a("protractor", "Транспортир: углы и дуги", c::toggleProtractor, selected = c.protractorShown),
-        a("compass", "Циркуль: окружности и дуги", c::toggleCompass, selected = c.compassOn),
-        a("timer", "Таймер учёбы: учёба и перерывы", onTimer, selected = StudyTimer.phase != null, title = "Таймер учёбы…"),
-        a("pdf-text", "Текст PDF: проведите пером по словам — скопировать или выделить маркером", c::togglePdfText, selected = c.pdfTextOn, title = "Текст PDF"),
-        a("pdf-page", "Страница PDF: повернуть, поля для заметок, вставить страницы", onPdfPage, title = "Страница PDF…"),
-        a("pdf-dark", "Тёмный PDF: светлый текст на тёмном", c::togglePdfDark, selected = c.pdfDark),
+        a("recordings", tr("Записи звука", "Sound recordings"), onRecordings, title = tr("Записи звука…", "Sound recordings…")),
+        a("background", tr("Фон страниц", "Page background"), onBackground),
+        a("page-size", tr("Размер и ориентация страницы", "Page size and orientation"), onPageSize, title = tr("Размер и ориентация страницы…", "Page size and orientation…")),
+        a("page-shift", tr("Отступ страницы слева или справа", "Page margin on the left or right"), onPageShift, title = tr("Отступ страницы слева или справа…", "Page margin on the left or right…")),
+        a("share", tr("Поделиться файлом тетради", "Share the notebook file"), onShare, title = tr("Поделиться файлом тетради", "Share the notebook file")),
+        a("save", tr("Сохранить файл тетради", "Save the notebook file"), onSave, title = tr("Сохранить файл тетради…", "Save the notebook file…")),
+        a("pdf", tr("Экспорт: PDF или PNG, все страницы, эта или диапазон", "Export: PDF or PNG, all pages, this one or a range"), onPdf, title = tr("Экспорт: PDF, PNG…", "Export: PDF, PNG…")),
+        a("pdf-share", tr("Отправить тетрадь как PDF одним нажатием", "Share the notebook as a PDF in one tap"), onPdfShare, title = tr("Отправить как PDF", "Share as PDF")),
+        a("print", tr("Печать тетради", "Print the notebook"), onPrint, title = tr("Печать…", "Print…")),
+        a("zoom-window", tr("Окно увеличения: пишите крупно, на странице мелко", "Zoom window: write large, it lands small on the page"), c::toggleZoomPad, selected = c.zoomPadOpen),
+        a("formula", tr("Формула печатной: выделите формулу лассо и нажмите", "Typeset formula: select a formula with the lasso and press"), c::formulaFromSelection, title = tr("Формула печатной (выделенная)", "Typeset formula (selection)")),
+        a("protractor", tr("Транспортир: углы и дуги", "Protractor: angles and arcs"), c::toggleProtractor, selected = c.protractorShown),
+        a("compass", tr("Циркуль: окружности и дуги", "Compass: circles and arcs"), c::toggleCompass, selected = c.compassOn),
+        a("timer", tr("Таймер учёбы: учёба и перерывы", "Study timer: study and breaks"), onTimer, selected = StudyTimer.phase != null, title = tr("Таймер учёбы…", "Study timer…")),
+        a("pdf-text", tr("Текст PDF: проведите пером по словам — скопировать или выделить маркером", "PDF text: run the pen over words — copy or highlight them"), c::togglePdfText, selected = c.pdfTextOn, title = tr("Текст PDF", "PDF text")),
+        a("pdf-page", tr("Страница PDF: повернуть, поля для заметок, вставить страницы", "PDF page: rotate, note margins, insert pages"), onPdfPage, title = tr("Страница PDF…", "PDF page…")),
+        a("pdf-dark", tr("Тёмный PDF: светлый текст на тёмном", "Dark PDF: light text on dark"), c::togglePdfDark, selected = c.pdfDark),
         a(
             "side",
-            if (sideOpen) "Закрыть тетрадь рядом" else "Открыть рядом: вторая тетрадь или PDF на том же экране",
+            if (sideOpen) tr("Закрыть тетрадь рядом", "Close the notebook beside") else tr("Открыть рядом: вторая тетрадь или PDF на том же экране", "Open side by side: a second notebook or PDF on the same screen"),
             { onSide?.invoke() },
             enabled = onSide != null,
             selected = sideOpen,
-            title = if (sideOpen) "Закрыть рядом" else "Открыть рядом…",
+            title = if (sideOpen) tr("Закрыть рядом", "Close side by side") else tr("Открыть рядом…", "Open side by side…"),
         ),
-        a("swap", "Поменять тетради местами", { onSwap?.invoke() }, enabled = onSwap != null, title = "Поменять местами"),
-        a("scan", "Сканировать документ камерой", onScan, title = "Сканировать документ"),
+        a("swap", tr("Поменять тетради местами", "Swap the notebooks"), { onSwap?.invoke() }, enabled = onSwap != null, title = tr("Поменять местами", "Swap")),
+        a("scan", tr("Сканировать документ камерой", "Scan a document with the camera"), onScan, title = tr("Сканировать документ", "Scan document")),
         a(
             "pressure",
-            if (c.penPressure) "Ручка чувствует нажим (нажмите, чтобы линия была одной толщины)" else "Ручка без нажима: линия одной толщины",
+            if (c.penPressure) tr("Ручка чувствует нажим (нажмите, чтобы линия была одной толщины)", "The pen responds to pressure (tap for lines of one width)") else tr("Ручка без нажима: линия одной толщины", "Pen without pressure: lines of one width"),
             c::togglePenPressure,
             selected = c.penPressure,
-            title = if (c.penPressure) "Нажим ручки: включён" else "Нажим ручки: выключен",
+            title = if (c.penPressure) tr("Нажим ручки: включён", "Pen pressure: on") else tr("Нажим ручки: выключен", "Pen pressure: off"),
         ),
         a(
             "theme",
-            "Тема: ${themeMode.title.lowercase()} (нажмите, чтобы сменить)",
+            tr("Тема: ${themeMode.title.lowercase()} (нажмите, чтобы сменить)", "Theme: ${themeMode.title.lowercase()} (tap to change)"),
             { onThemeModeChange(ThemeMode.entries[(themeMode.ordinal + 1) % ThemeMode.entries.size]) },
-            title = "Тема: ${themeMode.title.lowercase()}",
+            title = tr("Тема: ${themeMode.title.lowercase()}", "Theme: ${themeMode.title.lowercase()}"),
             icon = themeIcon(themeMode),
         ),
-        a("pen-button", "Кнопка пера: ${c.penButtonLabel}", { c.learningPenButton = true }, title = "Кнопка пера: ${c.penButtonLabel}"),
-        a("scribble", "Стирание зачёркиванием", c::toggleScribbleErase, selected = c.scribbleErase, title = "Стирание зачёркиванием"),
-        a("help", "Справка: все инструменты", onHelp, title = "Справка: все инструменты"),
+        a("pen-button", tr("Кнопка пера: ${c.penButtonLabel}", "Pen button: ${c.penButtonLabel}"), { c.learningPenButton = true }, title = tr("Кнопка пера: ${c.penButtonLabel}", "Pen button: ${c.penButtonLabel}")),
+        a("scribble", tr("Стирание зачёркиванием", "Scribble to erase"), c::toggleScribbleErase, selected = c.scribbleErase, title = tr("Стирание зачёркиванием", "Scribble to erase")),
+        a("help", tr("Справка: все инструменты", "Help: all tools"), onHelp, title = tr("Справка: все инструменты", "Help: all tools")),
     )
 }
 
 /** The page arrows with the page number between them, as one group on a bar. */
 @Composable
 private fun PageNav(c: EditorController, placing: Placing) {
-    BarButton(BarAction("page-nav", "", "Предыдущая страница", InkIcons.Previous, { c.goToPage(c.pageIndex - 1) }, enabled = c.pageIndex > 0), placing)
+    BarButton(BarAction("page-nav", "", tr("Предыдущая страница", "Previous page"), InkIcons.Previous, { c.goToPage(c.pageIndex - 1) }, enabled = c.pageIndex > 0), placing)
     Text("${c.pageIndex + 1} / ${c.notebook.pageIds.size}", maxLines = 1)
-    BarButton(BarAction("page-nav", "", "Следующая страница", InkIcons.Next, { c.goToPage(c.pageIndex + 1) }, enabled = c.pageIndex < c.notebook.pageIds.lastIndex), placing)
+    BarButton(BarAction("page-nav", "", tr("Следующая страница", "Next page"), InkIcons.Next, { c.goToPage(c.pageIndex + 1) }, enabled = c.pageIndex < c.notebook.pageIds.lastIndex), placing)
 }
 
 /** Buttons of a bar in order, with a small gap where the group changes. */
@@ -704,10 +705,10 @@ private fun TopRow(
                 .padding(horizontal = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconAction(InkIcons.Back, "К тетрадям", onClose)
+            IconAction(InkIcons.Back, tr("К тетрадям", "To notebooks"), onClose)
             val math = c.math.state
             val status = c.status ?: when (math) {
-                MathNotes.State.Downloading -> "Загружаю модель формул…"
+                MathNotes.State.Downloading -> tr("Загружаю модель формул…", "Downloading the formula model…")
                 is MathNotes.State.Failed -> math.message
                 else -> null
             }
@@ -723,9 +724,9 @@ private fun TopRow(
                 )
                 when {
                     c.learningPenButton -> Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Нажмите кнопку пера…", color = MaterialTheme.colorScheme.primary, fontSize = 13.sp, maxLines = 1)
+                        Text(tr("Нажмите кнопку пера…", "Press the pen button…"), color = MaterialTheme.colorScheme.primary, fontSize = 13.sp, maxLines = 1)
                         TextButton(onClick = { c.learningPenButton = false }, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp)) {
-                            Text("Отмена", fontSize = 13.sp)
+                            Text(tr("Отмена", "Cancel"), fontSize = 13.sp)
                         }
                     }
                     status != null -> androidx.compose.animation.AnimatedContent(
@@ -748,13 +749,13 @@ private fun TopRow(
             Row(verticalAlignment = Alignment.CenterVertically) { BarButtons(c, shown, placing, BarCatalog.GROUP_GAP) }
             if (compact) ToolsToggle(c)
             Box {
-                IconAction(InkIcons.More, "Ещё", { menuOpen = true })
+                IconAction(InkIcons.More, tr("Ещё", "More"), { menuOpen = true })
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                     val close = { menuOpen = false }
                     // Settings of the bars first: a long menu would hide them at its end.
-                    MenuRow(BarAction("customize", "Настроить панели…", "Какие кнопки где", InkIcons.Tune, placing.customize), null, close)
+                    MenuRow(BarAction("customize", tr("Настроить панели…", "Customise bars…"), tr("Какие кнопки где", "Which buttons go where"), InkIcons.Tune, placing.customize), null, close)
                     if (hiddenCount > 0) {
-                        MenuRow(BarAction("all", "Все функции… ($hiddenCount скрыто)", "Скрытые функции", InkIcons.AllFunctions, onAllFunctions), null, close)
+                        MenuRow(BarAction("all", tr("Все функции… ($hiddenCount скрыто)", "All functions… ($hiddenCount hidden)"), tr("Скрытые функции", "Hidden functions"), InkIcons.AllFunctions, onAllFunctions), null, close)
                     }
                     HorizontalDivider()
                     if (spilled.isNotEmpty()) {
@@ -789,7 +790,7 @@ private const val PANEL_MS = 220
 fun ThemeButton(mode: ThemeMode, onChange: (ThemeMode) -> Unit) {
     IconAction(
         icon = themeIcon(mode),
-        label = "Тема: ${mode.title.lowercase()} (нажмите, чтобы сменить)",
+        label = tr("Тема: ${mode.title.lowercase()} (нажмите, чтобы сменить)", "Theme: ${mode.title.lowercase()} (tap to change)"),
         onClick = { onChange(ThemeMode.entries[(mode.ordinal + 1) % ThemeMode.entries.size]) },
     )
 }
@@ -821,14 +822,14 @@ private fun SearchPanel(c: EditorController) {
             onValueChange = { query = it },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
-            placeholder = { Text("Найти в тетради") },
+            placeholder = { Text(tr("Найти в тетради", "Find in the notebook")) },
         )
         HandwritingStatus(c.handwriting)
         if (query.isNotBlank()) {
-            SearchResults(hits, emptyText = "Ничего не найдено", showNotebook = false, onClick = c::showHit)
+            SearchResults(hits, emptyText = tr("Ничего не найдено", "Nothing found"), showNotebook = false, onClick = c::showHit)
         } else if (c.handwriting.state == dev.inknotes.search.HandwritingIndex.State.Ready) {
             Text(
-                "Ищет по распознанному рукописному тексту. Нажмите на результат — строка подсветится на странице.",
+                tr("Ищет по распознанному рукописному тексту. Нажмите на результат — строка подсветится на странице.", "Searches the recognised handwriting. Tap a result — the line lights up on the page."),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 13.sp,
                 modifier = Modifier.padding(top = 8.dp),
@@ -844,26 +845,26 @@ private fun PageTextDialog(c: EditorController, lines: List<dev.inknotes.search.
     val text = lines.joinToString("\n") { it.text }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Текст страницы ${c.pageIndex + 1}") },
+        title = { Text(tr("Текст страницы ${c.pageIndex + 1}", "Text of page ${c.pageIndex + 1}")) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 when {
                     c.handwriting.state != dev.inknotes.search.HandwritingIndex.State.Ready -> HandwritingStatus(c.handwriting)
                     lines.isEmpty() -> Text(
-                        "Текст ещё не распознан или на странице нет рукописного текста. Распознавание идёт через пару секунд после того, как вы перестали писать.",
+                        tr("Текст ещё не распознан или на странице нет рукописного текста. Распознавание идёт через пару секунд после того, как вы перестали писать.", "The text is not recognised yet or the page has no handwriting. Recognition runs a couple of seconds after you stop writing."),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     else -> androidx.compose.foundation.text.selection.SelectionContainer { Text(text) }
                 }
             }
         },
-        confirmButton = { Button(onClick = onDismiss) { Text("Закрыть") } },
+        confirmButton = { Button(onClick = onDismiss) { Text(tr("Закрыть", "Close")) } },
         dismissButton = {
             if (lines.isNotEmpty()) {
                 TextButton(onClick = {
                     clipboard.setText(androidx.compose.ui.text.AnnotatedString(text))
                     onDismiss()
-                }) { Text("Копировать") }
+                }) { Text(tr("Копировать", "Copy")) }
             }
         },
     )
@@ -1004,22 +1005,22 @@ private fun PagesPanel(c: EditorController, onPageSize: (Int) -> Unit) {
             ) {
                 InkIcon(InkIcons.AddPage, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))
-                Text("В конец", maxLines = 1, softWrap = false)
+                Text(tr("В конец", "To the end"), maxLines = 1, softWrap = false)
             }
         }
     }
     confirmDelete?.let { index ->
         AlertDialog(
             onDismissRequest = { confirmDelete = null },
-            title = { Text("Удалить страницу ${index + 1}?") },
-            text = { Text("Страницу нельзя будет вернуть кнопкой «Отменить».") },
+            title = { Text(tr("Удалить страницу ${index + 1}?", "Delete page ${index + 1}?")) },
+            text = { Text(tr("Страницу нельзя будет вернуть кнопкой «Отменить».", "The page can't be brought back with “Undo”.")) },
             confirmButton = {
                 Button(onClick = {
                     c.deletePage(index)
                     confirmDelete = null
-                }) { Text("Удалить") }
+                }) { Text(tr("Удалить", "Delete")) }
             },
-            dismissButton = { TextButton(onClick = { confirmDelete = null }) { Text("Отмена") } },
+            dismissButton = { TextButton(onClick = { confirmDelete = null }) { Text(tr("Отмена", "Cancel")) } },
         )
     }
 }
@@ -1054,34 +1055,34 @@ private fun PageThumbnail(
                     if (current) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
                     shape,
                 )
-                .clickable(onClickLabel = "Перейти к странице ${index + 1}") { c.goToPage(index) }
+                .clickable(onClickLabel = tr("Перейти к странице ${index + 1}", "Go to page ${index + 1}")) { c.goToPage(index) }
                 // After the click handler: it sees events first and takes the release of a hold,
                 // so letting go after dragging (or for the menu) does not also open the page.
                 .then(dragHandle)
         ) {
             if (image != null) Image(image, contentDescription = null, modifier = Modifier.fillMaxSize())
             DropdownMenu(expanded = menuOpen, onDismissRequest = onMenuClose) {
-                DropdownMenuItem(text = { Text("Дублировать") }, onClick = {
+                DropdownMenuItem(text = { Text(tr("Дублировать", "Duplicate")) }, onClick = {
                     onMenuClose()
                     c.duplicatePage(index)
                 })
-                DropdownMenuItem(text = { Text("Переместить выше") }, enabled = index > 0, onClick = {
+                DropdownMenuItem(text = { Text(tr("Переместить выше", "Move up")) }, enabled = index > 0, onClick = {
                     onMenuClose()
                     c.movePage(index, index - 1)
                 })
-                DropdownMenuItem(text = { Text("Переместить ниже") }, enabled = index < c.notebook.pageIds.lastIndex, onClick = {
+                DropdownMenuItem(text = { Text(tr("Переместить ниже", "Move down")) }, enabled = index < c.notebook.pageIds.lastIndex, onClick = {
                     onMenuClose()
                     c.movePage(index, index + 1)
                 })
-                DropdownMenuItem(text = { Text("Вставить пустую после") }, onClick = {
+                DropdownMenuItem(text = { Text(tr("Вставить пустую после", "Insert a blank one after")) }, onClick = {
                     onMenuClose()
                     c.addPageAt(index + 1)
                 })
-                DropdownMenuItem(text = { Text("Размер и ориентация…") }, onClick = {
+                DropdownMenuItem(text = { Text(tr("Размер и ориентация…", "Size and orientation…")) }, onClick = {
                     onMenuClose()
                     onPageSize()
                 })
-                DropdownMenuItem(text = { Text("Удалить", color = MaterialTheme.colorScheme.error) }, enabled = c.notebook.pageIds.size > 1, onClick = {
+                DropdownMenuItem(text = { Text(tr("Удалить", "Delete"), color = MaterialTheme.colorScheme.error) }, enabled = c.notebook.pageIds.size > 1, onClick = {
                     onMenuClose()
                     onDelete()
                 })
@@ -1195,7 +1196,7 @@ private fun ToolOptions(c: EditorController, onPickColor: () -> Unit, onHatchSet
     if (c.selectionCount > 0) SelectionOptions(c, onPickColor, onHatchSettings, onSelectionSize) else when (c.tool) {
         Tool.PEN, Tool.FOUNTAIN, Tool.HIGHLIGHTER, Tool.NEON, Tool.SPOILER -> InkOptions(c, onPickColor)
         Tool.LASER -> Text(
-            "Указка: след гаснет сам и не записывается",
+            tr("Указка: след гаснет сам и не записывается", "Pointer: the trail fades by itself and is not saved"),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 8.dp),
         )
@@ -1204,17 +1205,17 @@ private fun ToolOptions(c: EditorController, onPickColor: () -> Unit, onHatchSet
             FilterChip(
                 selected = c.eraserMode == EraserMode.WHOLE,
                 onClick = { c.selectEraserMode(EraserMode.WHOLE) },
-                label = { Text("Штрих целиком") },
+                label = { Text(tr("Штрих целиком", "Whole stroke")) },
             )
             FilterChip(
                 selected = c.eraserMode == EraserMode.PARTIAL,
                 onClick = { c.selectEraserMode(EraserMode.PARTIAL) },
-                label = { Text("Частично") },
+                label = { Text(tr("Частично", "Partly")) },
             )
             EraserTargetButton(c)
         }
         Tool.LASSO -> Text(
-            "Обведите пером то, что нужно выделить, или коснитесь объекта пальцем",
+            tr("Обведите пером то, что нужно выделить, или коснитесь объекта пальцем", "Circle what to select with the pen, or touch an object with a finger"),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Tool.AREA -> {
@@ -1225,7 +1226,7 @@ private fun ToolOptions(c: EditorController, onPickColor: () -> Unit, onHatchSet
                 c.fillStyle,
                 InkColors.forPaper(c.fillColor, c.paperDark),
                 selected = true,
-                label = "Узор: ${c.fillPattern.title}. Выбрать узор и настроить",
+                label = tr("Узор: ${c.fillPattern.title}. Выбрать узор и настроить", "Pattern: ${c.fillPattern.title}. Choose and adjust the pattern"),
                 onClick = onHatchSettings,
             )
             ColorChoices(c, selected = c.fillColor, onPickColor)
@@ -1234,11 +1235,11 @@ private fun ToolOptions(c: EditorController, onPickColor: () -> Unit, onHatchSet
                 Button(onClick = { c.applyFill() }) {
                     InkIcon(InkIcons.Area, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text("Заштриховать")
+                    Text(tr("Заштриховать", "Hatch"))
                 }
-                IconAction(InkIcons.Close, "Отменить область", { c.cancelArea() })
+                IconAction(InkIcons.Close, tr("Отменить область", "Cancel the area"), { c.cancelArea() })
             } else {
-                Text("Коснитесь внутри фигуры", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(tr("Коснитесь внутри фигуры", "Tap inside a shape"), color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
@@ -1379,7 +1380,7 @@ private fun TabStrip(
                 )
                 // Wider than it looks: easy to hit with a finger, the strip stays thin.
                 Box(
-                    Modifier.width(36.dp).height(TAB_HEIGHT).clip(RoundedCornerShape(6.dp)).clickable { if (closing[t] != true) closeSmoothly(listOf(t)) { onCloseTab(t) } }.semantics { contentDescription = "Закрыть вкладку" },
+                    Modifier.width(36.dp).height(TAB_HEIGHT).clip(RoundedCornerShape(6.dp)).clickable { if (closing[t] != true) closeSmoothly(listOf(t)) { onCloseTab(t) } }.semantics { contentDescription = tr("Закрыть вкладку", "Close tab") },
                     contentAlignment = Alignment.Center,
                 ) { Text("✕", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             }
@@ -1388,7 +1389,7 @@ private fun TabStrip(
         Box(
             Modifier.height(TAB_HEIGHT).clip(RoundedCornerShape(6.dp)).clickable(onClick = onAdd).padding(horizontal = 10.dp),
             contentAlignment = Alignment.Center,
-        ) { Text(if (right) "+" else "+ Тетрадь", fontSize = 13.sp, color = MaterialTheme.colorScheme.primary) }
+        ) { Text(if (right) "+" else tr("+ Тетрадь", "+ Notebook"), fontSize = 13.sp, color = MaterialTheme.colorScheme.primary) }
         if (onCloseAll != null && tabs.size >= 2) CloseAllTabs(tabs.size) { closeSmoothly(tabs, onCloseAll) }
     }
 }
@@ -1437,7 +1438,7 @@ private fun ArrowRow(
                             )
                         }
                     }
-                    .semantics { contentDescription = if (forward) "Дальше по панели" else "Назад по панели" },
+                    .semantics { contentDescription = if (forward) tr("Дальше по панели", "Further along the bar") else tr("Назад по панели", "Back along the bar") },
                 contentAlignment = if (forward) Alignment.CenterEnd else Alignment.CenterStart,
             ) { InkIcon(if (forward) InkIcons.Next else InkIcons.Previous, contentDescription = null, modifier = Modifier.size(if (height < 40.dp) 16.dp else 20.dp)) }
         }
@@ -1477,12 +1478,12 @@ private fun ToolsToggle(c: EditorController) {
             val prefs = AppServices.get(context).prefs
             if (prefs.toolsHiddenHints < 3) {
                 prefs.toolsHiddenHints = prefs.toolsHiddenHints + 1
-                c.showStatus("Инструменты спрятаны в кнопку справа сверху — коснитесь её, чтобы вернуть")
+                c.showStatus(tr("Инструменты спрятаны в кнопку справа сверху — коснитесь её, чтобы вернуть", "The tools are tucked into the button at the top right — tap it to bring them back"))
             }
         }
     }
     if (!hidden) {
-        IconAction(InkIcons.ToolsHide, "Скрыть инструменты (больше места для страницы)", toggle)
+        IconAction(InkIcons.ToolsHide, tr("Скрыть инструменты (больше места для страницы)", "Hide tools (more room for the page)"), toggle)
         return
     }
     Row(
@@ -1495,7 +1496,7 @@ private fun ToolsToggle(c: EditorController) {
             .clip(RoundedCornerShape(18.dp))
             .background(MaterialTheme.colorScheme.secondaryContainer)
             .clickable(onClick = toggle)
-            .semantics { contentDescription = "Показать инструменты" }
+            .semantics { contentDescription = tr("Показать инструменты", "Show tools") }
             .padding(horizontal = 8.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(2.dp),
@@ -1539,13 +1540,13 @@ private fun CloseAllTabs(count: Int, onCloseAll: () -> Unit) {
                     armed = true
                 }
             }
-            .semantics { contentDescription = if (armed) "Подтвердить: закрыть все вкладки" else "Закрыть все вкладки" }
+            .semantics { contentDescription = if (armed) tr("Подтвердить: закрыть все вкладки", "Confirm: close all tabs") else tr("Закрыть все вкладки", "Close all tabs") }
             .animateContentSize(tween(180))
             .padding(horizontal = 10.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(
-            if (armed) "Закрыть $count ${tabsWord(count)}?" else "Закрыть все",
+            if (armed) tr("Закрыть $count ${tabsWord(count)}?", "Close $count ${if (count == 1) "tab" else "tabs"}?") else tr("Закрыть все", "Close all"),
             fontSize = 13.sp,
             fontWeight = if (armed) FontWeight.SemiBold else FontWeight.Normal,
             color = if (armed) MaterialTheme.colorScheme.onError else MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1606,16 +1607,16 @@ private fun TypeTextDialog(title: String, initial: String, onDismiss: () -> Unit
                 text,
                 { text = it },
                 modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp, max = 360.dp),
-                placeholder = { Text("Текст") },
+                placeholder = { Text(tr("Текст", "Text")) },
             )
         },
         confirmButton = {
             Button(onClick = {
                 onDone(text)
                 onDismiss()
-            }) { Text("Готово") }
+            }) { Text(tr("Готово", "Done")) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(tr("Отмена", "Cancel")) } },
     )
 }
 
@@ -1624,17 +1625,17 @@ private fun TypeTextDialog(title: String, initial: String, onDismiss: () -> Unit
 private fun SelectionMoreButton(c: EditorController) {
     Box {
         var open by remember { mutableStateOf(false) }
-        TextButton(onClick = { open = true }) { Text("Ещё ▾") }
+        TextButton(onClick = { open = true }) { Text(tr("Ещё ▾", "More ▾")) }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            DropdownMenuItem(text = { Text("В оглавление…") }, onClick = {
+            DropdownMenuItem(text = { Text(tr("В оглавление…", "To contents…")) }, onClick = {
                 open = false
                 c.showAddBookmark = true
             })
-            DropdownMenuItem(text = { Text("Ссылка на страницу…") }, onClick = {
+            DropdownMenuItem(text = { Text(tr("Ссылка на страницу…", "Link to a page…")) }, onClick = {
                 open = false
                 c.showLinkDialog = true
             })
-            DropdownMenuItem(text = { Text("На слой…") }, onClick = {
+            DropdownMenuItem(text = { Text(tr("На слой…", "To a layer…")) }, onClick = {
                 open = false
                 c.showLayersDialog = true
             })
@@ -1647,7 +1648,7 @@ private fun SelectionMoreButton(c: EditorController) {
 private fun EraserTargetButton(c: EditorController) {
     Box {
         var open by remember { mutableStateOf(false) }
-        TextButton(onClick = { open = true }) { Text("Стирает: ${c.eraserTarget.title.lowercase().removePrefix("только ")} ▾") }
+        TextButton(onClick = { open = true }) { Text(tr("Стирает: ${c.eraserTarget.title.lowercase().removePrefix("только ")} ▾", "Erases: ${c.eraserTarget.title.lowercase().removeSuffix(" only")} ▾")) }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             for (t in dev.inknotes.editor.EraserTarget.entries) {
                 DropdownMenuItem(
@@ -1666,43 +1667,43 @@ private fun EraserTargetButton(c: EditorController) {
 /** What can be done with the selection: colour, mirror, size, text, copy, delete. */
 @Composable
 private fun SelectionOptions(c: EditorController, onPickColor: () -> Unit, onHatchSettings: () -> Unit, onSelectionSize: () -> Unit) {
-    IconAction(InkIcons.Close, "Снять выделение", { c.clearSelection() })
-    Text("Выделено: ${c.selectionCount}", fontWeight = FontWeight.Medium)
+    IconAction(InkIcons.Close, tr("Снять выделение", "Deselect"), { c.clearSelection() })
+    Text(tr("Выделено: ${c.selectionCount}", "Selected: ${c.selectionCount}"), fontWeight = FontWeight.Medium)
     ColorChoices(c, selected = null, onPickColor)
     if (c.selectionLineKinds.isNotEmpty()) LineKindButton(c)
     SelectionWidthButton(c)
     SelectionDashButton(c)
     if (c.selectionIsTable) {
-        IconAction(InkIcons.TableAddRow, "Добавить строку снизу", { c.addToTable(row = true) })
-        IconAction(InkIcons.TableAddColumn, "Добавить столбец справа", { c.addToTable(row = false) })
-        IconAction(InkIcons.TableRemoveRow, "Убрать последнюю строку", { c.removeFromTable(row = true) })
-        IconAction(InkIcons.TableRemoveColumn, "Убрать последний столбец", { c.removeFromTable(row = false) })
+        IconAction(InkIcons.TableAddRow, tr("Добавить строку снизу", "Add a row below"), { c.addToTable(row = true) })
+        IconAction(InkIcons.TableAddColumn, tr("Добавить столбец справа", "Add a column on the right"), { c.addToTable(row = false) })
+        IconAction(InkIcons.TableRemoveRow, tr("Убрать последнюю строку", "Remove the last row"), { c.removeFromTable(row = true) })
+        IconAction(InkIcons.TableRemoveColumn, tr("Убрать последний столбец", "Remove the last column"), { c.removeFromTable(row = false) })
     }
-    if (c.selectedFills > 0) IconAction(InkIcons.Tune, "Штриховка выделенного", onHatchSettings)
-    IconAction(InkIcons.FlipHorizontal, "Отразить слева направо", { c.flipSelection(horizontal = true) })
-    IconAction(InkIcons.FlipVertical, "Отразить сверху вниз", { c.flipSelection(horizontal = false) })
-    IconAction(InkIcons.Ruler, "Размер в миллиметрах", onSelectionSize)
-    if (c.selectedPicture != null) IconAction(InkIcons.PhotoEdit, "Изменить картинку: обрезать, выпрямить, перспектива, фон", c::editSelectedPicture)
+    if (c.selectedFills > 0) IconAction(InkIcons.Tune, tr("Штриховка выделенного", "Hatching of the selection"), onHatchSettings)
+    IconAction(InkIcons.FlipHorizontal, tr("Отразить слева направо", "Flip left to right"), { c.flipSelection(horizontal = true) })
+    IconAction(InkIcons.FlipVertical, tr("Отразить сверху вниз", "Flip top to bottom"), { c.flipSelection(horizontal = false) })
+    IconAction(InkIcons.Ruler, tr("Размер в миллиметрах", "Size in millimetres"), onSelectionSize)
+    if (c.selectedPicture != null) IconAction(InkIcons.PhotoEdit, tr("Изменить картинку: обрезать, выпрямить, перспектива, фон", "Edit picture: crop, straighten, perspective, background"), c::editSelectedPicture)
     if (c.selectedText != null) {
-        TextButton(onClick = { c.editingText = true }) { Text("Изменить текст") }
-        TextButton(onClick = { c.scaleSelectedText(1f / 1.2f) }) { Text("А−") }
-        TextButton(onClick = { c.scaleSelectedText(1.2f) }) { Text("А+") }
+        TextButton(onClick = { c.editingText = true }) { Text(tr("Изменить текст", "Edit text")) }
+        TextButton(onClick = { c.scaleSelectedText(1f / 1.2f) }) { Text(tr("А−", "A−")) }
+        TextButton(onClick = { c.scaleSelectedText(1.2f) }) { Text(tr("А+", "A+")) }
     } else {
-        TextButton(onClick = { c.recognizeSelection() }) { Text("Текст") }
-        if (c.selectionLineKinds.isNotEmpty()) TextButton(onClick = { c.formulaFromSelection() }) { Text("Формула") }
+        TextButton(onClick = { c.recognizeSelection() }) { Text(tr("Текст", "Text")) }
+        if (c.selectionLineKinds.isNotEmpty()) TextButton(onClick = { c.formulaFromSelection() }) { Text(tr("Формула", "Formula")) }
     }
     SelectionMoreButton(c)
-    IconAction(InkIcons.Duplicate, "Дублировать", { c.duplicateSelection() })
-    IconAction(InkIcons.Delete, "Удалить выделенное", { c.deleteSelection() })
+    IconAction(InkIcons.Duplicate, tr("Дублировать", "Duplicate"), { c.duplicateSelection() })
+    IconAction(InkIcons.Delete, tr("Удалить выделенное", "Delete the selection"), { c.deleteSelection() })
 }
 
 private val LINE_KINDS = listOf(
-    InkKind.PEN to "Ручка",
-    InkKind.LINE to "Ровная",
-    InkKind.PENCIL to "Карандаш",
-    InkKind.DASHED to "Пунктир",
-    InkKind.FOUNTAIN to "Перо",
-    InkKind.NEON to "Неон",
+    InkKind.PEN to tr("Ручка", "Pen"),
+    InkKind.LINE to tr("Ровная", "Even"),
+    InkKind.PENCIL to tr("Карандаш", "Pencil"),
+    InkKind.DASHED to tr("Пунктир", "Dashed"),
+    InkKind.FOUNTAIN to tr("Перо", "Nib"),
+    InkKind.NEON to tr("Неон", "Neon"),
 )
 
 /** Type of the selected lines: a neon line made an ordinary one, a pen line pencil… */
@@ -1711,7 +1712,7 @@ private fun LineKindButton(c: EditorController) {
     Box {
         var open by remember { mutableStateOf(false) }
         val kinds = c.selectionLineKinds
-        val title = if (kinds.size == 1) LINE_KINDS.firstOrNull { it.first == kinds.first() }?.second ?: "Линия" else "Тип линии"
+        val title = if (kinds.size == 1) LINE_KINDS.firstOrNull { it.first == kinds.first() }?.second ?: tr("Линия", "Line") else tr("Тип линии", "Line type")
         TextButton(onClick = { open = true }) { Text("$title ▾") }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             for ((kind, name) in LINE_KINDS) {
@@ -1727,7 +1728,7 @@ private fun LineKindButton(c: EditorController) {
     }
 }
 
-private val PEN_KINDS = listOf(InkKind.PEN to "Ручка", InkKind.PENCIL to "Карандаш", InkKind.DASHED to "Пунктир")
+private val PEN_KINDS = listOf(InkKind.PEN to tr("Ручка", "Pen"), InkKind.PENCIL to tr("Карандаш", "Pencil"), InkKind.DASHED to tr("Пунктир", "Dashed"))
 
 /** Pen, pencil, dashes or the fountain pen for the pen button. */
 @Composable
@@ -1735,7 +1736,7 @@ private fun PenKindButton(c: EditorController) {
     Box {
         var open by remember { mutableStateOf(false) }
         val fountain = c.tool == Tool.FOUNTAIN
-        val title = if (fountain) "Перо" else PEN_KINDS.firstOrNull { it.first == c.penKind }?.second ?: "Ручка"
+        val title = if (fountain) tr("Перо", "Nib") else PEN_KINDS.firstOrNull { it.first == c.penKind }?.second ?: tr("Ручка", "Pen")
         TextButton(onClick = { open = true }) { Text("$title ▾") }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             for ((kind, name) in PEN_KINDS) {
@@ -1749,7 +1750,7 @@ private fun PenKindButton(c: EditorController) {
                 )
             }
             DropdownMenuItem(
-                text = { Text((if (fountain) "✓ " else "") + "Перо") },
+                text = { Text((if (fountain) "✓ " else "") + tr("Перо", "Nib")) },
                 onClick = {
                     c.selectTool(Tool.FOUNTAIN)
                     open = false
@@ -1779,7 +1780,7 @@ private fun InkOptions(c: EditorController, onPickColor: () -> Unit, tool: Tool 
         FilterChip(
             selected = c.straightHighlighter,
             onClick = c::toggleStraightHighlighter,
-            label = { Text("Ровно по тексту") },
+            label = { Text(tr("Ровно по тексту", "Along the text")) },
         )
     }
 }
@@ -1805,7 +1806,7 @@ private fun SizeSlider(c: EditorController, tool: Tool = c.tool) {
         Canvas(
             Modifier
                 .size(40.dp)
-                .semantics { contentDescription = "Толщина" }
+                .semantics { contentDescription = tr("Толщина", "Width") }
         ) {
             // Eraser: radius in dp; ink: page units at about the on-screen page scale.
             val diameter = if (eraser) value * 2 * density else value * 1.4f * density
@@ -1866,7 +1867,7 @@ private fun ColorChoices(c: EditorController, selected: Int?, onPickColor: () ->
         }
     }
     PickerSwatch(onPickColor)
-    IconAction(InkIcons.Eyedropper, "Пипетка: взять цвет со страницы или фото", { c.toggleColorPick() }, selected = c.pickingColor)
+    IconAction(InkIcons.Eyedropper, tr("Пипетка: взять цвет со страницы или фото", "Eyedropper: take a colour from the page or a photo"), { c.toggleColorPick() }, selected = c.pickingColor)
 }
 
 private fun sameRgb(a: Int, b: Int) = (a and 0xFFFFFF) == (b and 0xFFFFFF)
@@ -1897,8 +1898,8 @@ private fun PickerSwatch(onClick: () -> Unit) {
             .size(32.dp)
             .clip(CircleShape)
             .background(Brush.sweepGradient(rainbow))
-            .clickable(onClickLabel = "Другой цвет", onClick = onClick)
-            .semantics { contentDescription = "Другой цвет" },
+            .clickable(onClickLabel = tr("Другой цвет", "Another colour"), onClick = onClick)
+            .semantics { contentDescription = tr("Другой цвет", "Another colour") },
         contentAlignment = Alignment.Center,
     ) {
         Box(
@@ -1932,7 +1933,7 @@ private fun BackgroundDialog(c: EditorController, onDismiss: () -> Unit) {
     }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Фон тетради") },
+        title = { Text(tr("Фон тетради", "Notebook background")) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(20.dp)) {
                 for (darkTheme in listOf(false, true)) {
@@ -1946,10 +1947,10 @@ private fun BackgroundDialog(c: EditorController, onDismiss: () -> Unit) {
                         onCustomColor = { customFor = darkTheme },
                     )
                 }
-                if (c.importingPhoto) Text("Загружаю фото…", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (c.importingPhoto) Text(tr("Загружаю фото…", "Loading the photo…"), color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Готово") } },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(tr("Готово", "Done")) } },
     )
 }
 
@@ -1958,7 +1959,7 @@ private fun ThemeBackgrounds(c: EditorController, darkTheme: Boolean, onPickPhot
     val current = c.notebook.background(darkTheme)
     var lines by remember(current.lines) { mutableFloatStateOf(current.lines) }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(if (darkTheme) "Тёмная тема" else "Светлая тема", fontWeight = FontWeight.Medium)
+        Text(if (darkTheme) tr("Тёмная тема", "Dark theme") else tr("Светлая тема", "Light theme"), fontWeight = FontWeight.Medium)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             for (kind in PaperKind.entries) {
                 val isPhoto = kind == PaperKind.PHOTO
@@ -1977,7 +1978,7 @@ private fun ThemeBackgrounds(c: EditorController, darkTheme: Boolean, onPickPhot
         }
         // Paper colour: the theme's own, ready shades or any colour.
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("Цвет листа", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(tr("Цвет листа", "Paper colour"), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             val swatches: List<Int?> = listOf(null) + if (darkTheme) DARK_PAPERS else LIGHT_PAPERS
             for (color in swatches) {
                 val shown = color ?: PaperStyle.of(darkTheme).paper
@@ -1988,7 +1989,7 @@ private fun ThemeBackgrounds(c: EditorController, darkTheme: Boolean, onPickPhot
                         .clip(RoundedCornerShape(15.dp))
                         .background(Color(shown))
                         .border(if (selected) 3.dp else 1.dp, if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline, RoundedCornerShape(15.dp))
-                        .clickable(onClickLabel = if (color == null) "Цвет темы" else "Цвет листа") {
+                        .clickable(onClickLabel = if (color == null) tr("Цвет темы", "Theme colour") else tr("Цвет листа", "Paper colour")) {
                             c.setBackground(darkTheme, current.copy(color = color))
                         },
                 )
@@ -1998,7 +1999,7 @@ private fun ThemeBackgrounds(c: EditorController, darkTheme: Boolean, onPickPhot
                     .size(30.dp)
                     .clip(RoundedCornerShape(15.dp))
                     .background(androidx.compose.ui.graphics.Brush.sweepGradient(listOf(Color.Red, Color.Yellow, Color.Green, Color.Cyan, Color.Blue, Color.Magenta, Color.Red)))
-                    .clickable(onClickLabel = "Любой цвет", onClick = onCustomColor),
+                    .clickable(onClickLabel = tr("Любой цвет", "Any colour"), onClick = onCustomColor),
             )
         }
         if (current.kind != PaperKind.BLANK && current.kind != PaperKind.PHOTO) {
@@ -2011,13 +2012,13 @@ private fun ThemeBackgrounds(c: EditorController, darkTheme: Boolean, onPickPhot
 @Composable
 fun LinesSlider(value: Float, onChange: (Float) -> Unit, onDone: () -> Unit = {}) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("Линии фона: ${Math.round(value * 100)}%", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(140.dp))
+        Text(tr("Линии фона: ${Math.round(value * 100)}%", "Background lines: ${Math.round(value * 100)}%"), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(140.dp))
         InkSlider(
             value = value,
             onValueChange = onChange,
             onValueChangeFinished = onDone,
             valueRange = 0.1f..1f,
-            modifier = Modifier.width(240.dp).semantics { contentDescription = "Прозрачность линий фона" },
+            modifier = Modifier.width(240.dp).semantics { contentDescription = tr("Прозрачность линий фона", "Background line opacity") },
         )
     }
 }

@@ -1,5 +1,6 @@
 package dev.inknotes.ui
 
+import dev.inknotes.data.tr
 import kotlin.math.abs
 import android.content.ContentResolver
 import dev.inknotes.data.PdfGeometry
@@ -124,7 +125,7 @@ class EditorController(
         penPressure = !penPressure
         prefs.penPressure = penPressure
         syncView()
-        showStatus(if (penPressure) "Ручка чувствует нажим" else "Ручка без нажима: линия одной толщины")
+        showStatus(if (penPressure) tr("Ручка чувствует нажим", "The pen responds to pressure") else tr("Ручка без нажима: линия одной толщины", "Pen without pressure: lines of one width"))
     }
 
     /** The zoom window is open at the bottom of the page. */
@@ -185,7 +186,7 @@ class EditorController(
     fun toggleProtractor() {
         protractorShown = view?.toggleRuler(protractor = true) ?: false
         rulerShown = false
-        if (protractorShown) showStatus("Транспортир: пальцами двигать и поворачивать, пером — линия по низу или дуга по краю, наведите перо — угол")
+        if (protractorShown) showStatus(tr("Транспортир: пальцами двигать и поворачивать, пером — линия по низу или дуга по краю, наведите перо — угол", "Protractor: move and turn it with fingers; with the pen draw a line along the base or an arc along the edge; hover the pen to see the angle"))
     }
 
     /** The pen draws circles with the compass. */
@@ -195,7 +196,7 @@ class EditorController(
     fun toggleCompass() {
         compassOn = !compassOn
         view?.compassOn = compassOn
-        if (compassOn) showStatus("Циркуль: перо в центр, тяните до радиуса и отпустите — окружность; обведите часть круга — дуга")
+        if (compassOn) showStatus(tr("Циркуль: перо в центр, тяните до радиуса и отпустите — окружность; обведите часть круга — дуга", "Compass: pen at the centre, drag out to the radius and let go for a circle; trace part of it for an arc"))
     }
 
     /** A request to the screen from a key (open search, export, print, the timer); the screen clears it. */
@@ -210,11 +211,11 @@ class EditorController(
         clip = c
         clipPage = v.selectionPageIndex
         if (cut) v.deleteSelection()
-        showStatus(if (cut) "Вырезано" else "Скопировано")
+        showStatus(if (cut) tr("Вырезано", "Cut") else tr("Скопировано", "Copied"))
     }
 
     fun pasteClip() {
-        val c = clip ?: return showStatus("Сначала скопируйте выделенное (Ctrl+C)")
+        val c = clip ?: return showStatus(tr("Сначала скопируйте выделенное (Ctrl+C)", "Copy a selection first (Ctrl+C)"))
         val v = view ?: return
         selectTool(Tool.LASSO)
         v.paste(pageIndex, c, samePlace = pageIndex == clipPage)
@@ -279,7 +280,7 @@ class EditorController(
     fun addToTable(row: Boolean) = view?.addToTable(row)
 
     fun removeFromTable(row: Boolean) {
-        if (view?.removeFromTable(row) == false) showStatus(if (row) "В таблице одна строка" else "В таблице один столбец")
+        if (view?.removeFromTable(row) == false) showStatus(if (row) tr("В таблице одна строка", "The table has one row") else tr("В таблице один столбец", "The table has one column"))
     }
 
     /** The eyedropper is waiting for a touch on the page. */
@@ -566,7 +567,7 @@ class EditorController(
         importingImage = true
         repo.importImageAsync(notebook, uri, resolver) { result ->
             importingImage = false
-            val (file, pxW, pxH) = result ?: return@importImageAsync showStatus("Не удалось вставить картинку")
+            val (file, pxW, pxH) = result ?: return@importImageAsync showStatus(tr("Не удалось вставить картинку", "Could not insert the picture"))
             // About 40% of the page width, smaller pictures not upscaled past 2× their pixels.
             placeNewImage(file, pxW, pxH, pageIndex)
         }
@@ -599,7 +600,7 @@ class EditorController(
 
     fun toggleListenByTouch() {
         listenByTouch = !listenByTouch
-        if (listenByTouch && notebook.audioMarks.isEmpty()) showStatus("Пока нечего слушать: запишите звук и пишите во время записи")
+        if (listenByTouch && notebook.audioMarks.isEmpty()) showStatus(tr("Пока нечего слушать: запишите звук и пишите во время записи", "Nothing to listen to yet: record sound and write while recording"))
         view?.refresh()
     }
 
@@ -624,7 +625,7 @@ class EditorController(
         if (!ok) {
             runCatching { r.release() }
             file.delete()
-            showStatus("Не удалось начать запись")
+            showStatus(tr("Не удалось начать запись", "Could not start recording"))
             return
         }
         recorder = r
@@ -663,16 +664,16 @@ class EditorController(
         }
         // A stop that failed (a call came, the system took the microphone) still keeps what was
         // recorded up to then: AAC in ADTS frames plays without being finished.
-        if (!ok) showStatus("Запись прервана системой — сохранено то, что успело записаться")
+        if (!ok) showStatus(tr("Запись прервана системой — сохранено то, что успело записаться", "The recording was interrupted by the system — what was recorded so far is saved"))
         val rec = dev.inknotes.data.Recording(file.name, since, System.currentTimeMillis() - since)
         val marks = pendingMarks.toList()
         notebook = repo.addRecording(notebook, rec, marks)
         pendingMarks.clear()
         if (marks.isNotEmpty()) {
             listenByTouch = true
-            showStatus("Запись сохранена. Написанное во время неё подчёркнуто оранжевым — коснитесь пальцем, и включится звук")
+            showStatus(tr("Запись сохранена. Написанное во время неё подчёркнуто оранжевым — коснитесь пальцем, и включится звук", "Recording saved. Writing made during it is underlined in orange — touch it with a finger to play the sound"))
         } else {
-            showStatus("Запись сохранена. Во время неё ничего не написано — слушайте её в «Записи звука…»")
+            showStatus(tr("Запись сохранена. Во время неё ничего не написано — слушайте её в «Записи звука…»", "Recording saved. Nothing was written during it — listen to it in “Sound recordings…”"))
         }
         view?.refresh()
     }
@@ -701,7 +702,7 @@ class EditorController(
 
     /** Plays [rec] from [fromMs]. */
     fun play(rec: dev.inknotes.data.Recording, fromMs: Long = 0) {
-        val file = repo.recordingFile(notebook, rec.file) ?: return showStatus("Файл записи не найден")
+        val file = repo.recordingFile(notebook, rec.file) ?: return showStatus(tr("Файл записи не найден", "Recording file not found"))
         if (playing == rec && player != null) {
             player?.seekTo(fromMs.coerceAtLeast(0), android.media.MediaPlayer.SEEK_CLOSEST)
             player?.start()
@@ -718,7 +719,7 @@ class EditorController(
         }.isSuccess
         if (!ok) {
             p.release()
-            return showStatus("Не удалось включить запись")
+            return showStatus(tr("Не удалось включить запись", "Could not play the recording"))
         }
         p.setOnCompletionListener { stopPlaying() }
         player = p
@@ -799,7 +800,7 @@ class EditorController(
         if (i !in list.indices) return
         list[i] = list[i].copy(visible = !list[i].visible)
         saveLayers(list)
-        if (!list[i].visible && i == notebook.activeLayer) showStatus("Новое пишется на скрытый слой: выберите другой")
+        if (!list[i].visible && i == notebook.activeLayer) showStatus(tr("Новое пишется на скрытый слой: выберите другой", "New writing goes to a hidden layer: choose another one"))
     }
 
     fun toggleLayerLocked(i: Int) {
@@ -811,8 +812,8 @@ class EditorController(
 
     fun addLayer(name: String) {
         val list = notebook.layerList()
-        if (list.size >= dev.inknotes.data.Layers.MAX) return showStatus("Не больше ${dev.inknotes.data.Layers.MAX} слоёв")
-        saveLayers(list + dev.inknotes.data.LayerInfo(name.trim().ifEmpty { "Слой ${list.size + 1}" }), list.size)
+        if (list.size >= dev.inknotes.data.Layers.MAX) return showStatus(tr("Не больше ${dev.inknotes.data.Layers.MAX} слоёв", "No more than ${dev.inknotes.data.Layers.MAX} layers"))
+        saveLayers(list + dev.inknotes.data.LayerInfo(name.trim().ifEmpty { tr("Слой ${list.size + 1}", "Layer ${list.size + 1}") }), list.size)
     }
 
     fun renameLayer(i: Int, name: String) {
@@ -850,7 +851,7 @@ class EditorController(
     fun moveSelectionToLayer(i: Int) {
         if (i !in notebook.layerList().indices) return
         view?.moveSelectionToLayer(i)
-        showStatus("Перенесено на слой «${notebook.layerList()[i].name}»")
+        showStatus(tr("Перенесено на слой «${notebook.layerList()[i].name}»", "Moved to the layer “${notebook.layerList()[i].name}”"))
     }
 
     // ------------------------------------------------------------- typed text
@@ -935,7 +936,7 @@ class EditorController(
             it.onEdit = ::onPageEdited
             repo.takeDamaged(notebook, pageId)?.let { copy ->
                 val n = notebook.pageIds.indexOf(pageId) + 1
-                showStatus("Страница $n повреждена и открыта пустой. Её файл не удалён: он сохранён рядом как $copy — пришлите его разработчику или верните из автокопии")
+                showStatus(tr("Страница $n повреждена и открыта пустой. Её файл не удалён: он сохранён рядом как $copy — пришлите его разработчику или верните из автокопии", "Page $n is damaged and opened empty. Its file was not deleted: it is kept as $copy — send it to the developer or restore it from an auto backup"))
             }
         }
 
@@ -987,7 +988,7 @@ class EditorController(
     }
 
     override fun onPageNotReady(page: Int) {
-        showStatus("Страница ${page + 1} ещё открывается — коснитесь пером ещё раз")
+        showStatus(tr("Страница ${page + 1} ещё открывается — коснитесь пером ещё раз", "Page ${page + 1} is still opening — touch it with the pen again"))
     }
 
     override fun thumbnail(index: Int): Bitmap? =
@@ -1028,7 +1029,7 @@ class EditorController(
         pdfBitmaps.clear()
         view?.pdfDark = pdfDark
         view?.refresh()
-        showStatus(if (pdfDark) "PDF тёмный: светлый текст на тёмном" else "PDF как есть")
+        showStatus(if (pdfDark) tr("PDF тёмный: светлый текст на тёмном", "Dark PDF: light text on dark") else tr("PDF как есть", "PDF as it is"))
     }
 
     /** The pen picks words of PDF text instead of writing. */
@@ -1037,13 +1038,13 @@ class EditorController(
 
     fun togglePdfText() {
         if (!pdfTextOn && notebook.pdfPages.isEmpty()) {
-            showStatus("В тетради нет страниц PDF")
+            showStatus(tr("В тетради нет страниц PDF", "This notebook has no PDF pages"))
             return
         }
         pdfTextOn = !pdfTextOn
         if (pdfTextOn && compassOn) toggleCompass()
         view?.pdfTextOn = pdfTextOn
-        if (pdfTextOn) showStatus("Текст PDF: проведите пером по словам — их можно скопировать или выделить маркером")
+        if (pdfTextOn) showStatus(tr("Текст PDF: проведите пером по словам — их можно скопировать или выделить маркером", "PDF text: run the pen over words — they can be copied or highlighted"))
     }
 
     /** Words of PDF text picked with the pen and what they say. */
@@ -1098,7 +1099,7 @@ class EditorController(
         notebook.pageIds.getOrNull(index)?.let { repo.isLocked(notebook, it) } == true
 
     override fun onPageLocked(page: Int) {
-        showStatus("Страницу ${page + 1} не удалось прочитать, она открыта только для просмотра. Файл не тронут — откройте тетрадь заново позже.")
+        showStatus(tr("Страницу ${page + 1} не удалось прочитать, она открыта только для просмотра. Файл не тронут — откройте тетрадь заново позже.", "Page ${page + 1} could not be read, it is open read-only. The file is untouched — reopen the notebook later."))
     }
 
     override fun pdfWords(index: Int): List<PdfWord>? {
@@ -1125,17 +1126,17 @@ class EditorController(
             val ok = runCatching {
                 ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
             }.isSuccess
-            showStatus(if (ok) "Открываю $url" else "Нечем открыть ссылку $url")
+            showStatus(if (ok) tr("Открываю $url", "Opening $url") else tr("Нечем открыть ссылку $url", "Nothing can open the link $url"))
             return true
         }
         val target = notebook.pageIds.indexOfFirst { id -> notebook.pdfPages[id]?.let { it.file == ref.file && it.index == link.page } == true }
         if (target < 0) {
-            showStatus("Страницы ${link.page + 1} этого PDF нет в тетради")
+            showStatus(tr("Страницы ${link.page + 1} этого PDF нет в тетради", "Page ${link.page + 1} of this PDF is not in the notebook"))
             return true
         }
         val tref = notebook.pdfPages.getValue(notebook.pageIds[target])
         goToPage(target, PdfGeometry.map(unitToPage(tref), 0f, link.y).second.coerceAtLeast(0f))
-        showStatus("Страница ${target + 1}")
+        showStatus(tr("Страница ${target + 1}", "Page ${target + 1}"))
         return true
     }
 
@@ -1152,7 +1153,7 @@ class EditorController(
         val here = notebook.pageIds.getOrNull(pageIndex)
         val ids = if (all) notebook.pageIds.filter { it in notebook.pdfPages } else listOfNotNull(here?.takeIf { it in notebook.pdfPages })
         if (ids.isEmpty()) {
-            showStatus("Это не страница PDF")
+            showStatus(tr("Это не страница PDF", "This is not a PDF page"))
             return
         }
         flush()
@@ -1232,13 +1233,13 @@ class EditorController(
     fun insertPdf(uri: android.net.Uri, resolver: ContentResolver, context: Context) {
         if (insertingPdf) return
         insertingPdf = true
-        showStatus("Вставляю страницы PDF…")
+        showStatus(tr("Вставляю страницы PDF…", "Inserting PDF pages…"))
         flush()
         val id = notebook.id
         repo.copyPdfAsync(notebook, uri, resolver, outline = { PdfText.outlineOf(context, it) }) { part ->
             insertingPdf = false
             if (part == null) {
-                showStatus("Не удалось открыть PDF")
+                showStatus(tr("Не удалось открыть PDF", "Could not open the PDF"))
                 return@copyPdfAsync
             }
             if (notebook.id != id) return@copyPdfAsync
@@ -1246,7 +1247,7 @@ class EditorController(
             notebook = repo.addPdfPages(notebook, at, part)
             view?.relayout()
             goToPage(at)
-            showStatus("Вставлено страниц: ${part.refs.size}")
+            showStatus(tr("Вставлено страниц: ${part.refs.size}", "Pages inserted: ${part.refs.size}"))
         }
     }
 
@@ -1255,7 +1256,7 @@ class EditorController(
         val reader = pdfReader() ?: return
         val files = notebook.pdfPages.values.map { it.file }.distinct()
         if (files.isEmpty()) {
-            showStatus("В тетради нет страниц PDF")
+            showStatus(tr("В тетради нет страниц PDF", "This notebook has no PDF pages"))
             return
         }
         var left = files.size
@@ -1278,7 +1279,7 @@ class EditorController(
                     val have = notebook.toc.map { it.pageId to it.title.trim() }.toSet()
                     val add = found.filter { (it.pageId to it.title.trim()) !in have }
                     if (add.isNotEmpty()) notebook = repo.setToc(notebook, notebook.toc + add)
-                    showStatus(if (found.isEmpty()) "В PDF нет оглавления" else "Оглавление PDF: добавлено ${add.size}")
+                    showStatus(if (found.isEmpty()) tr("В PDF нет оглавления", "The PDF has no contents") else tr("Оглавление PDF: добавлено ${add.size}", "PDF contents: added ${add.size}"))
                 }
             }
         }
@@ -1314,10 +1315,10 @@ class EditorController(
         val base = fileName(notebook.title)
         val all = pages.size == notebook.pageIds.size
         val part = when {
-            page != null -> " — стр. ${page + 1}"
+            page != null -> tr(" — стр. ${page + 1}", " — p. ${page + 1}")
             all -> ""
-            pages.size == 1 -> " — стр. ${pages[0] + 1}"
-            else -> " — стр. ${pages.first() + 1}-${pages.last() + 1}"
+            pages.size == 1 -> tr(" — стр. ${pages[0] + 1}", " — p. ${pages[0] + 1}")
+            else -> tr(" — стр. ${pages.first() + 1}-${pages.last() + 1}", " — pp. ${pages.first() + 1}-${pages.last() + 1}")
         }
         return "$base$part.${format.ext}"
     }
@@ -1338,20 +1339,20 @@ class EditorController(
     private fun runExport(pages: List<Int>, format: ExportFormat, outFor: (page: Int, index: Int) -> java.io.OutputStream?, done: (Boolean) -> Unit) {
         flush()
         val nb = notebook
-        status = if (format == ExportFormat.PDF) "Экспорт PDF…" else "Экспорт PNG…"
+        status = if (format == ExportFormat.PDF) tr("Экспорт PDF…", "Exporting PDF…") else tr("Экспорт PNG…", "Exporting PNG…")
         Thread({
             val missing = ArrayList<Int>()
             val result = runCatching {
                 if (format == ExportFormat.PDF) {
                     (outFor(-1, 0) ?: error("cannot open output")).use { out ->
                         missing += PdfExporter.export(repo, nb, out, pages) { k, total ->
-                            handler.post { status = "Экспорт PDF: $k / $total" }
+                            handler.post { status = tr("Экспорт PDF: $k / $total", "Exporting PDF: $k / $total") }
                         }
                     }
                 } else {
                     pages.forEachIndexed { k, i ->
                         (outFor(i, k) ?: error("cannot open output")).use { out -> if (!PdfExporter.writePng(repo, nb, i, out)) missing += i + 1 }
-                        handler.post { status = "Экспорт PNG: ${k + 1} / ${pages.size}" }
+                        handler.post { status = tr("Экспорт PNG: ${k + 1} / ${pages.size}", "Exporting PNG: ${k + 1} / ${pages.size}") }
                     }
                 }
             }
@@ -1366,11 +1367,11 @@ class EditorController(
 
     /** What went wrong with an export beyond "not saved": too little memory, pages that came out incomplete. */
     private fun exportWarning(error: Throwable?, missing: List<Int>): String? = when {
-        error is OutOfMemoryError -> "Не хватило памяти: экспортируйте страницы частями (диапазоном)"
+        error is OutOfMemoryError -> tr("Не хватило памяти: экспортируйте страницы частями (диапазоном)", "Out of memory: export the pages in parts (a range)")
         error != null -> null
         missing.isEmpty() -> null
-        else -> "Сохранено, но " + (if (missing.size == 1) "страницу ${missing[0]}" else "страницы ${missing.take(10).joinToString(", ")}" + (if (missing.size > 10) " и другие" else "")) +
-            " не удалось прочитать — в файле они пустые или без PDF"
+        else -> tr("Сохранено, но ", "Saved, but ") + (if (missing.size == 1) tr("страницу ${missing[0]}", "page ${missing[0]}") else tr("страницы ${missing.take(10).joinToString(", ")}", "pages ${missing.take(10).joinToString(", ")}") + (if (missing.size > 10) tr(" и другие", " and others") else "")) +
+            tr(" не удалось прочитать — в файле они пустые или без PDF", " could not be read — they are blank or without the PDF in the file")
     }
 
     /** Writes the whole notebook as PDF to [uri] (from the system "save as" dialog). */
@@ -1381,7 +1382,7 @@ class EditorController(
         if (pages.isEmpty()) return
         val only = if (format == ExportFormat.PNG) pages.take(1) else pages
         runExport(only, format, { _, _ -> resolver.openOutputStream(uri, "wt") }) { ok ->
-            showStatus(if (!ok) "Не удалось сохранить" else if (format == ExportFormat.PDF) "PDF сохранён" else "Картинка сохранена")
+            showStatus(if (!ok) tr("Не удалось сохранить", "Could not save") else if (format == ExportFormat.PDF) tr("PDF сохранён", "PDF saved") else tr("Картинка сохранена", "Picture saved"))
         }
     }
 
@@ -1392,7 +1393,7 @@ class EditorController(
         runExport(pages, ExportFormat.PNG, { page, _ ->
             val name = exportName(pages, ExportFormat.PNG, page).removeSuffix(".png")
             android.provider.DocumentsContract.createDocument(resolver, dir, "image/png", name)?.let { resolver.openOutputStream(it, "wt") }
-        }) { ok -> showStatus(if (ok) "Сохранено картинок: ${pages.size}" else "Не удалось сохранить картинки") }
+        }) { ok -> showStatus(if (ok) tr("Сохранено картинок: ${pages.size}", "Pictures saved: ${pages.size}") else tr("Не удалось сохранить картинки", "Could not save the pictures")) }
     }
 
     /** [pages] in [format] as files in the cache, handed to [onReady] as content:// URIs to share. */
@@ -1407,7 +1408,7 @@ class EditorController(
             f.outputStream()
         }) { ok ->
             if (ok) onReady(files.map { FileProvider.getUriForFile(context, "${context.packageName}.files", it) })
-            else showStatus("Не удалось подготовить файл")
+            else showStatus(tr("Не удалось подготовить файл", "Could not prepare the file"))
         }
     }
 
@@ -1415,7 +1416,7 @@ class EditorController(
     fun print(context: Context, pages: List<Int>) {
         if (pages.isEmpty()) return
         flush()
-        val pm = context.getSystemService(Context.PRINT_SERVICE) as? android.print.PrintManager ?: return showStatus("Печать недоступна")
+        val pm = context.getSystemService(Context.PRINT_SERVICE) as? android.print.PrintManager ?: return showStatus(tr("Печать недоступна", "Printing is unavailable"))
         val nb = notebook
         val name = exportName(pages, ExportFormat.PDF).removeSuffix(".pdf")
         val adapter = object : android.print.PrintDocumentAdapter() {
@@ -1461,16 +1462,16 @@ class EditorController(
     /** Saves the notebook as an `.inknote` file at [uri] (system "save as" dialog). */
     fun saveNotebookFile(uri: Uri, resolver: ContentResolver) {
         flush()
-        status = "Сохраняю файл…"
+        status = tr("Сохраняю файл…", "Saving the file…")
         repo.exportArchiveAsync(notebook, { resolver.openOutputStream(uri, "wt") }) { ok ->
-            showStatus(if (ok) "Файл сохранён" else "Не удалось сохранить файл")
+            showStatus(if (ok) tr("Файл сохранён", "File saved") else tr("Не удалось сохранить файл", "Could not save the file"))
         }
     }
 
     /** Packs the notebook into a cache file and hands a shareable content:// URI to [onReady]. */
     fun shareNotebookFile(context: Context, onReady: (Uri) -> Unit) {
         flush()
-        status = "Готовлю файл…"
+        status = tr("Готовлю файл…", "Preparing the file…")
         val dir = File(context.cacheDir, "shared").apply { mkdirs() }
         dir.listFiles()?.forEach { it.delete() } // only the latest shared file is kept
         val file = File(dir, fileName(notebook.title) + ".inknote")
@@ -1479,7 +1480,7 @@ class EditorController(
                 status = null
                 onReady(FileProvider.getUriForFile(context, "${context.packageName}.files", file))
             } else {
-                showStatus("Не удалось подготовить файл")
+                showStatus(tr("Не удалось подготовить файл", "Could not prepare the file"))
             }
         }
     }
@@ -1581,7 +1582,7 @@ class EditorController(
     /** Eyedropper on or off; the picked colour goes to the current tool like a custom one. */
     fun toggleColorPick() {
         pickingColor = !pickingColor
-        if (pickingColor) showStatus("Коснитесь места, откуда взять цвет")
+        if (pickingColor) showStatus(tr("Коснитесь места, откуда взять цвет", "Touch the spot to take the colour from"))
         syncView()
     }
 
@@ -1641,13 +1642,13 @@ class EditorController(
     fun recognizeSelection() {
         val ink = view?.selectedInk().orEmpty()
         when {
-            ink.isEmpty() -> showStatus("В выделении нет рукописных строк")
+            ink.isEmpty() -> showStatus(tr("В выделении нет рукописных строк", "There are no handwritten lines in the selection"))
             handwriting.state != HandwritingIndex.State.Ready ->
-                showStatus("Сначала включите распознавание почерка: «Включить» под строкой поиска в библиотеке")
+                showStatus(tr("Сначала включите распознавание почерка: «Включить» под строкой поиска в библиотеке", "Turn on handwriting recognition first: “Turn on” under the search line in the library"))
             else -> {
-                showStatus("Распознаю…")
+                showStatus(tr("Распознаю…", "Recognising…"))
                 handwriting.recognizeText(ink) { text ->
-                    if (text == null) showStatus("Не удалось распознать") else recognizedText = text
+                    if (text == null) showStatus(tr("Не удалось распознать", "Could not recognise")) else recognizedText = text
                 }
             }
         }
@@ -1661,17 +1662,17 @@ class EditorController(
      * to send the file ([onReady] gets a shareable link). Kept in the app's files too.
      */
     fun reportWrongAnswer(context: Context, answer: PageAnswer, expected: String, onReady: (Uri) -> Unit) {
-        val pageId = mathAnswers.entries.firstOrNull { (_, list) -> list.any { it === answer } }?.key ?: return showStatus("Страница ответа не найдена")
+        val pageId = mathAnswers.entries.firstOrNull { (_, list) -> list.any { it === answer } }?.key ?: return showStatus(tr("Страница ответа не найдена", "The answer's page was not found"))
         val doc = docs[pageId] ?: return
-        showStatus("Сохраняю пример…")
+        showStatus(tr("Сохраняю пример…", "Saving the example…"))
         math.report(doc.strokes, notebook.pageWidthUnits(pageId), answer.x, answer.y, expected) { json ->
-            if (json == null) return@report showStatus("Не удалось сохранить пример")
+            if (json == null) return@report showStatus(tr("Не удалось сохранить пример", "Could not save the example"))
             val name = "math-report-${java.text.SimpleDateFormat("yyyyMMdd-HHmmss", java.util.Locale.ROOT).format(java.util.Date())}.json"
             runCatching { context.getExternalFilesDir("math-reports")?.let { File(it, name).writeText(json) } }
             val shared = File(context.cacheDir, "shared").apply { mkdirs() }
             val file = File(shared, name)
-            runCatching { file.writeText(json) }.onFailure { return@report showStatus("Не удалось сохранить пример") }
-            showStatus("Пример сохранён")
+            runCatching { file.writeText(json) }.onFailure { return@report showStatus(tr("Не удалось сохранить пример", "Could not save the example")) }
+            showStatus(tr("Пример сохранён", "Example saved"))
             onReady(FileProvider.getUriForFile(context, context.packageName + ".files", file))
         }
     }
@@ -1874,8 +1875,8 @@ class EditorController(
     /** A new entry of the table of contents at the selection (or the top of the current page). */
     fun addBookmark(title: String, page: Int, y: Float) {
         val pageId = notebook.pageIds.getOrNull(page) ?: return
-        notebook = repo.setToc(notebook, notebook.toc + dev.inknotes.data.Bookmark(pageId, y, title.trim().ifEmpty { "Страница ${page + 1}" }))
-        showStatus("Добавлено в оглавление")
+        notebook = repo.setToc(notebook, notebook.toc + dev.inknotes.data.Bookmark(pageId, y, title.trim().ifEmpty { tr("Страница ${page + 1}", "Page ${page + 1}") }))
+        showStatus(tr("Добавлено в оглавление", "Added to contents"))
     }
 
     fun renameBookmark(b: dev.inknotes.data.Bookmark, title: String) {
@@ -1911,7 +1912,7 @@ class EditorController(
         notebook = repo.setLinks(notebook, notebook.links.filterNot { it.pageId == pageId && overlaps(it, r) } + link)
         view?.clearSelection()
         view?.refresh()
-        showStatus("Ссылка на страницу ${target + 1}: коснитесь её пальцем")
+        showStatus(tr("Ссылка на страницу ${target + 1}: коснитесь её пальцем", "Link to page ${target + 1}: touch it with a finger"))
     }
 
     /** Links under the selection. */
@@ -1941,7 +1942,7 @@ class EditorController(
         val target = notebook.pageIds.indexOf(link.target)
         if (target < 0) return false
         goToPage(target, link.targetY)
-        showStatus("Страница ${target + 1}")
+        showStatus(tr("Страница ${target + 1}", "Page ${target + 1}"))
         return true
     }
 
@@ -1953,7 +1954,7 @@ class EditorController(
 
     fun toggleInsertSpace() {
         insertingSpace = !insertingSpace
-        if (insertingSpace) showStatus("Проведите вниз от места, где нужна строка; вверх — убрать пустое место")
+        if (insertingSpace) showStatus(tr("Проведите вниз от места, где нужна строка; вверх — убрать пустое место", "Swipe down from where you need a line; up to remove empty space"))
         syncView()
     }
 
@@ -1967,7 +1968,7 @@ class EditorController(
         val size = pageId.takeIf { it !in notebook.pdfPages }?.let(notebook::pageSize)?.let(::freshSize) ?: PageSize.DEFAULT
         notebook = repo.insertPage(notebook, after + 1, size)
         view?.relayout()
-        showStatus("Не поместившееся — на новой странице ${after + 2}")
+        showStatus(tr("Не поместившееся — на новой странице ${after + 2}", "What did not fit is on a new page ${after + 2}"))
         return after + 1
     }
 
@@ -2207,7 +2208,7 @@ class EditorController(
         val nb = notebook
         // Pages open in the editor are taken as they are now; the rest from their files.
         val open = nb.pageIds.associateWith { docs[it]?.content() }
-        status = "Собираю карточки…"
+        status = tr("Собираю карточки…", "Collecting cards…")
         runCatching {
             cardExec.execute {
                 val pages = HashMap<String, PageContent>()
@@ -2314,7 +2315,7 @@ class EditorController(
                 return true
             }
             // A typing key or a keyboard's key: refused, it keeps its meaning.
-            showStatus("Эту клавишу назначить нельзя: она нужна для набора текста. Нажмите кнопку пера.")
+            showStatus(tr("Эту клавишу назначить нельзя: она нужна для набора текста. Нажмите кнопку пера.", "This key can't be assigned: it is needed for typing. Press the pen button."))
             return false
         }
         if (!penButton.matches(e)) return false
@@ -2341,11 +2342,11 @@ class EditorController(
         if (saved) {
             // Said once per page: it is saved at every pause in writing.
             if (!warnedComplex.add(id)) return
-            showStatus("Страница $n сохранена, но $problem — на другой планшет и в файл тетради она так не попадёт. Перенесите часть на другую страницу или сотрите лишнее")
+            showStatus(tr("Страница $n сохранена, но $problem — на другой планшет и в файл тетради она так не попадёт. Перенесите часть на другую страницу или сотрите лишнее", "Page $n is saved, but $problem — in this form it won't reach another tablet or a notebook file. Move part of it to another page or erase what is not needed"))
             return
         }
         savedRevision.remove(id)
-        showStatus("Страница $n не сохранена: $problem. Перенесите часть на другую страницу")
+        showStatus(tr("Страница $n не сохранена: $problem. Перенесите часть на другую страницу", "Page $n is not saved: $problem. Move part of it to another page"))
     }
 
     /** Writes every page whose revision changed since the last save. */
@@ -2432,24 +2433,24 @@ class EditorController(
         val img = view?.selectedPicture() ?: return
         val nb = notebook
         val page = view?.selectionPageIndex ?: pageIndex
-        status = "Открываю картинку…"
+        status = tr("Открываю картинку…", "Opening the picture…")
         Thread({
             val bmp = repo.loadImage(nb, img.file)?.let { it.copy(Bitmap.Config.ARGB_8888, true).also { c -> if (c !== it) it.recycle() } }
             handler.post {
                 status = null
-                if (bmp == null) showStatus("Не удалось открыть картинку") else photoEdit = PhotoEdit(bmp, img, page, PhotoMode.CROP)
+                if (bmp == null) showStatus(tr("Не удалось открыть картинку", "Could not open the picture")) else photoEdit = PhotoEdit(bmp, img, page, PhotoMode.CROP)
             }
         }, "photo-open").start()
     }
 
     /** A photo from the camera for the document scanner: straightened first, then put on the page. */
     fun scanned(uri: Uri, resolver: ContentResolver) {
-        status = "Открываю снимок…"
+        status = tr("Открываю снимок…", "Opening the photo…")
         Thread({
             val bmp = repo.decodePicture(uri, resolver)
             handler.post {
                 status = null
-                if (bmp == null) showStatus("Снимок не получился") else photoEdit = PhotoEdit(bmp, null, pageIndex, PhotoMode.CORNERS)
+                if (bmp == null) showStatus(tr("Снимок не получился", "The photo did not work")) else photoEdit = PhotoEdit(bmp, null, pageIndex, PhotoMode.CORNERS)
             }
         }, "scan-open").start()
     }
@@ -2463,10 +2464,10 @@ class EditorController(
         val edit = photoEdit ?: return
         photoEdit = null
         val nb = notebook
-        status = "Сохраняю картинку…"
+        status = tr("Сохраняю картинку…", "Saving the picture…")
         repo.saveImageAsync(nb, result) { saved ->
             status = null
-            val (file, pxW, pxH) = saved ?: return@saveImageAsync showStatus("Не удалось сохранить картинку")
+            val (file, pxW, pxH) = saved ?: return@saveImageAsync showStatus(tr("Не удалось сохранить картинку", "Could not save the picture"))
             val v = view ?: return@saveImageAsync
             val old = edit.target
             if (old != null && v.selectedPicture() === old) {
@@ -2554,16 +2555,16 @@ class EditorController(
     fun formulaFromSelection() {
         val v = view ?: return
         val ink = v.selectedInk()
-        if (ink.isEmpty()) return showStatus("Выделите формулу лассо, затем нажмите «Формула»")
+        if (ink.isEmpty()) return showStatus(tr("Выделите формулу лассо, затем нажмите «Формула»", "Select a formula with the lasso, then press “Formula”"))
         when (math.state) {
             MathNotes.State.Ready -> Unit
-            MathNotes.State.Downloading -> return showStatus("Скачивается распознавание формул, подождите немного")
+            MathNotes.State.Downloading -> return showStatus(tr("Скачивается распознавание формул, подождите немного", "Formula recognition is downloading, wait a little"))
             else -> {
                 math.enable()
-                return showStatus("Скачиваю распознавание формул (один раз) — нажмите «Формула» ещё раз через минуту")
+                return showStatus(tr("Скачиваю распознавание формул (один раз) — нажмите «Формула» ещё раз через минуту", "Downloading formula recognition (once) — press “Formula” again in a minute"))
             }
         }
-        status = "Читаю формулу…"
+        status = tr("Читаю формулу…", "Reading the formula…")
         math.readFormula(ink) { source ->
             status = null
             formula = if (source.isNullOrBlank()) FormulaRead("", failed = true) else FormulaRead(dev.inknotes.math.Typeset.latex(source), failed = false)
@@ -2577,7 +2578,7 @@ class EditorController(
     fun copyFormulaLatex(context: Context, latex: String) {
         val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
         cm.setPrimaryClip(android.content.ClipData.newPlainText("LaTeX", latex))
-        showStatus("LaTeX скопирован")
+        showStatus(tr("LaTeX скопирован", "LaTeX copied"))
     }
 
     fun copyFormulaPicture(context: Context, latex: String) {
@@ -2588,8 +2589,8 @@ class EditorController(
         bmp.recycle()
         val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", file)
         val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-        cm.setPrimaryClip(android.content.ClipData.newUri(context.contentResolver, "Формула", uri))
-        showStatus("Картинка формулы скопирована")
+        cm.setPrimaryClip(android.content.ClipData.newUri(context.contentResolver, tr("Формула", "Formula"), uri))
+        showStatus(tr("Картинка формулы скопирована", "Formula picture copied"))
     }
 
     /** The formula set in print on the page: in place of the selected handwriting, or under it. */
@@ -2603,7 +2604,7 @@ class EditorController(
         val h = max(rect.height(), MIN_FORMULA_HEIGHT) * bmp.height / (bmp.height - FORMULA_PX * 0.5f).coerceAtLeast(1f)
         val w = h * bmp.width / bmp.height
         repo.saveImageAsync(notebook, bmp) { saved ->
-            val (file, _, _) = saved ?: return@saveImageAsync showStatus("Не удалось вставить формулу")
+            val (file, _, _) = saved ?: return@saveImageAsync showStatus(tr("Не удалось вставить формулу", "Could not insert the formula"))
             val vv = view ?: return@saveImageAsync
             if (replace) {
                 vv.replaceSelection(PageImage(file, rect.left, rect.centerY() - h / 2, w, h))
@@ -2680,7 +2681,7 @@ class EditorController(
     }
 
     companion object {
-        const val RECORDING_ON_SCREEN_ONLY = "Запись идёт, но Android не дал записывать в фоне: не выключайте экран и не уходите из приложения до конца записи"
+        val RECORDING_ON_SCREEN_ONLY: String get() = tr("Запись идёт, но Android не дал записывать в фоне: не выключайте экран и не уходите из приложения до конца записи", "Recording, but Android did not allow recording in the background: keep the screen on and stay in the app until the recording ends")
 
         /** Less than this is a recording header with no sound in it. */
         private const val MIN_RECORDING_BYTES = 2048L

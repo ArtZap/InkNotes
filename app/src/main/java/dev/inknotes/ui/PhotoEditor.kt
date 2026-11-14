@@ -1,5 +1,6 @@
 package dev.inknotes.ui
 
+import dev.inknotes.data.tr
 import android.graphics.Bitmap
 import android.graphics.Canvas as AndroidCanvas
 import android.graphics.Matrix
@@ -133,12 +134,12 @@ object PhotoEdits {
 }
 
 enum class PhotoMode(val title: String) {
-    CROP("Обрезать"),
-    CORNERS("Выпрямить лист"),
-    TILT("Перспектива"),
-    BACKGROUND("Убрать фон"),
-    DOCUMENT("Документ"),
-    ROTATE("Повернуть"),
+    CROP(tr("Обрезать", "Crop")),
+    CORNERS(tr("Выпрямить лист", "Straighten sheet")),
+    TILT(tr("Перспектива", "Perspective")),
+    BACKGROUND(tr("Убрать фон", "Remove background")),
+    DOCUMENT(tr("Документ", "Document")),
+    ROTATE(tr("Повернуть", "Rotate")),
 }
 
 /**
@@ -197,12 +198,12 @@ fun PhotoEditorDialog(
         Surface(Modifier.fillMaxSize(), color = Color(0xFF1C1F23)) {
             Column(Modifier.fillMaxSize().safeDrawingPadding()) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    TextButton(onClick = onCancel) { Text("Отмена", color = Color.White) }
+                    TextButton(onClick = onCancel) { Text(tr("Отмена", "Cancel"), color = Color.White) }
                     Spacer(Modifier.weight(1f))
                     TextButton(enabled = history.isNotEmpty() && !busy, onClick = {
                         current = history.removeAt(history.lastIndex)
                         generation++
-                    }) { Text("↶ Шаг назад", color = if (history.isNotEmpty()) Color.White else Color.Gray) }
+                    }) { Text(tr("↶ Шаг назад", "↶ Step back"), color = if (history.isNotEmpty()) Color.White else Color.Gray) }
                     Spacer(Modifier.width(8.dp))
                     Button(enabled = !busy, onClick = { onDone(current) }) { Text(doneLabel) }
                 }
@@ -311,36 +312,36 @@ fun PhotoEditorDialog(
                     val hint = Color(0xFFB0BEC5)
                     when (mode) {
                         PhotoMode.CROP -> Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("Тяните углы рамки или саму рамку.", color = hint, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                            Text(tr("Тяните углы рамки или саму рамку.", "Drag the corners of the frame or the frame itself."), color = hint, fontSize = 13.sp, modifier = Modifier.weight(1f))
                             Button(enabled = !busy, onClick = {
                                 val (l, t, r, b) = crop.toList()
                                 apply { PhotoEdits.crop(it, l, t, r, b) }
-                            }) { Text("Обрезать") }
+                            }) { Text(tr("Обрезать", "Crop")) }
                         }
                         PhotoMode.CORNERS -> Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("Поставьте кружки на углы листа: он станет ровным прямоугольником.", color = hint, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                            Text(tr("Поставьте кружки на углы листа: он станет ровным прямоугольником.", "Put the circles on the corners of the sheet: it becomes a straight rectangle."), color = hint, fontSize = 13.sp, modifier = Modifier.weight(1f))
                             val pts = corners.toFloatArray()
                             Button(enabled = !busy && PhotoMath.isConvex(pts), onClick = {
                                 apply { bmp -> PhotoEdits.straighten(bmp, FloatArray(8) { i -> pts[i] * if (i % 2 == 0) bmp.width else bmp.height }) }
-                            }) { Text("Выпрямить") }
+                            }) { Text(tr("Выпрямить", "Straighten")) }
                         }
                         PhotoMode.TILT -> {
-                            AngleRow("Наклон вперёд-назад", aroundX) { aroundX = it }
-                            AngleRow("Поворот влево-вправо", aroundY) { aroundY = it }
+                            AngleRow(tr("Наклон вперёд-назад", "Tilt forward-back"), aroundX) { aroundX = it }
+                            AngleRow(tr("Поворот влево-вправо", "Turn left-right"), aroundY) { aroundY = it }
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("Повороты вокруг осей вдоль экрана: картинка уходит вглубь.", color = hint, fontSize = 13.sp, modifier = Modifier.weight(1f))
-                                OutlinedButton(onClick = { aroundX = 0f; aroundY = 0f }) { Text("Сброс", color = Color.White) }
+                                Text(tr("Повороты вокруг осей вдоль экрана: картинка уходит вглубь.", "Turns around axes along the screen: the picture goes into depth."), color = hint, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                                OutlinedButton(onClick = { aroundX = 0f; aroundY = 0f }) { Text(tr("Сброс", "Reset"), color = Color.White) }
                                 Spacer(Modifier.width(8.dp))
                                 Button(enabled = !busy && (aroundX != 0f || aroundY != 0f), onClick = {
                                     val ax = aroundX
                                     val ay = aroundY
                                     apply { PhotoEdits.tilt(it, ax, ay) }
-                                }) { Text("Применить") }
+                                }) { Text(tr("Применить", "Apply")) }
                             }
                         }
                         PhotoMode.BACKGROUND -> {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("Похожесть цвета", color = Color.White, fontSize = 14.sp, modifier = Modifier.width(150.dp))
+                                Text(tr("Похожесть цвета", "Colour similarity"), color = Color.White, fontSize = 14.sp, modifier = Modifier.width(150.dp))
                                 InkSlider(
                                     value = tolerance,
                                     onValueChange = { tolerance = it },
@@ -351,21 +352,21 @@ fun PhotoEditorDialog(
                                 )
                             }
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("Убирается фон, который касается края картинки: лист, стена, стол.", color = hint, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                                Text(tr("Убирается фон, который касается края картинки: лист, стена, стол.", "Removes the background that touches the edge of the picture: a sheet, a wall, a desk."), color = hint, fontSize = 13.sp, modifier = Modifier.weight(1f))
                                 Button(enabled = !busy, onClick = {
                                     val tol = tolerance
                                     apply { PhotoEdits.clearBackground(it, tol) }
-                                }) { Text("Убрать фон") }
+                                }) { Text(tr("Убрать фон", "Remove background")) }
                             }
                         }
                         PhotoMode.DOCUMENT -> Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("Бумага станет белой, текст — чётким.", color = hint, fontSize = 13.sp, modifier = Modifier.weight(1f))
-                            OutlinedButton(enabled = !busy, onClick = { apply { PhotoEdits.document(it, color = true) } }) { Text("В цвете", color = Color.White) }
+                            Text(tr("Бумага станет белой, текст — чётким.", "Paper turns white, text sharp."), color = hint, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                            OutlinedButton(enabled = !busy, onClick = { apply { PhotoEdits.document(it, color = true) } }) { Text(tr("В цвете", "Colour"), color = Color.White) }
                             Spacer(Modifier.width(8.dp))
-                            Button(enabled = !busy, onClick = { apply { PhotoEdits.document(it, color = false) } }) { Text("Чёрно-белый") }
+                            Button(enabled = !busy, onClick = { apply { PhotoEdits.document(it, color = false) } }) { Text(tr("Чёрно-белый", "Black and white")) }
                         }
                         PhotoMode.ROTATE -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("Поворот на четверть оборота.", color = hint, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                            Text(tr("Поворот на четверть оборота.", "Quarter-turn rotation."), color = hint, fontSize = 13.sp, modifier = Modifier.weight(1f))
                             OutlinedButton(enabled = !busy, onClick = { apply { PhotoEdits.rotate(it, clockwise = false) } }) { Text("↺ 90°", color = Color.White) }
                             Button(enabled = !busy, onClick = { apply { PhotoEdits.rotate(it, clockwise = true) } }) { Text("↻ 90°") }
                         }

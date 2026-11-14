@@ -1,5 +1,6 @@
 package dev.inknotes.editor
 
+import dev.inknotes.data.tr
 import android.graphics.Bitmap
 import android.graphics.BlendMode
 import android.graphics.BlurMaskFilter
@@ -246,9 +247,9 @@ class PageRenderer {
         canvas.drawLine(cue, head, cue, summary, linePaint)
         canvas.drawLine(0f, summary, pageWidth, summary, linePaint)
         width(1.2f)
-        label(canvas, "Вопросы", 4 * mm, head + 7 * mm)
-        label(canvas, "Конспект", cue + 4 * mm, head + 7 * mm)
-        label(canvas, "Итог", 4 * mm, summary + 7 * mm)
+        label(canvas, tr("Вопросы", "Questions"), 4 * mm, head + 7 * mm)
+        label(canvas, tr("Конспект", "Notes"), cue + 4 * mm, head + 7 * mm)
+        label(canvas, tr("Итог", "Summary"), 4 * mm, summary + 7 * mm)
     }
 
     /** A week: seven day boxes in two columns and one for notes, under a title band. */
@@ -261,7 +262,7 @@ class PageRenderer {
         linePaint.color = style.line
         width(1.4f)
         canvas.drawLine(m, top - 6 * mm, pageWidth - m, top - 6 * mm, linePaint)
-        val days = listOf("Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье", "Заметки")
+        val days = listOf(tr("Понедельник", "Monday"), tr("Вторник", "Tuesday"), tr("Среда", "Wednesday"), tr("Четверг", "Thursday"), tr("Пятница", "Friday"), tr("Суббота", "Saturday"), tr("Воскресенье", "Sunday"), tr("Заметки", "Notes"))
         for ((i, day) in days.withIndex()) {
             val col = i / 4
             val row = i % 4

@@ -1,5 +1,6 @@
 package dev.inknotes.ui
 
+import dev.inknotes.data.tr
 import android.util.LruCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -34,12 +35,12 @@ import kotlin.math.sin
 
 /** The six covers of the reference set, in the order of the cover picker. */
 enum class CoverArt(val title: String, val color: Int) {
-    LEAVES("Листья", 0xFF2C4838.toInt()),
-    ARCH("Арка", 0xFF936622.toInt()),
-    MOON("Луна и звезда", 0xFF2B3D9E.toInt()),
-    OVAL("Овал", 0xFF6C1F21.toInt()),
-    MEDALLIONS("Медальоны", 0xFF1F4868.toInt()),
-    WREATH("Венок с розой", 0xFF3D4A44.toInt()),
+    LEAVES(tr("Листья", "Leaves"), 0xFF2C4838.toInt()),
+    ARCH(tr("Арка", "Arch"), 0xFF936622.toInt()),
+    MOON(tr("Луна и звезда", "Moon and star"), 0xFF2B3D9E.toInt()),
+    OVAL(tr("Овал", "Oval"), 0xFF6C1F21.toInt()),
+    MEDALLIONS(tr("Медальоны", "Medallions"), 0xFF1F4868.toInt()),
+    WREATH(tr("Венок с розой", "Wreath with a rose"), 0xFF3D4A44.toInt()),
     ;
 
     /** Where the title sits (fraction of the height) and how wide it may be (of the width). */

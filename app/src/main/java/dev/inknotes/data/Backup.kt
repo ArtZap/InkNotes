@@ -41,7 +41,7 @@ class Backup(private val context: Context, private val repo: NotebookRepository,
     fun setFolder(tree: Uri, onDone: (Result) -> Unit) {
         val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
         if (runCatching { context.contentResolver.takePersistableUriPermission(tree, flags) }.isFailure) {
-            return onDone(Result.Failed("Эта папка не даёт постоянного доступа: выберите другую"))
+            return onDone(Result.Failed(tr("Эта папка не даёт постоянного доступа: выберите другую", "This folder does not allow lasting access: choose another one")))
         }
         if (folder != tree) prefs.backupWhole = emptySet()
         folder?.takeIf { it != tree }?.let { old -> runCatching { context.contentResolver.releasePersistableUriPermission(old, flags) } }
@@ -108,7 +108,7 @@ class Backup(private val context: Context, private val repo: NotebookRepository,
                         doc?.let { runCatching { DocumentsContract.deleteDocument(resolver, it) } }
                         running.set(false)
                         val lost = resolver.persistedUriPermissions.none { it.uri == tree && it.isWritePermission }
-                        return@Thread done(Result.Failed(if (lost) "Нет доступа к папке: выберите её заново" else "Не удалось записать копию в папку"))
+                        return@Thread done(Result.Failed(if (lost) tr("Нет доступа к папке: выберите её заново", "No access to the folder: choose it again") else tr("Не удалось записать копию в папку", "Could not write the copy to the folder")))
                     }
                     prefs.backupWhole = prefs.backupWhole + name
                     prefs.lastBackupAt = now

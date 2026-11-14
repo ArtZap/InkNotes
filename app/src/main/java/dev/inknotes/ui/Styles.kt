@@ -1,5 +1,6 @@
 package dev.inknotes.ui
 
+import dev.inknotes.data.tr
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
@@ -178,7 +179,7 @@ fun PortfolioFolder(count: Int, modifier: Modifier = Modifier) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text("$count", style = TextStyle(brush = Gold.Foil), fontFamily = FontFamily.Serif, fontSize = 44.sp)
             Text(
-                "ТЕТРАДЕЙ",
+                tr("ТЕТРАДЕЙ", "NOTEBOOKS"),
                 fontSize = 10.sp,
                 letterSpacing = 3.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -197,9 +198,9 @@ fun Monogram() {
     Text(
         when (style) {
             UiStyle.MINIMAL -> "INKNOTES"
-            UiStyle.NOTEBOOK -> "✿ INKNOTES · МОИ ТЕТРАДКИ"
-            UiStyle.MYSTIC -> "✦ INKNOTES · КНИЖНАЯ ЛАВКА ТАЙН ✦"
-            else -> "INKNOTES · ЛИЧНАЯ БИБЛИОТЕКА"
+            UiStyle.NOTEBOOK -> tr("✿ INKNOTES · МОИ ТЕТРАДКИ", "✿ INKNOTES · MY NOTEBOOKS")
+            UiStyle.MYSTIC -> tr("✦ INKNOTES · КНИЖНАЯ ЛАВКА ТАЙН ✦", "✦ INKNOTES · BOOKSHOP OF SECRETS ✦")
+            else -> tr("INKNOTES · ЛИЧНАЯ БИБЛИОТЕКА", "INKNOTES · PRIVATE LIBRARY")
         },
         fontSize = 10.sp,
         letterSpacing = if (minimal) 5.sp else 3.5.sp,
@@ -261,7 +262,7 @@ fun LineFolder(count: Int, modifier: Modifier = Modifier) {
         Box(Modifier.align(Alignment.TopStart).padding(start = 16.dp, top = 16.dp).width(36.dp).height(0.8.dp).background(line))
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text("$count", fontSize = 56.sp, fontWeight = FontWeight.ExtraLight, color = MaterialTheme.colorScheme.onSurface)
-            Text("ТЕТРАДЕЙ", fontSize = 10.sp, letterSpacing = 3.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(tr("ТЕТРАДЕЙ", "NOTEBOOKS"), fontSize = 10.sp, letterSpacing = 3.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -289,9 +290,9 @@ fun SettingsDialog(
                 Modifier.verticalScroll(rememberScrollState()).padding(28.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Text("Настройки", style = MaterialTheme.typography.headlineSmall)
+                Text(tr("Настройки", "Settings"), style = MaterialTheme.typography.headlineSmall)
                 Spacer(Modifier.height(4.dp))
-                Text("Стиль интерфейса", style = MaterialTheme.typography.titleMedium)
+                Text(tr("Стиль интерфейса", "Interface style"), style = MaterialTheme.typography.titleMedium)
                 androidx.compose.foundation.layout.FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(14.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -306,9 +307,9 @@ fun SettingsDialog(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Column(Modifier.weight(1f)) {
-                        Text("Полупрозрачные обложки", style = MaterialTheme.typography.titleMedium)
+                        Text(tr("Полупрозрачные обложки", "See-through covers"), style = MaterialTheme.typography.titleMedium)
                         Text(
-                            "Обложка остаётся своего цвета, но сквозь неё видно первую страницу тетради",
+                            tr("Обложка остаётся своего цвета, но сквозь неё видно первую страницу тетради", "The cover keeps its colour, but the first page of the notebook shows through it"),
                             fontSize = 12.sp,
                             lineHeight = 16.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -318,7 +319,7 @@ fun SettingsDialog(
                     Switch(checked = glass, onCheckedChange = onGlass)
                 }
                 Spacer(Modifier.height(4.dp))
-                Text("Тема", style = MaterialTheme.typography.titleMedium)
+                Text(tr("Тема", "Theme"), style = MaterialTheme.typography.titleMedium)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     for (m in ThemeMode.entries) {
                         FilterChip(selected = m == themeMode, onClick = { onTheme(m) }, label = { Text(m.title) })
@@ -327,7 +328,7 @@ fun SettingsDialog(
                 Spacer(Modifier.height(4.dp))
                 LanguageChoice()
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    Button(onClick = onDismiss) { Text("Готово") }
+                    Button(onClick = onDismiss) { Text(tr("Готово", "Done")) }
                 }
             }
         }
@@ -373,7 +374,7 @@ private fun StylePreview(style: UiStyle, dark: Boolean, modifier: Modifier) {
             Text(if (style == UiStyle.MYSTIC) "✦ INKNOTES ✦" else "INKNOTES", fontSize = 6.sp, letterSpacing = 2.sp, color = if (style.gilded) colors.primary else colors.onSurfaceVariant)
         }
         Text(
-            "Тетради",
+            tr("Тетради", "Notebooks"),
             color = colors.onBackground,
             fontFamily = displayFont(style),
             fontWeight = titleWeight(style),
