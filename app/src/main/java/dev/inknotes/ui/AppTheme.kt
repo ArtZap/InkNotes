@@ -194,9 +194,12 @@ class AppPrefs(context: Context) {
     var driveLastSync: Long
         get() = prefs.getLong("driveLastSync", 0L)
         set(value) = prefs.edit().putLong("driveLastSync", value).apply()
+    /** The last sync's outcome as shown, in the language it was written in: none after the language changed. */
     var driveLastResult: String?
-        get() = prefs.getString("driveLastResult", null)
-        set(value) = prefs.edit().putString("driveLastResult", value).apply()
+        get() = prefs.getString("driveLastResult", null)?.takeIf { prefs.getString("driveLastResultLang", "ru") == langMark() }
+        set(value) = prefs.edit().putString("driveLastResult", value).putString("driveLastResultLang", langMark()).apply()
+
+    private fun langMark() = if (dev.inknotes.data.Lang.english) "en" else "ru"
 
     /** The quick notes notebook (lock screen, tile, widget). */
     var quickNoteId: String?
