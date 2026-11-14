@@ -192,11 +192,11 @@ class MathNotes(private val enabledPref: () -> Boolean, private val setEnabledPr
     }
 
     internal val reader = object : RunReader {
-        override fun read(strokes: List<Ink>, lineHeight: Float) = read(strokes, lineHeight)
+        override fun read(strokes: List<Ink>, lineHeight: Float): List<String> = this@MathNotes.read(strokes, lineHeight)
 
         // Both readings (plain and after arithmetic) put the same text first: measured on
         // CROHME with ML Kit, answers where they differ are wrong far more often.
-        override fun sure(strokes: List<Ink>) = doubt(strokes)?.agree ?: true
+        override fun sure(strokes: List<Ink>): Boolean = doubt(strokes)?.agree ?: true
     }
 
     private fun read(run: List<Ink>, h: Float): List<String> {

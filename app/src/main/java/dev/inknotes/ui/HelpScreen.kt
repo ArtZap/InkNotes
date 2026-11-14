@@ -45,6 +45,14 @@ private class Topic(val title: String, val entries: List<Pair<String, String>>)
 
 private val TOPICS = listOf(
     Topic(
+        tr("Новое в 0.42", "What's new in 0.42"),
+        listOf(
+            tr("Ответ под вопросом — чаще и честнее", "Answers not certain — more often, more honestly") to tr("Ответ показывается серым со знаком «?», и когда распознаватель почерка сам не уверен, что написано (прочитал по-разному). Касание по ответу покажет другие возможные прочтения. Уравнения тоже: x2 = 4 на границе между «x·2» и «x²» даст серый ответ с обоими вариантами.", "An answer is shown grey with a “?” also when the handwriting reader itself is not sure what is written (it read it in different ways). Tap the answer to see the other possible readings. Equations too: x2 = 4 on the edge between “x·2” and “x²” gives a grey answer with both."),
+            tr("Корни и показатели", "Roots and exponents") to tr("√(1 + √2): первая цифра сразу за знаком корня больше не выпадает из-под корня. Показатель в показателе тоже читается: e^(−x²), 2^(m^p).", "√(1 + √2): the first digit right after the root sign no longer falls outside the root. An exponent of an exponent reads too: e^(−x²), 2^(m^p)."),
+            tr("Если ответ неверный", "When an answer is wrong") to tr("Нажмите на него и «Неверно…»: такие примеры пополняют проверку, которая теперь гоняет каждую версию на тысячах рукописных формул.", "Tap it and “Wrong…”: such examples join the check that now runs every version on thousands of handwritten formulas."),
+        ),
+    ),
+    Topic(
         tr("Новое в 0.41", "What's new in 0.41"),
         listOf(
             tr("Ответ под вопросом", "Answers not certain") to tr("Если написанное можно прочитать по-разному (показатель это или просто цифра, индекс или нет) и ответы при этом расходятся, ответ показывается серым со знаком «?». Касание по нему покажет другие возможные ответы. Раньше в таких местах мог появиться уверенный неверный ответ.", "When what is written can be read in more than one way (an exponent or just a digit, an index or not) and the answers differ, the answer is shown grey with a “?”. Tap it to see the other possible answers. Before, such places could get a confident wrong answer."),
