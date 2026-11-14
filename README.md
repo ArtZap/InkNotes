@@ -108,7 +108,7 @@ APK: `app/build/outputs/apk/debug/app-debug.apk`.
 
 ```bash
 ./gradlew installDebug installDebugAndroidTest
-/mnt/addmem/android-sdk/platform-tools/adb shell am instrument -w dev.inknotes.test/androidx.test.runner.AndroidJUnitRunner
+/mnt/addmem/android-sdk/platform-tools/adb shell am instrument -w dev.inknotes.test/dev.inknotes.InkTestRunner
 ```
 
 `connectedDebugAndroidTest` после прогона удаляет приложение вместе с тетрадями.

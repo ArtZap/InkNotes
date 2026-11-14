@@ -46,6 +46,7 @@ object Language {
 
     /** Sets [Lang] for this run of the app. Called once, before any text is made. */
     fun init(context: Context) {
+        if (Lang.fixed) return
         Lang.english = effective(context) == EN
     }
 
@@ -55,7 +56,7 @@ object Language {
      */
     fun wrap(base: Context): Context {
         if (Build.VERSION.SDK_INT >= 33) return base
-        val tag = known(prefs(base).getString(KEY, SYSTEM).orEmpty())
+        val tag = if (Lang.fixed) (if (Lang.english) EN else RU) else known(prefs(base).getString(KEY, SYSTEM).orEmpty())
         if (tag.isEmpty()) return base
         val locale = Locale(tag)
         Locale.setDefault(locale)
@@ -71,7 +72,7 @@ object Language {
     fun handwriting(context: Context): String = known(prefs(context).getString(KEY_HANDWRITING, SYSTEM).orEmpty())
 
     /** True when handwriting is read with the English model. */
-    fun handwritingEnglish(context: Context): Boolean = handwriting(context).ifEmpty { effective(context) } == EN
+    fun handwritingEnglish(context: Context): Boolean = if (Lang.fixed) Lang.english else handwriting(context).ifEmpty { effective(context) } == EN
 
     /** Changes the handwriting language; the app starts again, as it reads with one model per run. */
     fun setHandwriting(activity: Activity, tag: String) {
@@ -96,7 +97,7 @@ object Language {
      * of the app while it ran): it starts again. True if it does.
      */
     fun restartIfChanged(activity: Activity): Boolean {
-        if ((effective(activity) == EN) == Lang.english) return false
+        if (Lang.fixed || (effective(activity) == EN) == Lang.english) return false
         restart(activity)
         return true
     }

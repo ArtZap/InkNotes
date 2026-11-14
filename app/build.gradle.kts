@@ -32,7 +32,8 @@ android {
         targetSdk = 36
         versionCode = 21
         versionName = "0.42"
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // The device tests in a set language (dev.inknotes.InkTestRunner).
+        testInstrumentationRunner = "dev.inknotes.InkTestRunner"
         buildConfigField("String", "GOOGLE_CLIENT_ID", "\"${googleProp("clientId")}\"")
         buildConfigField("String", "GOOGLE_CLIENT_SECRET", "\"${googleProp("clientSecret")}\"")
     }

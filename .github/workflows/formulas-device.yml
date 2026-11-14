@@ -16,6 +16,7 @@ on:
       - app/src/main/java/dev/inknotes/math/**
       - tools/crohme_symbols.py
       - .github/workflows/formulas-device.yml
+      - app/src/androidTest/java/dev/inknotes/InkTestRunner.kt
 
 concurrency:
   group: formulas-device-${{ github.ref }}
@@ -67,8 +68,11 @@ jobs:
             adb push symbols.tsv /sdcard/Android/data/dev.inknotes/files/level0/symbols.tsv
             adb shell mkdir -p /sdcard/Android/data/dev.inknotes/files/level1
             adb push formulas.tsv /sdcard/Android/data/dev.inknotes/files/level1/formulas.tsv
-            adb shell am instrument -w -e class dev.inknotes.math.SymbolReadTest dev.inknotes.test/androidx.test.runner.AndroidJUnitRunner || true
-            adb shell am instrument -w -e class dev.inknotes.math.FormulaReadTest dev.inknotes.test/androidx.test.runner.AndroidJUnitRunner || true
+            adb shell am instrument -w -e class dev.inknotes.math.SymbolReadTest dev.inknotes.test/dev.inknotes.InkTestRunner || true
+            adb shell am instrument -w -e class dev.inknotes.math.FormulaReadTest dev.inknotes.test/dev.inknotes.InkTestRunner || true
+            # The math checks on real pages, in Russian and in English: the answers must be the same.
+            adb shell am instrument -w -e class dev.inknotes.math.RealPagesTest,dev.inknotes.math.MathNotesTest dev.inknotes.test/dev.inknotes.InkTestRunner | tee math-ru.txt || true
+            adb shell am instrument -w -e lang en -e class dev.inknotes.math.RealPagesTest,dev.inknotes.math.MathNotesTest dev.inknotes.test/dev.inknotes.InkTestRunner | tee math-en.txt || true
             adb pull /sdcard/Android/data/dev.inknotes/files/level0/report.txt level0-report.txt || true
             adb pull /sdcard/Android/data/dev.inknotes/files/level1/report.txt level1-report.txt || true
             cat level0-report.txt level1-report.txt || adb logcat -d | grep -i "SymbolReadTest\|FormulaReadTest\|mlkit\|digitalink" | tail -60

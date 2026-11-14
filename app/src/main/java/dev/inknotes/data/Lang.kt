@@ -12,6 +12,10 @@ package dev.inknotes.data
 object Lang {
     @Volatile
     var english: Boolean = false
+
+    /** Set by the device tests: the language stays as they set it (no change, no restart). */
+    @Volatile
+    var fixed: Boolean = false
 }
 
 /** [ru] or [en], in the language of the interface. */
