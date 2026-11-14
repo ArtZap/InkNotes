@@ -56,6 +56,8 @@ class FormulaReadTest {
         val layout = sortedMapOf<String, Tally>()
         val page = sortedMapOf<String, Tally>()
         val wrongs = ArrayList<String>()
+        class Signal(val right: Boolean, val shifts: Boolean, val top2: Boolean, val top3: Boolean)
+        val signals = ArrayList<Signal>()
         val started = System.currentTimeMillis()
         try {
             for (line in file.readLines()) {
@@ -83,6 +85,16 @@ class FormulaReadTest {
                     else -> "WRONG"
                 }
                 for (k in listOf("all", kind, set)) layout.getOrPut(k) { Tally() }.add(o)
+                // Signals for "unsure", measured before one is chosen: the moved layouts disagree;
+                // the first readings (the reader's first guesses and the next ones) give other values.
+                if (got != null) {
+                    val right = FormulaValues.fingerprint(got)?.let { FormulaValues.sameFingerprint(it, want) } == true
+                    val readings = runCatching { MathPage.readings(strokes, h, ax, math.reader, MathPage.Prefer.FIRST) }.getOrDefault(emptyList())
+                    val values = readings.take(3).mapNotNull { FormulaValues.fingerprint(it) }
+                    val top2 = values.size >= 2 && !FormulaValues.sameFingerprint(values[0], values[1])
+                    val top3 = values.drop(1).any { !FormulaValues.sameFingerprint(values[0], it) }
+                    signals += Signal(right, o == "UNSURE", top2, top3)
+                }
                 if (o == "WRONG" && wrongs.size < 60) wrongs += "$set/$id  →  ${runCatching { Printer.expr(got!!) }.getOrDefault("?")}"
                 if (pageWant.isEmpty()) continue
                 // As written on a page: "=" drawn after it, the whole page analysed.
@@ -110,6 +122,18 @@ class FormulaReadTest {
             for ((k, t) in layout) append("  %-30s %s\n".format(k, t))
             append("== страница (дописан «=»)\n")
             for ((k, t) in page) append("  %-30s %s\n".format(k, t))
+            append("== сигналы «не уверен» (раскладка и чтение): показано, неверных среди показанных\n")
+            fun line(name: String, doubt: (Signal) -> Boolean) {
+                val shown = signals.filter { !doubt(it) }
+                val wrong = shown.count { !it.right }
+                append("  %-28s показано %5.1f%%  неверных %5.1f%%  (%d из %d)\n".format(name, 100.0 * shown.size / maxOf(1, signals.size), 100.0 * wrong / maxOf(1, shown.size), wrong, shown.size))
+            }
+            line("без проверки", { false })
+            line("сдвиги порогов", { it.shifts })
+            line("первые два прочтения", { it.top2 })
+            line("первые три прочтения", { it.top3 })
+            line("сдвиги или два прочтения", { it.shifts || it.top2 })
+            line("сдвиги или три прочтения", { it.shifts || it.top3 })
             append("== неверные ответы (первые ${wrongs.size})\n")
             for (x in wrongs) append("  $x\n")
         }
