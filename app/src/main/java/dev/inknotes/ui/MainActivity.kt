@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.material3.AlertDialog
@@ -125,7 +126,7 @@ class MainActivity : ComponentActivity() {
                 val current = editor
                 val saved = androidx.compose.runtime.saveable.rememberSaveableStateHolder()
                 if (current == null) {
-                    saved.SaveableStateProvider("library") { LibraryScreen(
+                    saved.SaveableStateProvider("library") { androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.appear()) { LibraryScreen(
                         repo = repo,
                         backup = AppServices.get(this).backup,
                         handwriting = handwriting,
@@ -140,11 +141,11 @@ class MainActivity : ComponentActivity() {
                         // The probe is in debug builds only (src/debug): started by name.
                         onProbe = { runCatching { startActivity(Intent().setClassName(this, "dev.inknotes.probe.ProbeActivity")) } },
                         version = libraryVersion,
-                    ) }
+                    ) } }
                 } else {
                     val main = @androidx.compose.runtime.Composable {
                         // A fresh editor for each notebook: nothing of the last one carries over.
-                        androidx.compose.runtime.key(current) { EditorScreen(
+                        androidx.compose.runtime.key(current) { androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.appear()) { EditorScreen(
                             controller = current,
                             themeMode = themeMode,
                             onThemeModeChange = changeTheme,
@@ -162,7 +163,7 @@ class MainActivity : ComponentActivity() {
                             onCloseAllTabs = ::closeAllTabs,
                             // Beside another half its strip shows even with one tab: a tab can be dragged across.
                             alwaysTabs = side != null,
-                        ) }
+                        ) } }
                     }
                     val other = side
                     if (other == null) {
@@ -181,7 +182,8 @@ class MainActivity : ComponentActivity() {
                             },
                             first = main,
                             second = {
-                                androidx.compose.runtime.key(other) { EditorScreen(
+                                // Slides in a little from the right, where it opens.
+                                androidx.compose.runtime.key(other) { androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.appear(fromX = 0.06f)) { EditorScreen(
                                     controller = other,
                                     themeMode = themeMode,
                                     onThemeModeChange = changeTheme,
@@ -207,7 +209,7 @@ class MainActivity : ComponentActivity() {
                                     rightPane = true,
                                     onAddTab = { pickingSide = true },
                                     onCloseAllTabs = ::closeSide,
-                                ) }
+                                ) } }
                             },
                         )
                     }
@@ -706,13 +708,18 @@ class MainActivity : ComponentActivity() {
                 else -> sideShare to 1f
             }
             val accent = androidx.compose.material3.MaterialTheme.colorScheme.primary
+            // The place lights up smoothly as the tab comes over it.
+            val zoneColor by androidx.compose.animation.animateColorAsState(accent.copy(alpha = if (lit) 0.18f else 0.06f), Motion.fast(), label = "drop zone")
+            // Picked up: the tab grows a little, as if lifted off the strip.
+            val lift = androidx.compose.runtime.remember(t) { androidx.compose.animation.core.Animatable(0.9f) }
+            androidx.compose.runtime.LaunchedEffect(t) { lift.animateTo(1.06f, androidx.compose.animation.core.spring(dampingRatio = 0.6f, stiffness = 700f)) }
             with(density) {
                 androidx.compose.foundation.layout.Box(
                     androidx.compose.ui.Modifier
                         .offset(x = (w * zone.first).toDp())
                         .width((w * (zone.second - zone.first)).toDp())
                         .fillMaxHeight()
-                        .background(accent.copy(alpha = if (lit) 0.18f else 0.06f)),
+                        .background(zoneColor),
                     contentAlignment = androidx.compose.ui.Alignment.Center,
                 ) {
                     Text(
@@ -722,7 +729,12 @@ class MainActivity : ComponentActivity() {
                     )
                 }
                 androidx.compose.material3.Surface(
-                    modifier = androidx.compose.ui.Modifier.offset(x = (at.x - 60.dp.toPx()).toDp(), y = (at.y - 16.dp.toPx()).toDp()),
+                    modifier = androidx.compose.ui.Modifier
+                        .offset(x = (at.x - 60.dp.toPx()).toDp(), y = (at.y - 16.dp.toPx()).toDp())
+                        .graphicsLayer {
+                            scaleX = lift.value
+                            scaleY = lift.value
+                        },
                     shape = androidx.compose.foundation.shape.RoundedCornerShape(6.dp),
                     color = androidx.compose.material3.MaterialTheme.colorScheme.secondaryContainer,
                     shadowElevation = 6.dp,

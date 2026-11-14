@@ -101,7 +101,7 @@ fun SyncDialog(cloud: CloudSync, prefs: AppPrefs, busy: () -> Set<String>, onDis
                         Text(s, fontSize = 13.sp)
                     }
                 }
-                if (cloud.held.isNotEmpty() && !cloud.running) {
+                androidx.compose.animation.AnimatedVisibility(cloud.held.isNotEmpty() && !cloud.running) { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     HorizontalDivider()
                     Text("Пропали сразу ${cloud.held.size} тетрадей", fontWeight = FontWeight.Medium)
                     Text(
@@ -115,7 +115,7 @@ fun SyncDialog(cloud: CloudSync, prefs: AppPrefs, busy: () -> Set<String>, onDis
                         Button(onClick = { cloud.resolveHeld(trash = false) }) { Text("Оставить везде") }
                         OutlinedButton(onClick = { cloud.resolveHeld(trash = true) }) { Text("Удалить везде") }
                     }
-                }
+                } }
             }
         },
         confirmButton = {

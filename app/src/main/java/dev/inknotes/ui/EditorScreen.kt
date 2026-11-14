@@ -6,6 +6,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -710,8 +711,9 @@ private fun TopRow(
                 is MathNotes.State.Failed -> math.message
                 else -> null
             }
-            // Title with the status under it: they share the room left by the buttons.
-            Column(Modifier.weight(1f)) {
+            // Title with the status under it: they share the room left by the buttons. The line
+            // under the title opens and closes smoothly, and one message fades into the next.
+            Column(Modifier.weight(1f).animateContentSize(Motion.fast())) {
                 Text(
                     c.notebook.title,
                     fontWeight = FontWeight.SemiBold,
@@ -726,14 +728,20 @@ private fun TopRow(
                             Text("Отмена", fontSize = 13.sp)
                         }
                     }
-                    status != null -> Text(
+                    status != null -> androidx.compose.animation.AnimatedContent(
                         status,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 13.sp,
-                        lineHeight = 15.sp,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                        transitionSpec = { fadeIn(Motion.fast()) togetherWith fadeOut(Motion.fast()) },
+                        label = "status",
+                    ) { shown ->
+                        Text(
+                            shown,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 13.sp,
+                            lineHeight = 15.sp,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
             }
             StudyTimerChip(onClick = onTimer)
@@ -1273,6 +1281,17 @@ private fun TabStrip(
     val gapAt = drag?.target?.takeIf { it.first == right }?.second
     val gapWidth = with(density) { ((dragging?.let { drag.strips.values.firstNotNullOfOrNull { s -> s.tabs[it] } }?.width ?: 0f)).toDp() }
     val others = tabs.filter { it !== dragging }
+    // Tabs being closed: they fold away first, then go.
+    val closing = remember { androidx.compose.runtime.mutableStateMapOf<EditorController, Boolean>() }
+    val scope = rememberCoroutineScope()
+    fun closeSmoothly(list: List<EditorController>, then: () -> Unit) {
+        list.forEach { closing[it] = true }
+        scope.launch {
+            kotlinx.coroutines.delay(Motion.FAST.toLong())
+            list.forEach { closing.remove(it) }
+            then()
+        }
+    }
     @Composable
     fun gap(at: Int) {
         val w by androidx.compose.animation.core.animateDpAsState(
@@ -1302,11 +1321,15 @@ private fun TabStrip(
             val dragged = dragging === t
             if (!dragged) gap(others.indexOf(t))
             // The dragged tab folds away where it was (it stays composed: the drag goes on in it).
-            val fold by androidx.compose.animation.core.animateFloatAsState(
-                if (dragged) 0f else 1f,
-                androidx.compose.animation.core.tween(TAB_SLIDE_MS, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+            val folded by androidx.compose.animation.core.animateFloatAsState(
+                if (dragged || closing[t] == true) 0f else 1f,
+                androidx.compose.animation.core.tween(if (closing[t] == true) Motion.FAST else TAB_SLIDE_MS, easing = androidx.compose.animation.core.FastOutSlowInEasing),
                 label = "tab fold",
             )
+            // A new tab unfolds into the strip.
+            val appear = remember(t) { androidx.compose.animation.core.Animatable(if (bounds.isEmpty()) 1f else 0f) }
+            LaunchedEffect(t) { appear.animateTo(1f, Motion.fast()) }
+            val fold = folded * appear.value
             Row(
                 Modifier
                     .height(TAB_HEIGHT)
@@ -1356,7 +1379,7 @@ private fun TabStrip(
                 )
                 // Wider than it looks: easy to hit with a finger, the strip stays thin.
                 Box(
-                    Modifier.width(36.dp).height(TAB_HEIGHT).clip(RoundedCornerShape(6.dp)).clickable { onCloseTab(t) }.semantics { contentDescription = "Закрыть вкладку" },
+                    Modifier.width(36.dp).height(TAB_HEIGHT).clip(RoundedCornerShape(6.dp)).clickable { if (closing[t] != true) closeSmoothly(listOf(t)) { onCloseTab(t) } }.semantics { contentDescription = "Закрыть вкладку" },
                     contentAlignment = Alignment.Center,
                 ) { Text("✕", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             }
@@ -1366,7 +1389,7 @@ private fun TabStrip(
             Modifier.height(TAB_HEIGHT).clip(RoundedCornerShape(6.dp)).clickable(onClick = onAdd).padding(horizontal = 10.dp),
             contentAlignment = Alignment.Center,
         ) { Text(if (right) "+" else "+ Тетрадь", fontSize = 13.sp, color = MaterialTheme.colorScheme.primary) }
-        if (onCloseAll != null && tabs.size >= 2) CloseAllTabs(tabs.size, onCloseAll)
+        if (onCloseAll != null && tabs.size >= 2) CloseAllTabs(tabs.size) { closeSmoothly(tabs, onCloseAll) }
     }
 }
 
@@ -1429,7 +1452,7 @@ private fun ArrowRow(
 }
 
 private const val ARROW_SCROLL_MS = 450
-private const val TOOLS_FOLD_MS = 260
+private const val TOOLS_FOLD_MS = Motion.NORMAL
 
 /**
  * Hides the tools of a narrow pane, and brings them back. Shown: a plain "fold up" button.
