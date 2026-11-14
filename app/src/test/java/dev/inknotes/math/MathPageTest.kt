@@ -452,8 +452,34 @@ class MathPageTest {
         add(label, ts.map { (x + w / 2 + w / 2 * Math.sin(it)).toFloat() }, ts.map { (top + h / 2 - h / 2 * Math.cos(it)).toFloat() })
     }
 
+    /** [block] with English handwriting: a low dot between digits is a decimal point. */
+    private fun <T> englishHandwriting(block: () -> T): T {
+        val point = Tune.decimalPoint
+        Tune.decimalPoint = 1f
+        try {
+            return block()
+        } finally {
+            Tune.decimalPoint = point
+        }
+    }
+
     @Test
-    fun lowDotIsADecimalPoint() {
+    fun lowDotIsMultiplicationInRussianHandwriting() {
+        // Russian handwriting: decimals take a comma; a dot a little below the middle is a
+        // hasty · (8·5 + 1), as on real pages. English handwriting reads it as 8.5.
+        val s = Sheet()
+        s.glyph("8", 100f, 100f)
+        s.dot(119f, 116f)
+        s.glyph("5", 124f, 100f)
+        s.glyph("+", 144f, 106f, 12f, 12f)
+        s.glyph("1", 162f, 100f)
+        s.equals(184f, 112f)
+        assertEquals("41", text(s.answers().single()))
+        assertTrue(englishHandwriting { text(s.answers().single()) } in setOf("9,5", "9.5", "19/2"))
+    }
+
+    @Test
+    fun lowDotIsADecimalPoint() = englishHandwriting {
         val s = Sheet()
         s.glyph("8", 100f, 100f)
         s.dot(119f, 121f)

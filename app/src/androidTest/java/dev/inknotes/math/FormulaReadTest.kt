@@ -53,6 +53,7 @@ class FormulaReadTest {
         }
         val numbers = Printer.numbers
         Printer.numbers = Printer.Numbers.DECIMAL
+        Tune.decimalPoint = 1f // CROHME is written the English way (8.5)
         val layout = sortedMapOf<String, Tally>()
         val page = sortedMapOf<String, Tally>()
         val wrongs = ArrayList<String>()

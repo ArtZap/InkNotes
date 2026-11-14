@@ -23,6 +23,9 @@ class FormulaBenchTest {
         checkNotNull(root)
         val numbers = Printer.numbers
         Printer.numbers = Printer.Numbers.DECIMAL
+        // CROHME is written the English way: 8.5 with a decimal point.
+        val point = Tune.decimalPoint
+        Tune.decimalPoint = 1f
         try {
             val report = StringBuilder()
             val runs = FormulaBench.SETS.map { set -> FormulaBench.run(File(root, set), log = { report.append(it).append('\n') }, set = set) }
@@ -38,6 +41,7 @@ class FormulaBenchTest {
             if (comparison != null) assertTrue(comparison.regressions.joinToString("\n") + "\n" + comparison, comparison.regressions.isEmpty())
         } finally {
             Printer.numbers = numbers
+            Tune.decimalPoint = point
         }
     }
 }

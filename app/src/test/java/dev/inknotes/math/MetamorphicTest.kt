@@ -21,6 +21,8 @@ class MetamorphicTest {
         checkNotNull(root)
         val numbers = Printer.numbers
         Printer.numbers = Printer.Numbers.DECIMAL
+        val point = Tune.decimalPoint
+        Tune.decimalPoint = 1f // CROHME: the English way
         try {
             val samples = FormulaBench.SETS.flatMap { InkMl.loadDir(File(root, it)) }.mapNotNull { s -> FormulaBench.covered(s)?.let { s to it } }
             val base = samples.map { (s, e) -> FormulaBench.answer(s, e) }
@@ -53,6 +55,7 @@ class MetamorphicTest {
             assertTrue("стало хрупче: " + worse.map { (k, v) -> "$k ${before[k]} → $v" } + "\n" + report, worse.isEmpty())
         } finally {
             Printer.numbers = numbers
+            Tune.decimalPoint = point
         }
     }
 }

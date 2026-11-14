@@ -555,7 +555,7 @@ object MathLayout {
                 // ring or a little high: not a degree sign (those sit at the top), a prime or
                 // an exponent.
                 // A dot low beside a symbol (8.5, 0.7) is a decimal point: it stays in the run.
-                val point = tiny && r != null && !refStructure && b.cy > r.top + Tune.pointLow * r.height && b.left > r.cx
+                val point = Tune.decimalPoint > 0.5f && tiny && r != null && !refStructure && b.cy > r.top + Tune.pointLow * r.height && b.left > r.cx
                 if (tiny && !point && abs(b.cy - ax) < 0.2f * h && (r == null || b.cy > r.top + 0.15f * r.height)) {
                     enter(Level.BASE)
                     flush()
@@ -1019,6 +1019,13 @@ object Tune {
 
     /** A dot is a decimal point, not multiplication, when its middle is this low on the symbol before it. */
     @JvmField var pointLow = 0.55f
+
+    /**
+     * 1: a dot low between digits is a decimal point (English handwriting, 8.5); 0: a dot is
+     * multiplication wherever it sits (Russian handwriting: decimals take a comma, and a low
+     * dot is a hasty ·). Set by the app from the handwriting language.
+     */
+    @JvmField var decimalPoint = 0f
 
     /** An index measured on the symbol before it: smaller than this part of it, its top this far down it, its bottom this far below its foot. */
     @JvmField var subRelSize = 0.7f
