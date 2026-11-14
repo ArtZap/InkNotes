@@ -12,6 +12,7 @@ on:
       - app/src/androidTest/java/dev/inknotes/math/FormulaReadTest.kt
       - app/src/test/java/dev/inknotes/math/FormulaExportTest.kt
       - app/src/sharedTest/**
+      - app/build.gradle.kts
       - tools/crohme_symbols.py
       - .github/workflows/formulas-device.yml
 
