@@ -159,6 +159,7 @@ class MainActivity : ComponentActivity() {
                             sideOpen = side != null,
                             compact = side != null,
                             tabDrag = tabDragging,
+                            onCloseAllTabs = ::closeAllTabs,
                             // Beside another half its strip shows even with one tab: a tab can be dragged across.
                             alwaysTabs = side != null,
                         ) }
@@ -205,6 +206,7 @@ class MainActivity : ComponentActivity() {
                                     tabDrag = tabDragging,
                                     rightPane = true,
                                     onAddTab = { pickingSide = true },
+                                    onCloseAllTabs = ::closeSide,
                                 ) }
                             },
                         )
@@ -372,6 +374,30 @@ class MainActivity : ComponentActivity() {
     }
 
     /** Closes a tab; the next one (or the library) is shown if it was the current one. */
+    /**
+     * Every tab of the left half is saved and closed. With a half beside, that one fills the
+     * screen; without, the library shows.
+     */
+    private fun closeAllTabs() {
+        val all = tabs
+        if (all.isEmpty()) return
+        tabs = emptyList()
+        editor = null
+        for (t in all) {
+            t.flush()
+            t.close()
+        }
+        if (sideTabs.isNotEmpty()) {
+            tabs = sideTabs
+            editor = side
+            sideTabs = emptyList()
+            side = null
+            focused = editor
+            editor?.activateLayer()
+        }
+        rememberTabs()
+    }
+
     private fun closeTab(c: EditorController) {
         val i = tabs.indexOf(c)
         if (i < 0) return

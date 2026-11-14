@@ -5,6 +5,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.expandVertically
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -145,6 +146,8 @@ fun EditorScreen(
     alwaysTabs: Boolean = false,
     /** "+" in the strip: another notebook in this half (null: the library). */
     onAddTab: (() -> Unit)? = null,
+    /** Closes every tab of this half (asked once more in the strip first). */
+    onCloseAllTabs: (() -> Unit)? = null,
     /** The system back gesture (null: as the back arrow). */
     onBack: (() -> Unit)? = null,
 ) {
@@ -309,7 +312,7 @@ fun EditorScreen(
             .safeDrawingPadding()
     ) {
         if (tabs.size > 1 || (alwaysTabs || rightPane) && tabs.isNotEmpty()) {
-            TabStrip(controller, tabs, onTab, onCloseTab, onAdd = onAddTab ?: onClose, drag = tabDrag, right = rightPane)
+            TabStrip(controller, tabs, onTab, onCloseTab, onAdd = onAddTab ?: onClose, drag = tabDrag, right = rightPane, onCloseAll = onCloseAllTabs)
         }
         val layout = controller.toolbar
         TopRow(
@@ -1243,6 +1246,7 @@ private fun TabStrip(
     onAdd: () -> Unit,
     drag: TabDragging?,
     right: Boolean,
+    onCloseAll: (() -> Unit)? = null,
 ) {
     // Where the strip and each tab are (in the window's root): a dragged tab is placed by them,
     // in this strip or in the other half's.
@@ -1362,6 +1366,7 @@ private fun TabStrip(
             Modifier.height(TAB_HEIGHT).clip(RoundedCornerShape(6.dp)).clickable(onClick = onAdd).padding(horizontal = 10.dp),
             contentAlignment = Alignment.Center,
         ) { Text(if (right) "+" else "+ Тетрадь", fontSize = 13.sp, color = MaterialTheme.colorScheme.primary) }
+        if (onCloseAll != null && tabs.size >= 2) CloseAllTabs(tabs.size, onCloseAll)
     }
 }
 
@@ -1478,6 +1483,62 @@ private fun ToolsToggle(c: EditorController) {
 }
 private const val TAB_SLIDE_MS = 220
 private const val ARROW_FADE_MS = 180
+
+/**
+ * "Закрыть все" at the end of a strip of tabs. Two taps: the first turns it into a red
+ * "Закрыть N вкладок?" for a few seconds, the second (only then) closes them; left alone it
+ * turns back. Easy on purpose, never by a stray touch.
+ */
+@Composable
+private fun CloseAllTabs(count: Int, onCloseAll: () -> Unit) {
+    var armed by remember { mutableStateOf(false) }
+    LaunchedEffect(armed) {
+        if (armed) {
+            kotlinx.coroutines.delay(CLOSE_ALL_ARMED_MS)
+            armed = false
+        }
+    }
+    val bg by androidx.compose.animation.animateColorAsState(
+        if (armed) MaterialTheme.colorScheme.error else Color.Transparent,
+        tween(180),
+        label = "close all",
+    )
+    Box(
+        Modifier
+            .height(TAB_HEIGHT)
+            .clip(RoundedCornerShape(6.dp))
+            .background(bg)
+            .clickable {
+                if (armed) {
+                    armed = false
+                    onCloseAll()
+                } else {
+                    armed = true
+                }
+            }
+            .semantics { contentDescription = if (armed) "Подтвердить: закрыть все вкладки" else "Закрыть все вкладки" }
+            .animateContentSize(tween(180))
+            .padding(horizontal = 10.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            if (armed) "Закрыть $count ${tabsWord(count)}?" else "Закрыть все",
+            fontSize = 13.sp,
+            fontWeight = if (armed) FontWeight.SemiBold else FontWeight.Normal,
+            color = if (armed) MaterialTheme.colorScheme.onError else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/** "вкладку", "вкладки", "вкладок" after [n]. */
+private fun tabsWord(n: Int): String = when {
+    n % 100 in 11..14 -> "вкладок"
+    n % 10 == 1 -> "вкладку"
+    n % 10 in 2..4 -> "вкладки"
+    else -> "вкладок"
+}
+
+private const val CLOSE_ALL_ARMED_MS = 3000L
 
 /** Height of a tab: a thin strip, the page keeps the room. */
 private val TAB_HEIGHT = 28.dp
