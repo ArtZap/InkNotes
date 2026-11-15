@@ -40,7 +40,7 @@ object Correct {
      * the first choices are the ones that give it; [learned] puts what the writer chose before
      * first among the other candidates.
      */
-    fun side(strokes: List<Ink>, h: Float, axis: Float, reader: RunReader, target: Expr? = null, learned: Learned? = null): Side? {
+    fun side(strokes: List<Ink>, h: Float, axis: Float, reader: RunReader, target: Expr? = null, learned: Learned? = null, samples: Samples? = null): Side? {
         if (strokes.isEmpty()) return null
         val pieces = runCatching { MathLayout.formula(strokes, h, axis) }.getOrNull() ?: return null
         val parts = ArrayList<Part>()
@@ -80,8 +80,11 @@ object Correct {
                         // Alone a symbol reads as itself, not as the word the run made.
                         if (n > 1) reader.read(glyph, p.h).map(MathText::normalize).filter { tokens(it).size == 1 }.take(MAX_ALONE).forEach { cands += it }
                         for (c in cands.toList().take(2)) LOOKALIKES[c]?.let { cands += it }
-                        val ordered = learned?.order(cands.toList()) ?: cands.toList()
-                        val differs = fitting.size > 1 && fitting[0][i] != fitting[1][i]
+                        var ordered = learned?.order(cands.toList()) ?: cands.toList()
+                        // The writer's own symbols: what they say comes right after the first.
+                        val vote = samples?.vote(glyph)?.takeIf { it.sure }
+                        if (vote != null && ordered.firstOrNull() != vote.token) ordered = listOf(ordered[0], vote.token) + (ordered.drop(1) - vote.token)
+                        val differs = fitting.size > 1 && fitting[0][i] != fitting[1][i] || vote != null && vote.token != ordered[0]
                         parts += Part.S(syms.size)
                         syms += Sym(glyph, ordered.take(MAX_CANDIDATES), p.level, sign = false, unsure = differs || n == 1 && !reader.sure(p.strokes))
                     }

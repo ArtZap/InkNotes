@@ -206,9 +206,10 @@ class MathNotes(
             exec.execute {
                 val draft = runCatching {
                     val learned = fixes.learned.takeIf { fixes.learn }
+                    val samples = fixes.samples.takeIf { fixes.learn }
                     val rows = fix.rows.map { row ->
-                        val left = Correct.side(row.left, row.h, row.axis, reader, row.leftRead, learned)
-                        val right = row.right?.let { Correct.side(it, row.h, row.axis, reader, row.rightRead, learned) }
+                        val left = Correct.side(row.left, row.h, row.axis, reader, row.leftRead, learned, samples)
+                        val right = row.right?.let { Correct.side(it, row.h, row.axis, reader, row.rightRead, learned, samples) }
                         if (left == null || row.right != null && right == null) return@runCatching null
                         Row(row, left, right)
                     }
@@ -228,10 +229,14 @@ class MathNotes(
     internal val reader = object : RunReader {
         override fun read(strokes: List<Ink>, lineHeight: Float): List<String> {
             val texts = this@MathNotes.read(strokes, lineHeight)
-            // What the writer meant by a symbol, learned from their corrections.
-            if (!fixes.learn || fixes.learned.isEmpty() || texts.isEmpty()) return texts
-            val symbols = runCatching { MathLayout.items(strokes, lineHeight).size }.getOrDefault(0)
-            return fixes.learned.adjust(texts, symbols)
+            // What the writer meant by a symbol, learned from their corrections: the choices
+            // they made, then their own symbols' shapes as a second voice.
+            if (!fixes.learn || fixes.learned.isEmpty() && fixes.samples.isEmpty() || texts.isEmpty()) return texts
+            val glyphs = runCatching {
+                MathLayout.items(strokes, lineHeight).filterIsInstance<MathLayout.G>().sortedBy { it.box.left }.map { it.glyph.strokes }
+            }.getOrDefault(emptyList())
+            val counted = fixes.learned.adjust(texts, glyphs.size)
+            return Voices.adjust(counted, glyphs, fixes.samples)
         }
 
         // Both readings (plain and after arithmetic) put the same text first: measured on

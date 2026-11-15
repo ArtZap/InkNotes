@@ -294,15 +294,17 @@ private fun FixContent(c: EditorController, answer: PageAnswer, d: MathNotes.Dra
                 } else {
                     val read = ArrayList<String>()
                     val chosen = ArrayList<String>()
+                    val shapes = ArrayList<List<dev.inknotes.math.Ink>>()
                     for (s in slots) {
                         val sym = sym(s)
                         if (sym.sign || picks(s)[s.index].level == Correct.OFF) continue
                         read += sym.candidates[side(s).initial[s.index].choice]
                         chosen += sym.candidates[picks(s)[s.index].choice]
+                        shapes += sym.strokes
                     }
                     // What the window shows is what the page then computes: pinned as it stands,
                     // changed or not (the page may have read it otherwise).
-                    c.applyFix(answer, shown, read, chosen)
+                    c.applyFix(answer, shown, read, chosen, shapes)
                 }
                 onDismiss()
             }) { Text(tr("Готово", "Done")) }
@@ -622,7 +624,14 @@ fun FormulaFixSettings(fixes: dev.inknotes.math.FixStore) {
             androidx.compose.material3.FilterChip(selected = ask == mode, onClick = { ask = mode; fixes.ask = mode }, label = { Text(label) })
         }
     }
-    OutlinedButton(enabled = !forgotten && !fixes.learned.isEmpty(), onClick = { fixes.forget(); forgotten = true }) {
+    if (!forgotten && !fixes.samples.isEmpty()) {
+        Text(
+            tr("Запомнено ваших символов: ${fixes.samples.count()}", "Your symbols kept: ${fixes.samples.count()}"),
+            fontSize = 12.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+    OutlinedButton(enabled = !forgotten && !(fixes.learned.isEmpty() && fixes.samples.isEmpty()), onClick = { fixes.forget(); forgotten = true }) {
         Text(if (forgotten) tr("Почерк забыт", "Handwriting forgotten") else tr("Забыть мой почерк", "Forget my handwriting"))
     }
 }

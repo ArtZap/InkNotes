@@ -45,6 +45,12 @@ private class Topic(val title: String, val entries: List<Pair<String, String>>)
 
 private val TOPICS = listOf(
     Topic(
+        tr("Новое в 0.45", "What's new in 0.45"),
+        listOf(
+            tr("Ваш почерк — второй голос", "Your handwriting as a second voice") to tr("Каждое «Готово» в окне «Как прочитано» запоминает, как вы пишете каждый символ формулы. Когда новый символ очень похож на ваш запомненный, а распознавание прочитало иначе, ваш вариант идёт следующим (у одиночного символа, если похож почти точно, — первым), а ответ становится «под вопросом», где они расходятся. На барабане ваш вариант стоит вторым. Нужно хотя бы два образца символа; чем больше исправлений, тем лучше. Всё хранится только на устройстве; в настройках видно, сколько символов запомнено, и есть «Забыть мой почерк».", "Every “Done” in the “How it was read” window keeps how you write each symbol of the formula. When a new symbol is very like one of yours and recognition read it otherwise, your reading comes next (for a lone symbol that is almost exactly alike, first), and the answer becomes uncertain where they disagree. On the wheel your symbol comes second. At least two samples of a symbol are needed; the more corrections, the better. Everything stays on the device; the settings show how many symbols are kept, and “Forget my handwriting” clears them."),
+        ),
+    ),
+    Topic(
         tr("Новое в 0.44", "What's new in 0.44"),
         listOf(
             tr("Калькулятор формул", "Formula keyboard") to tr("В окне «Как прочитано» — «Нет нужного — набрать формулу»: вместо барабанов калькулятор, сразу заполненный тем, что прочитано. Шаблоны с пустыми местами □ на десяти вкладках: структура (дроби, степени, индексы, корни, скобки), анализ (интегралы с пределами, производные, пределы, суммы), функции, графики, латиница, греческие буквы, множества и логика, векторы и матрицы, сравнения, единицы. Справа — цифры и знаки, ← → по формуле, «след. □» — к следующему пустому месту.", "In the “How it was read” window — “Not there — type the formula”: a formula keyboard instead of the wheels, filled with what was read. Templates with empty places □ on ten tabs: structure (fractions, powers, indexes, roots, brackets), calculus (integrals with limits, derivatives, limits, sums), functions, graphs, Latin and Greek letters, sets and logic, vectors and matrices, relations, units. On the right, digits and signs, ← → through the formula, “next □” to the next empty place."),
