@@ -690,6 +690,9 @@ object MathLayout {
 
         private fun level(b: Box, ref: Box?, axis: Float): Level {
             if (ref == null) return Level.BASE
+            // The writer's own way of placing exponents and indexes, where it is clear.
+            val dashLike = b.width >= 2.2f * max(b.height, 0.5f)
+            if (!dashLike && max(b.width, b.height) >= 0.22f * h) Tune.personal?.level(b, ref, h)?.let { return Level.entries[it] }
             // Written wholly above the top of the symbol before it: an exponent of almost any size.
             if (b.bottom <= ref.top + Tune.supAbove * ref.height && b.height < 1.2f * max(ref.height, 0.75f * h) && b.width < 3 * h) return Level.SUP
             val small = b.height < Tune.supSmall * max(ref.height, 0.75f * h)
@@ -1026,6 +1029,10 @@ object MathLayout {
  * only with its report in hand.
  */
 object Tune {
+    /** The writer's placements (null: none, as in tests and stands); see [Placements]. */
+    @Volatile
+    var personal: Placements? = null
+
     /** Strokes overlapping by this part of the narrower one are parts of one symbol… */
     @JvmField var joinOverlap = 0.35f
 

@@ -21,6 +21,9 @@ class FixStore(private val dir: File?) {
     /** The writer's own symbols (shape and what it is), a second voice beside ML Kit. */
     val samples: Samples
 
+    /** Where the writer puts exponents and indexes. */
+    val placements: Placements
+
     @Volatile
     var learn: Boolean = true
         set(value) {
@@ -38,6 +41,7 @@ class FixStore(private val dir: File?) {
     init {
         learned = runCatching { Learned.parse(file(LEARNED)!!.readText()) }.getOrDefault(Learned())
         samples = runCatching { Samples.parse(file(SAMPLES)!!.readText()) }.getOrDefault(Samples())
+        placements = runCatching { Placements.parse(file(PLACES)!!.readText()) }.getOrDefault(Placements())
         runCatching {
             for (line in file(PINS)!!.readLines()) {
                 val tab = line.indexOf('\t')
@@ -76,8 +80,10 @@ class FixStore(private val dir: File?) {
      * The writer took [chosen] for symbols the reader read first as [read] (same order), drawn
      * as [strokes] (each symbol's): the choices counted, the shapes kept as samples.
      */
-    fun learn(read: List<String>, chosen: List<String>, strokes: List<List<Ink>> = emptyList()) {
+    fun learn(read: List<String>, chosen: List<String>, strokes: List<List<Ink>> = emptyList(), places: List<Placements.P> = emptyList()) {
         if (!learn) return
+        places.forEach(placements::add)
+        if (places.isNotEmpty()) runCatching { file(PLACES)?.writeText(placements.serialize()) }
         for (i in read.indices) learned.record(read[i], chosen.getOrElse(i) { read[i] })
         for ((i, s) in strokes.withIndex()) chosen.getOrNull(i)?.let { samples.add(it, s) }
         runCatching { file(LEARNED)?.writeText(learned.serialize()) }
@@ -88,6 +94,8 @@ class FixStore(private val dir: File?) {
     fun forget() {
         learned.clear()
         samples.clear()
+        placements.clear()
+        runCatching { file(PLACES)?.delete() }
         runCatching { file(LEARNED)?.delete() }
         runCatching { file(SAMPLES)?.delete() }
     }
@@ -105,6 +113,7 @@ class FixStore(private val dir: File?) {
         const val PINS = "formula-pins.tsv"
         const val LEARNED = "formula-learned.tsv"
         const val SAMPLES = "formula-samples.tsv"
+        const val PLACES = "formula-places.tsv"
         const val SETTINGS = "formula-settings.txt"
         const val MAX_PINS = 5000
     }

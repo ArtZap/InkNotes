@@ -122,6 +122,7 @@ class MathNotes(
             exec.execute {
                 if (latest[key] != n) return@execute
                 // A failure must cost the answers of a page, never the app.
+                usePersonal()
                 val answers = runCatching { MathPage.analyze(toInk(strokes), reader, pageWidth, fixes.pins()) }.getOrDefault(emptyList())
                 main.post { if (latest[key] == n) onResult(answers) }
             }
@@ -204,6 +205,7 @@ class MathNotes(
         if (state != State.Ready) return onResult(null)
         runCatching {
             exec.execute {
+                usePersonal()
                 val draft = runCatching {
                     val learned = fixes.learned.takeIf { fixes.learn }
                     val samples = fixes.samples.takeIf { fixes.learn }
@@ -222,6 +224,11 @@ class MathNotes(
 
     /** A formula as read, symbol by symbol: its [rows] (the equations of a system, or one). */
     class Draft(val fix: Fix, val rows: List<Row>)
+
+    /** The layout follows the writer's placements when learning is on (on the math thread). */
+    private fun usePersonal() {
+        Tune.personal = fixes.placements.takeIf { fixes.learn && !it.isEmpty() }
+    }
 
     /** Both sides of one formula; [right] null for `expr =`. */
     class Row(val fix: Fix, val left: Correct.Side, val right: Correct.Side?)

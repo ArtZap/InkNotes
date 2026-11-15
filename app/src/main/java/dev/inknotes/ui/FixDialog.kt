@@ -304,7 +304,13 @@ private fun FixContent(c: EditorController, answer: PageAnswer, d: MathNotes.Dra
                     }
                     // What the window shows is what the page then computes: pinned as it stands,
                     // changed or not (the page may have read it otherwise).
-                    c.applyFix(answer, shown, read, chosen, shapes)
+                    // Where each symbol stands, as the writer left or set it: their way of
+                    // raising exponents and lowering indexes.
+                    val places = d.rows.flatMapIndexed { r, row ->
+                        dev.inknotes.math.Placements.observe(row.left, leftPicks[r], row.fix.h) +
+                            (row.right?.let { dev.inknotes.math.Placements.observe(it, rightPicks[r], row.fix.h) } ?: emptyList())
+                    }
+                    c.applyFix(answer, shown, read, chosen, shapes, places)
                 }
                 onDismiss()
             }) { Text(tr("Готово", "Done")) }
@@ -631,7 +637,7 @@ fun FormulaFixSettings(fixes: dev.inknotes.math.FixStore) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
-    OutlinedButton(enabled = !forgotten && !(fixes.learned.isEmpty() && fixes.samples.isEmpty()), onClick = { fixes.forget(); forgotten = true }) {
+    OutlinedButton(enabled = !forgotten && !(fixes.learned.isEmpty() && fixes.samples.isEmpty() && fixes.placements.isEmpty()), onClick = { fixes.forget(); forgotten = true }) {
         Text(if (forgotten) tr("Почерк забыт", "Handwriting forgotten") else tr("Забыть мой почерк", "Forget my handwriting"))
     }
 }

@@ -1,6 +1,7 @@
 package org.junit
 @Retention(AnnotationRetention.RUNTIME) @Target(AnnotationTarget.FUNCTION) annotation class Test
 @Retention(AnnotationRetention.RUNTIME) @Target(AnnotationTarget.FUNCTION) annotation class Before
+@Retention(AnnotationRetention.RUNTIME) @Target(AnnotationTarget.FUNCTION) annotation class After
 class AssumptionViolatedException(m: String?) : RuntimeException(m)
 object Assume { @JvmStatic fun assumeTrue(m: String?, b: Boolean) { if (!b) throw AssumptionViolatedException(m) }
   @JvmStatic fun assumeTrue(b: Boolean) = assumeTrue(null, b) }
@@ -33,7 +34,7 @@ object Runner {
         catch (e: java.lang.reflect.InvocationTargetException) {
           val t = e.targetException
           if (t is AssumptionViolatedException) skip++ else { failN++; println("FAIL ${c.simpleName}.${m.name}: ${t.toString().take(400)}") }
-        }
+        } finally { c.methods.filter { it.isAnnotationPresent(After::class.java) }.forEach { runCatching { it.invoke(o) } } }
       }
     }
     println("passed $pass, failed $failN, skipped $skip")
