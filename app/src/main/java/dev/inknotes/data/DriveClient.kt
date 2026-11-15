@@ -31,10 +31,19 @@ interface DriveApi {
     fun trash(fileId: String)
 }
 
-class DriveError(message: String, val code: Int = 0) : IOException(message) {
-    /** What went wrong in words for the user, not Google's answer. */
+class DriveError(message: String, val code: Int = 0, val webdav: Boolean = false) : IOException(message) {
+    /** What went wrong in words for the user, not Google's (or the WebDAV server's) answer. */
     fun friendly(): String {
         val m = message.orEmpty()
+        if (webdav) return when {
+            code == 401 -> tr("Сервер не принял логин или пароль. Для Яндекс Диска нужен пароль приложения", "The server did not accept the login or password. Yandex Disk needs an app password")
+            code == 403 -> tr("Нет доступа к папке на сервере", "No access to the folder on the server")
+            code == 404 || code == 409 -> tr("Папка на сервере не найдена — проверьте адрес", "The folder on the server was not found — check the address")
+            code == 507 -> tr("На сервере закончилось место", "The server is out of space")
+            code == 429 || code == 503 -> tr("Сервер просит подождать: синхронизация продолжится позже", "The server asks to wait: syncing will continue later")
+            code in 500..599 -> tr("Сервер сейчас недоступен, синхронизация продолжится позже", "The server is unavailable right now, syncing will continue later")
+            else -> tr("Ошибка сервера WebDAV (код $code)", "WebDAV server error (code $code)")
+        }
         return when {
             m.contains("storageQuotaExceeded") || m.contains("quotaExceeded") && code == 403 -> tr("На Google Диске закончилось место", "Your Google Drive is full")
             code == 429 || m.contains("rateLimitExceeded") -> tr("Google Диск просит подождать: синхронизация продолжится позже", "Google Drive asks to wait: syncing will continue later")

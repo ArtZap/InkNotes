@@ -30,12 +30,73 @@ class CloudSync(private val context: Context, private val repo: NotebookReposito
     private val clientId = BuildConfig.GOOGLE_CLIENT_ID
     private val secret = BuildConfig.GOOGLE_CLIENT_SECRET
 
-    /** The app was built with a Google client (local.properties): sync can be offered. */
-    val configured get() = clientId.isNotBlank()
+    /** Where the library syncs: [GOOGLE] or [WEBDAV]. */
+    var provider by mutableStateOf(prefs.syncProvider)
+        private set
+
+    val webdav get() = provider == WEBDAV
+
+    /**
+     * Sync can be offered: a WebDAV server always; Google Drive when the app was built with a
+     * Google client (local.properties).
+     */
+    val configured get() = webdav || clientId.isNotBlank()
+
+    /** The WebDAV account set in the form (null: none yet, or its password is gone). */
+    fun webdavAccount(): dev.inknotes.data.WebDavAccount? {
+        val url = prefs.webdavUrl ?: return null
+        val user = prefs.webdavUser ?: return null
+        val pass = prefs.webdavPassword ?: return null
+        return dev.inknotes.data.WebDavAccount(url, user, pass, prefs.webdavFolder)
+    }
+
+    private fun connected() = if (webdav) webdavAccount() != null else prefs.driveRefreshToken != null
+
+    /** Sync with Google Drive or a WebDAV server from now on. */
+    fun choose(p: String) {
+        if (p == provider || running) return
+        attempt++
+        loopback?.close()
+        signingIn = false
+        held = emptyList()
+        prefs.syncProvider = p
+        provider = p
+        signedIn = connected()
+        status = null
+    }
+
+    /**
+     * Signs in to the WebDAV server of [account] (and makes its folder) in the background; when
+     * it answers, the account is kept and a first sync runs.
+     */
+    fun connectWebDav(account: dev.inknotes.data.WebDavAccount) {
+        if (signingIn) return
+        signingIn = true
+        status = tr("Подключение…", "Connecting…")
+        val mine = ++attempt
+        scope.launch {
+            val error = if (!online()) tr("Нет интернета", "No internet") else dev.inknotes.data.WebDavClient.check(account)
+            main {
+                if (mine != attempt) return@main
+                signingIn = false
+                if (error != null) {
+                    status = error
+                } else {
+                    prefs.webdavUrl = account.url.trim()
+                    prefs.webdavUser = account.user.trim()
+                    prefs.webdavPassword = account.password
+                    prefs.webdavFolder = account.folder.trim().ifEmpty { "InkNotes" }
+                    signedIn = true
+                    status = tr("Подключено: ${account.user}", "Connected: ${account.user}")
+                }
+            }
+            if (mine == attempt && error == null) sync()
+        }
+    }
 
     var email by mutableStateOf(prefs.driveEmail)
         private set
-    var signedIn by mutableStateOf(prefs.driveRefreshToken != null)
+    var signedIn by mutableStateOf(if (prefs.syncProvider == WEBDAV) prefs.webdavPassword != null && prefs.webdavUrl != null else prefs.driveRefreshToken != null)
         private set
     var running by mutableStateOf(false)
         private set
@@ -64,7 +125,7 @@ class CloudSync(private val context: Context, private val repo: NotebookReposito
 
     /** Opens Google's page in the browser; the answer comes back to the app by itself. */
     fun signIn(from: Context) {
-        if (!configured) return
+        if (webdav || clientId.isBlank()) return
         // Pressed again while waiting (the browser closed, the page lost): that sign-in is given
         // up and a new one starts, instead of waiting out the old one's minutes.
         loopback?.close()
@@ -124,6 +185,17 @@ class CloudSync(private val context: Context, private val repo: NotebookReposito
     }
 
     fun signOut() {
+        if (webdav) {
+            // The address and login stay for next time; the password goes. So does nothing
+            // there: what was synced is kept per server and account.
+            attempt++
+            signingIn = false
+            held = emptyList()
+            prefs.webdavPassword = null
+            signedIn = false
+            status = tr("Отключено. Тетради на сервере остались", "Disconnected. Notebooks on the server stay there")
+            return
+        }
         attempt++
         loopback?.close()
         signingIn = false
@@ -142,6 +214,12 @@ class CloudSync(private val context: Context, private val repo: NotebookReposito
      * before 0.39 belongs to the account signed in when it is first needed.
      */
     private fun stateFile(email: String? = prefs.driveEmail): File {
+        if (webdav) {
+            // Per server, account and folder: another one compares afresh.
+            val key = listOf(prefs.webdavUrl, prefs.webdavUser, prefs.webdavFolder).joinToString("|") { it.orEmpty().trim().lowercase() }
+            val hash = java.security.MessageDigest.getInstance("SHA-256").digest(key.toByteArray()).take(8).joinToString("") { "%02x".format(it) }
+            return File(context.filesDir, "webdav-sync-$hash.json")
+        }
         val legacy = File(context.filesDir, "drive-sync.json")
         if (email == null) return legacy
         val hash = java.security.MessageDigest.getInstance("SHA-256").digest(email.trim().lowercase().toByteArray())
@@ -226,9 +304,13 @@ class CloudSync(private val context: Context, private val repo: NotebookReposito
         scope.launch {
             val result = runCatching {
                 if (!online()) error(tr("Нет интернета", "No internet"))
-                val refresh = prefs.driveRefreshToken ?: error(tr("Войдите в Google", "Sign in to Google"))
-                val token = { DriveClient.refresh(clientId, secret, refresh).access }
-                val api = DriveClient(token, token)
+                val api: dev.inknotes.data.DriveApi = if (webdav) {
+                    dev.inknotes.data.WebDavClient(webdavAccount() ?: error(tr("Подключите сервер WebDAV", "Connect a WebDAV server")))
+                } else {
+                    val refresh = prefs.driveRefreshToken ?: error(tr("Войдите в Google", "Sign in to Google"))
+                    val token = { DriveClient.refresh(clientId, secret, refresh).access }
+                    DriveClient(token, token)
+                }
                 DriveSync(repo, api, stateFile(), context.cacheDir).run({ busy + openNow() }, trashMany)
             }
             DriveSync.running.set(false)
@@ -240,7 +322,8 @@ class CloudSync(private val context: Context, private val repo: NotebookReposito
                     when {
                         // The sign-in was taken back (or ran out): sign in again.
                         m.contains("invalid_grant") -> tr("Вход в Google больше не действует — войдите снова", "The Google sign-in has expired — sign in again")
-                        e is java.net.UnknownHostException || e is java.net.SocketTimeoutException -> tr("Нет связи с Google Диском", "Cannot reach Google Drive")
+                        e is java.net.UnknownHostException || e is java.net.SocketTimeoutException ->
+                            if (webdav) tr("Нет связи с сервером", "Cannot reach the server") else tr("Нет связи с Google Диском", "Cannot reach Google Drive")
                         e is dev.inknotes.data.DriveError -> e.friendly()
                         else -> tr("Не удалось: ${m.take(200)}", "Failed: ${m.take(200)}")
                     }
@@ -256,7 +339,7 @@ class CloudSync(private val context: Context, private val repo: NotebookReposito
                 status = text
                 result.getOrNull()?.let { held = it.held }
                 lastSync = prefs.driveLastSync
-                signedIn = prefs.driveRefreshToken != null
+                signedIn = connected()
             }
             result.getOrNull()?.let { if (!it.nothing) repo.refreshLibrary() }
         }
@@ -264,5 +347,7 @@ class CloudSync(private val context: Context, private val repo: NotebookReposito
 
     companion object {
         const val AUTO_EVERY_MS = 2 * 60 * 1000L
+        const val GOOGLE = "google"
+        const val WEBDAV = "webdav"
     }
 }
