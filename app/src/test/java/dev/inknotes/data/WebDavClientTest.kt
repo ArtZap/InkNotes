@@ -76,7 +76,7 @@ class WebDavClientTest {
         assertEquals("made once", folder, c.folder())
         assertTrue(c.exists(folder))
         val id = "1b4e28ba-2fa1-11d2-883f-0016d3cca427"
-        val tmp = File.createTempFile("nb", ".inknote").apply { writeText("first") }
+        val tmp = File.createTempFile("note", ".inknote").apply { writeText("first") }
         val up = c.upload(folder, null, "Матан.inknote", mapOf(DriveSync.PROP_ID to id, DriveSync.PROP_TIME to "100"), tmp)
         assertEquals(1, c.list(folder).size)
         // Changed: up under a new name, the old file gone.
