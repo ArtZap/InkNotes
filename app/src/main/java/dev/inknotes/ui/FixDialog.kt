@@ -7,7 +7,12 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -38,7 +43,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -63,6 +70,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -74,6 +82,7 @@ import dev.inknotes.math.Correct
 import dev.inknotes.math.MathNotes
 import dev.inknotes.math.PageAnswer
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.abs
 import kotlin.math.max
@@ -143,9 +152,12 @@ private fun FixContent(c: EditorController, answer: PageAnswer, d: MathNotes.Dra
     val list = rememberLazyListState()
     LaunchedEffect(focus) { if (slots.isNotEmpty()) list.animateScrollToItem(max(0, focus - 2)) }
 
+    // The buttons stay at the bottom, always in sight; what is above them scrolls when the
+    // screen is short.
+    Column(Modifier.padding(horizontal = 28.dp, vertical = 20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
     Column(
-        Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 28.dp, vertical = 22.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(tr("Как прочитано", "How it was read"), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
@@ -168,7 +180,7 @@ private fun FixContent(c: EditorController, answer: PageAnswer, d: MathNotes.Dra
 
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             Panel(tr("Ваша запись", "As written"), Modifier.weight(1f)) {
-                Handwriting(fix, d, slots, focus, ::sym) { focus = it }
+                Handwriting(fix, d, slots, focus, slots.map { picks(it)[it.index].level == Correct.OFF }, ::sym) { focus = it }
                 Text(
                     tr("Нажмите на символ, чтобы перейти к его барабану. Жёлтым — в чём распознавание не уверено.", "Tap a symbol to go to its wheel. Amber: what recognition is not sure of."),
                     fontSize = 12.sp,
@@ -203,7 +215,7 @@ private fun FixContent(c: EditorController, answer: PageAnswer, d: MathNotes.Dra
                 }
             }
             Text(
-                tr("Под барабаном — где стоит символ: индекс, на строке или степень.", "Under a wheel: where the symbol stands — an index, on the line or an exponent."),
+                tr("Под барабаном — где стоит символ: индекс, на строке или степень; ✕ — убрать лишнее (точку, случайный штрих).", "Under a wheel: where the symbol stands — an index, on the line or an exponent; ✕ takes out a stray mark (a dot, a slip)."),
                 fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -222,6 +234,7 @@ private fun FixContent(c: EditorController, answer: PageAnswer, d: MathNotes.Dra
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+    }
 
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             OutlinedButton(onClick = {
@@ -249,13 +262,13 @@ private fun FixContent(c: EditorController, answer: PageAnswer, d: MathNotes.Dra
                     val chosen = ArrayList<String>()
                     for (s in slots) {
                         val sym = sym(s)
-                        if (sym.sign) continue
+                        if (sym.sign || picks(s)[s.index].level == Correct.OFF) continue
                         read += sym.candidates[(if (s.right) d.right!! else d.left).initial[s.index].choice]
                         chosen += sym.candidates[picks(s)[s.index].choice]
                     }
-                    val l = leftText.takeIf { it != Correct.text(d.left, d.left.initial) }
-                    val r = d.right?.let { side -> rightText.takeIf { it != Correct.text(side, side.initial) } }
-                    c.applyFix(answer, l, r, read, chosen)
+                    // What the window shows is what the page then computes: pinned as it stands,
+                    // changed or not (the page may have read it otherwise).
+                    c.applyFix(answer, leftText, rightText, read, chosen)
                 }
                 onDismiss()
             }) { Text(tr("Готово", "Done")) }
@@ -276,7 +289,7 @@ private fun Panel(title: String, modifier: Modifier, content: @Composable () -> 
 
 /** The strokes as written, symbols framed: the focused one in the accent, unsure ones dashed amber. */
 @Composable
-private fun Handwriting(fix: dev.inknotes.math.Fix, d: MathNotes.Draft, slots: List<Slot>, focus: Int, sym: (Slot) -> Correct.Sym, onTap: (Int) -> Unit) {
+private fun Handwriting(fix: dev.inknotes.math.Fix, d: MathNotes.Draft, slots: List<Slot>, focus: Int, offs: List<Boolean>, sym: (Slot) -> Correct.Sym, onTap: (Int) -> Unit) {
     val ink = fix.left + fix.equals + fix.right.orEmpty()
     val all = InkBox.of(ink)
     val pen = MaterialTheme.colorScheme.onSurface
@@ -284,7 +297,7 @@ private fun Handwriting(fix: dev.inknotes.math.Fix, d: MathNotes.Draft, slots: L
     val boxes = remember(d) { slots.map { sym(it).box } }
     val unsure = remember(d) { slots.map { sym(it).unsure } }
     Canvas(
-        Modifier.fillMaxWidth().height(120.dp).pointerInput(d) {
+        Modifier.fillMaxWidth().height(96.dp).pointerInput(d) {
             detectTapGestures { p ->
                 val scale = min((size.width - 16f) / max(all.width, 1f), (size.height - 16f) / max(all.height, 1f))
                 val ox = (size.width - all.width * scale) / 2 - all.left * scale
@@ -308,6 +321,11 @@ private fun Handwriting(fix: dev.inknotes.math.Fix, d: MathNotes.Draft, slots: L
             val tl = Offset(px(b.left) - pad, py(b.top) - pad)
             val sz = Size(b.width * scale + 2 * pad, b.height * scale + 2 * pad)
             val r = androidx.compose.ui.geometry.CornerRadius(6.dp.toPx())
+            if (offs.getOrElse(i) { false }) {
+                // Taken out: crossed.
+                drawLine(DOUBT, tl, Offset(tl.x + sz.width, tl.y + sz.height), 2.dp.toPx())
+                drawLine(DOUBT, Offset(tl.x + sz.width, tl.y), Offset(tl.x, tl.y + sz.height), 2.dp.toPx())
+            }
             when {
                 i == focus -> {
                     drawRoundRect(accent.copy(alpha = 0.12f), tl, sz, r)
@@ -406,73 +424,115 @@ private fun MiniGraph(g: Answer.Graph) {
 }
 
 /**
- * One symbol's wheel: the reading before and after the chosen one, turned by a swipe up or
- * down or the arrows, and under it the symbol's place.
+ * One symbol's wheel: its readings in a column that turns smoothly under the finger and
+ * settles on one, the chosen one in the middle; the arrows turn it a step. Under it the
+ * symbol's place, or ✕ to take it out (a stray mark, not part of the formula).
  */
 @Composable
 private fun Wheel(sym: Correct.Sym, pick: Correct.Pick, focused: Boolean, onFocus: () -> Unit, onPick: (Correct.Pick) -> Unit) {
     val n = sym.candidates.size
     val accent = MaterialTheme.colorScheme.primary
+    val off = pick.level == Correct.OFF
     val border = when {
         focused -> BorderStroke(2.dp, accent)
         sym.unsure -> BorderStroke(1.dp, DOUBT)
         else -> BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     }
     val back = if (sym.unsure) DOUBT.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surface
-    val step = with(LocalDensity.current) { 36.dp.toPx() }
+    val itemH = 40.dp
+    val itemPx = with(LocalDensity.current) { itemH.toPx() }
+    val state = rememberLazyListState(initialFirstVisibleItemIndex = pick.choice.coerceIn(0, max(0, n - 1)))
+    val scope = rememberCoroutineScope()
+    // The reading in the middle: where the column stands, half a row decides.
+    val centred by remember(n) {
+        derivedStateOf {
+            (state.firstVisibleItemIndex + if (state.firstVisibleItemScrollOffset > itemPx / 2) 1 else 0).coerceIn(0, max(0, n - 1))
+        }
+    }
+    // Settled after a swipe: that reading is chosen.
+    LaunchedEffect(state.isScrollInProgress) {
+        if (!state.isScrollInProgress && centred != pick.choice) onPick(pick.copy(choice = centred))
+    }
+    // Chosen otherwise (an arrow, a tap): the column turns to it.
+    LaunchedEffect(pick.choice) {
+        if (!state.isScrollInProgress && (state.firstVisibleItemIndex != pick.choice || state.firstVisibleItemScrollOffset != 0)) {
+            state.animateScrollToItem(pick.choice)
+        }
+    }
     fun turn(by: Int) {
-        if (n > 1) onPick(pick.copy(choice = ((pick.choice + by) % n + n) % n))
+        val to = (pick.choice + by).coerceIn(0, max(0, n - 1))
+        if (to != pick.choice) onPick(pick.copy(choice = to))
     }
     Column(
-        Modifier.width(92.dp)
+        Modifier.width(96.dp)
             .background(back, RoundedCornerShape(16.dp))
-            .border(border, RoundedCornerShape(16.dp))
-            .pointerInput(sym, n) {
-                var drag = 0f
-                detectVerticalDragGestures(onDragStart = { drag = 0f; onFocus() }) { _, dy ->
-                    drag += dy
-                    while (drag > step) { drag -= step; turn(-1) }
-                    while (drag < -step) { drag += step; turn(1) }
-                }
-            },
+            .border(border, RoundedCornerShape(16.dp)),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        TextButton(onClick = { onFocus(); turn(-1) }, enabled = n > 1, modifier = Modifier.height(34.dp)) { Text("▲", fontSize = 12.sp) }
-        for (k in -1..1) {
-            val index = if (n == 1 && k != 0) -1 else ((pick.choice + k) % n + n) % n
-            val chosen = k == 0
+        TextButton(onClick = { onFocus(); turn(-1) }, enabled = pick.choice > 0, modifier = Modifier.height(32.dp)) { Text("▲", fontSize = 12.sp) }
+        Box(Modifier.size(width = 84.dp, height = itemH * 3), contentAlignment = Alignment.Center) {
             Box(
-                Modifier.size(width = 80.dp, height = if (chosen) 54.dp else 36.dp)
-                    .background(if (chosen) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent, RoundedCornerShape(10.dp))
-                    .clickable(enabled = index >= 0) { onFocus(); onPick(pick.copy(choice = index)) },
-                contentAlignment = Alignment.Center,
+                Modifier.size(width = 80.dp, height = itemH + 8.dp)
+                    .background(if (off) Color.Transparent else MaterialTheme.colorScheme.secondaryContainer, RoundedCornerShape(10.dp)),
+            )
+            LazyColumn(
+                state = state,
+                flingBehavior = rememberSnapFlingBehavior(lazyListState = state),
+                contentPadding = PaddingValues(vertical = itemH),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.fillMaxWidth().height(itemH * 3).pointerInput(Unit) {
+                    awaitEachGesture { awaitFirstDown(requireUnconsumed = false); onFocus() }
+                },
             ) {
-                if (index >= 0) {
-                    Text(
-                        Correct.show(sym.candidates[index]),
-                        fontFamily = FontFamily.Serif,
-                        fontStyle = FontStyle.Italic,
-                        fontSize = if (chosen) 30.sp else 19.sp,
-                        color = if (chosen) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                        maxLines = 1,
-                    )
+                items(n) { k ->
+                    val chosen = k == centred
+                    Box(
+                        Modifier.fillMaxWidth().height(itemH).clickable {
+                            onFocus()
+                            onPick(pick.copy(choice = k))
+                            scope.launch { state.animateScrollToItem(k) }
+                        },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            Correct.show(sym.candidates[k]),
+                            fontFamily = FontFamily.Serif,
+                            fontStyle = FontStyle.Italic,
+                            fontSize = if (chosen) 28.sp else 19.sp,
+                            color = when {
+                                off -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
+                                chosen -> MaterialTheme.colorScheme.onSecondaryContainer
+                                else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                            },
+                            textDecoration = if (off && chosen) TextDecoration.LineThrough else null,
+                            maxLines = 1,
+                        )
+                    }
                 }
             }
         }
-        TextButton(onClick = { onFocus(); turn(1) }, enabled = n > 1, modifier = Modifier.height(34.dp)) { Text("▼", fontSize = 12.sp) }
+        TextButton(onClick = { onFocus(); turn(1) }, enabled = pick.choice < n - 1, modifier = Modifier.height(32.dp)) { Text("▼", fontSize = 12.sp) }
         Row(
-            Modifier.padding(start = 6.dp, end = 6.dp, bottom = 8.dp).background(MaterialTheme.colorScheme.surfaceContainer, RoundedCornerShape(10.dp)).padding(3.dp),
-            horizontalArrangement = Arrangement.spacedBy(2.dp),
+            Modifier.padding(start = 4.dp, end = 4.dp, bottom = 6.dp).background(MaterialTheme.colorScheme.surfaceContainer, RoundedCornerShape(10.dp)).padding(2.dp),
+            horizontalArrangement = Arrangement.spacedBy(1.dp),
         ) {
-            for ((level, mark) in listOf(Correct.DOWN to "□₂", Correct.LINE to "□", Correct.UP to "□²")) {
+            for ((level, mark) in listOf(Correct.DOWN to "□₂", Correct.LINE to "□", Correct.UP to "□²", Correct.OFF to "✕")) {
                 val on = pick.level == level
                 Box(
-                    Modifier.size(width = 26.dp, height = 30.dp)
-                        .background(if (on) accent else Color.Transparent, RoundedCornerShape(7.dp))
-                        .clickable { onFocus(); onPick(pick.copy(level = level)) },
+                    Modifier.size(width = 21.dp, height = 30.dp)
+                        .background(if (on) (if (level == Correct.OFF) MaterialTheme.colorScheme.error else accent) else Color.Transparent, RoundedCornerShape(7.dp))
+                        .clickable { onFocus(); onPick(pick.copy(level = if (on && level == Correct.OFF) sym.level else level)) },
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text(mark, fontSize = 12.sp, color = if (on) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        mark,
+                        fontSize = 11.sp,
+                        color = when {
+                            on && level == Correct.OFF -> MaterialTheme.colorScheme.onError
+                            on -> MaterialTheme.colorScheme.onPrimary
+                            else -> MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    )
                 }
             }
         }

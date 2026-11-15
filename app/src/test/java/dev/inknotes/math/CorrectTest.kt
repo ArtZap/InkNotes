@@ -201,3 +201,30 @@ class FixStoreTest {
         assertTrue(!FixStore(dir).learn)
     }
 }
+
+class CorrectOffTest {
+    @Test
+    fun aSymbolTakenOutLeavesNoTrace() {
+        val s = Sheet2()
+        s.glyph("s", 100f, 100f)
+        s.glyph("o", 116f, 88f, 6f, 6f)
+        s.glyph("i", 124f, 100f, 6f)
+        s.glyph("n", 134f, 100f)
+        val side = Correct.side(s.strokes, 24f, 112f, s.reader())!!
+        val text = Correct.text(side, side.initial)
+        val dot = side.syms.indexOfFirst { it.candidates[0] == "o" }
+        val off = side.initial.toMutableList().also { it[dot] = Correct.Pick(it[dot].choice, Correct.OFF) }
+        assertEquals(text.replace("^{o}", "").replace("o", ""), Correct.text(side, off))
+    }
+
+    private class Sheet2 {
+        val strokes = ArrayList<Ink>()
+        val labels = HashMap<Ink, String>()
+        fun glyph(label: String, x: Float, top: Float, w: Float = 14f, h: Float = 24f) {
+            val ink = Ink(floatArrayOf(x, x + w, x, x + w), floatArrayOf(top, top + h / 3, top + 2 * h / 3, top + h), strokes.size)
+            strokes += ink
+            labels[ink] = label
+        }
+        fun reader() = RunReader { run, _ -> listOf(run.sortedBy { it.left }.mapNotNull { labels[it] }.joinToString("")) }
+    }
+}

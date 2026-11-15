@@ -188,7 +188,7 @@ object MathPage {
             val after = side(eq, 1, eqs, rest, limit = null).maxOfOrNull { it.right } ?: eq.right
             val at = after + 0.4f * eq.h
             val pl = pin(left)
-            val l = pl ?: readTrimmed(left, eq, reader, known)
+            var l = pl ?: readTrimmed(left, eq, reader, known)
             fun fix(read: Expr?) = Fix(left, null, listOf(eq.top, eq.bottom) + eq.extra, eq.h, eq.cy, envAt(i), leftRead = read)
             if (l == null) {
                 // Nothing after "=" though something is before it: a mark to tap, not a blank.
@@ -197,6 +197,27 @@ object MathPage {
             }
             // "3 =" has nothing to compute.
             if (l is Expr.Num) continue
+            // A misread letter that is also a unit (g for 4, B for 8) makes "8,5 + g" an error:
+            // a reading that computes wins over it, shown unsure with the error as the other answer.
+            var fellBack: String? = null
+            if (pl == null) {
+                val error = try {
+                    Calc.evaluate(l, envAt(i))
+                    null
+                } catch (e: MathError) {
+                    e.message ?: "?"
+                }
+                if (error != null) {
+                    val first = l
+                    val better = readings(left, eq.h, eq.cy, reader, Prefer.NUMBERS, known).firstOrNull { e ->
+                        e != first && runCatching { Calc.evaluate(e, envAt(i)) != null }.getOrDefault(false)
+                    }
+                    if (better != null) {
+                        l = better
+                        fellBack = error
+                    }
+                }
+            }
             // "x =" under an equation in x: its roots.
             val asking = (l as? Expr.Sym)?.takeIf { envAt(i).variable(it.name) == null }?.let { sym ->
                 single.filter { it.index < i && ordered[it.index].cy < eq.cy && unknownOf(it)?.equals(sym.name, ignoreCase = true) == true }
@@ -214,6 +235,7 @@ object MathPage {
                     } else {
                         val others = if (pl != null) emptyList() else otherAnswers(answer) { shift -> readTrimmed(left, eq, reader, known, shift)?.let { Calc.evaluate(it, envAt(i)) } }
                             .ifEmpty { if (readSure(left, eq, reader)) emptyList() else otherReadings(answer, left, eq, reader, known) { Calc.evaluate(it, envAt(i)) } }
+                            .ifEmpty { listOfNotNull(fellBack) }
                         PageAnswer(at, eq.cy, eq.h, answer, others = others, fix = fix(l))
                     }
                 }
@@ -1051,7 +1073,7 @@ object MathPage {
         val otherLines = eqs.filter { it !== eq && abs(it.cy - eq.cy) > 0.8f * h && abs(it.left - eq.left) < 15 * h }
         val otherLine = cand.filter { c ->
             otherLines.any { o ->
-                abs(c.cy - o.cy) < 0.45f * o.h && abs(c.cy - o.cy) < abs(c.cy - eq.cy) - 0.3f * h &&
+                abs(c.cy - o.cy) < 0.9f * o.h && abs(c.cy - o.cy) < abs(c.cy - eq.cy) - 0.3f * h &&
                     // that line's own formula, not one in another column at the same height
                     c.cx in o.left - 10 * o.h..o.right + 10 * o.h
             }

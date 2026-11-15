@@ -199,10 +199,23 @@ object MathLayout {
                 // the top bar of a 5 drawn as its own stroke, just touching the body's top end
                 cap(a, b, h) || cap(b, a, h) ||
                 // the dot of i or j, the dots of ÷
-                (dot && yGap < Tune.dotGap * h && (b.cx in a.left - 0.1f * h..a.right + 0.1f * h || a.cx in b.left - 0.1f * h..b.right + 0.1f * h))
+                (dot && yGap < Tune.dotGap * h && (b.cx in a.left - 0.1f * h..a.right + 0.1f * h || a.cx in b.left - 0.1f * h..b.right + 0.1f * h)) ||
+                // a big dot well over a short stem: an i written with a thick pen, dotted high
+                iDot(a, b, h) || iDot(b, a, h)
             if (joined) parent[find(i)] = find(j)
         }
         return strokes.indices.groupBy(::find).values.map { idx -> G(Glyph(idx.map { strokes[it] })) }
+    }
+
+    /**
+     * [d] is the dot of an i whose stem is [s]: a small blob over a short narrow upright
+     * (lower-case height), right above it, the gap less than the stem is tall.
+     */
+    private fun iDot(d: Ink, s: Ink, h: Float): Boolean {
+        if (max(d.width, d.height) >= 0.28f * h) return false
+        if (s.width >= 0.25f * h || s.height < 0.25f * h || s.height > 0.8f * h || s.height < 2.5f * max(s.width, 0.05f * h)) return false
+        val gap = s.top - d.bottom
+        return gap > -0.05f * h && gap < max(0.6f * h, 1.1f * s.height) && abs(d.cx - s.cx) < 0.22f * h
     }
 
     /**

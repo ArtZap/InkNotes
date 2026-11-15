@@ -12,6 +12,9 @@ object Correct {
     const val UP = 1
     const val DOWN = 2
 
+    /** A symbol taken out: a stray mark (the dot of an i read on its own), not part of the formula. */
+    const val OFF = 3
+
     /**
      * One symbol as written: its [strokes], what it could be (best first: [candidates] are
      * parser text, "*" for a dot, "\pi" for π), on [level]. [sign] marks a sign told by its
@@ -123,6 +126,7 @@ object Correct {
                 is Part.S -> {
                     val sym = side.syms[p.index]
                     val pick = picks.getOrNull(p.index) ?: side.initial[p.index]
+                    if (pick.level == OFF) continue
                     val tok = sym.candidates.getOrElse(pick.choice) { sym.candidates[0] }
                     b.append(placed(tok, sym.level, pick.level))
                 }

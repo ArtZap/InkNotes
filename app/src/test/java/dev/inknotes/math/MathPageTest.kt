@@ -441,6 +441,40 @@ class MathPageTest {
         }
     }
 
+    @Test
+    fun aMisreadUnitGivesWayToAReadingThatComputes() {
+        // 8,5 + 4 with units on, a stray mark read as m: "8,5 + 4 m" (a reading with units
+        // comes first) cannot be added.
+        val s = Sheet()
+        s.glyph("8,5+4", 100f, 100f, 80f, 24f)
+        s.equals(200f, 112f)
+        Parser.units = true
+        try {
+            val a = s.answers(mapOf("8,5+4" to listOf("8,5+4m", "8,5+4"))).single()
+            assertEquals("12,5", (a.answer as Answer.Text).lines.single())
+            assertTrue("shown unsure, the error as the other: ${a.others}", a.unsure)
+            assertTrue(a.others.toString(), a.others.any { "единиц" in it })
+        } finally {
+            Parser.units = false
+        }
+    }
+
+    @Test
+    fun surfaceAxesAreNotTheYDefinedAbove() {
+        val env = Env()
+        env.vars["y"] = Parser.parse("x^2-3")
+        assertTrue(Calc.surface(Parser.parse("x+y"), env) is Answer.Surface)
+    }
+
+    @Test
+    fun aHighDotOverAShortStemIsAnI() {
+        // A blob a quarter of the line high, well over a stem of lower-case height.
+        val dot = Ink(floatArrayOf(108f, 113f, 113f, 108f, 108f), floatArrayOf(85f, 85f, 90f, 90f, 85f), 0)
+        val stem = Ink(floatArrayOf(110.5f, 110.5f), floatArrayOf(103f, 119f), 1)
+        val items = MathLayout.items(listOf(dot, stem), 24f)
+        assertEquals("one glyph: i", 1, items.size)
+    }
+
     // ------------------------------------------------------------ 0.41
 
     /** A dot of [r] around ([cx], [cy]). */
