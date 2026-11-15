@@ -124,6 +124,8 @@ fun AnswerDialog(c: EditorController, a: PageAnswer, onDismiss: () -> Unit) {
         confirmButton = { Button(onClick = onDismiss) { Text(tr("Закрыть", "Close")) } },
         dismissButton = {
             Column {
+                // Symbol by symbol, with wheels to correct what was misread.
+                if (a.fix != null) TextButton(onClick = { c.startFix(a) }) { Text(tr("Как прочитано…", "How it was read…")) }
                 if (!reporting && a.answer !is Answer.Graph && a.answer !is Answer.Surface) {
                     TextButton(onClick = { reporting = true }) { Text(tr("Неверно…", "Wrong…")) }
                 }

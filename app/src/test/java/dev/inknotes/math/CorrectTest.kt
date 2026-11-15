@@ -177,3 +177,27 @@ class CorrectTest {
         assertEquals("2π", Correct.show("2\\pi"))
     }
 }
+
+class FixStoreTest {
+    @Test
+    fun keptBetweenRuns() {
+        val dir = java.nio.file.Files.createTempDirectory("fixes").toFile()
+        val a = FixStore(dir)
+        a.pin("k1", "x^{2}+1")
+        a.ask = FixStore.Ask.SOMETIMES
+        a.learn(listOf("2", "2", "2"), listOf("z", "z", "z"))
+        val b = FixStore(dir)
+        assertEquals("x^{2}+1", b.pins()["k1"])
+        assertEquals(FixStore.Ask.SOMETIMES, b.ask)
+        assertEquals("z", b.learned.meant("2"))
+        b.unpin("k1")
+        b.forget()
+        val c = FixStore(dir)
+        assertNull(c.pins()["k1"])
+        assertTrue(c.learned.isEmpty())
+        b.learn = false
+        b.learn(listOf("2"), listOf("z"))
+        assertTrue("not learning: nothing kept", FixStore(dir).learned.isEmpty())
+        assertTrue(!FixStore(dir).learn)
+    }
+}

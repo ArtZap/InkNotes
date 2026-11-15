@@ -327,6 +327,8 @@ fun SettingsDialog(
                 }
                 Spacer(Modifier.height(4.dp))
                 LanguageChoice()
+                Spacer(Modifier.height(4.dp))
+                FormulaFixSettings(AppServices.get(androidx.compose.ui.platform.LocalContext.current).math.fixes)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                     Button(onClick = onDismiss) { Text(tr("Готово", "Done")) }
                 }

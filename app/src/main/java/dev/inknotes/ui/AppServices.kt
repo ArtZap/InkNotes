@@ -29,7 +29,7 @@ object AppServices {
             repo,
             prefs,
             HandwritingIndex(repo, { prefs.handwritingEnabled }, { prefs.handwritingEnabled = it }, Language.handwritingEnglish(app)),
-            MathNotes({ prefs.mathEnabled }, { prefs.mathEnabled = it }),
+            MathNotes({ prefs.mathEnabled }, { prefs.mathEnabled = it }, dev.inknotes.math.FixStore(app.filesDir)),
             Backup(app, repo, prefs),
             CoverPreviews(repo),
             CloudSync(app, repo, prefs),

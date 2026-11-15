@@ -361,12 +361,16 @@ fun EditorScreen(
                     VerticalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 }
             }
-            AndroidView(
-                factory = { ctx -> PageEditorView(ctx).also { shownView[0] = it; controller.attach(it) } },
-                // Its own layer: a redrawn page (every frame of a scroll) then re-records only
-                // the canvas, not the toolbars and panels around it.
-                modifier = Modifier.weight(1f).fillMaxHeight().graphicsLayer(),
-            )
+            Box(Modifier.weight(1f).fillMaxHeight()) {
+                AndroidView(
+                    factory = { ctx -> PageEditorView(ctx).also { shownView[0] = it; controller.attach(it) } },
+                    // Its own layer: a redrawn page (every frame of a scroll) then re-records only
+                    // the canvas, not the toolbars and panels around it.
+                    modifier = Modifier.fillMaxSize().graphicsLayer(),
+                )
+                // A formula just written may be misread: asked about, without stopping the writing.
+                controller.checkOffer?.let { CheckOffer(controller, it, Modifier.align(Alignment.BottomCenter).padding(bottom = 24.dp)) }
+            }
             if (showSearch) {
                 VerticalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 SearchPanel(controller)
@@ -376,6 +380,7 @@ fun EditorScreen(
 
     controller.recognizedText?.let { RecognizedTextDialog(it, controller, onDismiss = { controller.recognizedText = null }) }
     controller.tappedAnswer?.let { AnswerDialog(controller, it, onDismiss = { controller.tappedAnswer = null }) }
+    controller.fixing?.let { FixDialog(controller, it, onDismiss = { controller.fixing = null }) }
     controller.studyCards?.let { CardsDialog(controller, it, onDismiss = { controller.closeCards() }) }
     if (showToc) TocDialog(controller, onDismiss = { showToc = false })
     if (showCustomize) CustomizeBarsDialog(controller.toolbar, onChange = controller::changeToolbar, onDismiss = { showCustomize = false })

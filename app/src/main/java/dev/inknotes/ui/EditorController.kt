@@ -54,6 +54,8 @@ import dev.inknotes.search.HandwritingIndex
 import dev.inknotes.search.SearchHit
 import dev.inknotes.math.MathNotes
 import dev.inknotes.math.PageAnswer
+import dev.inknotes.math.Correct
+import dev.inknotes.math.FixStore
 import dev.inknotes.math.Printer
 import dev.inknotes.search.TextLine
 import java.io.File
@@ -1656,6 +1658,78 @@ class EditorController(
     /** The answer a finger tapped, shown with how it was found (null: none). */
     var tappedAnswer by mutableStateOf<PageAnswer?>(null)
 
+    /** The answer whose formula is being corrected in the correction window (null: none). */
+    var fixing by mutableStateOf<PageAnswer?>(null)
+
+    /** A formula just written that may be misread: a small question offers to check it (null: none). */
+    var checkOffer by mutableStateOf<PageAnswer?>(null)
+
+    /** Formulas already seen on each page, so that only newly written ones are asked about. */
+    private val seenFormulas = HashMap<String, MutableSet<String>>()
+    private val askRandom = java.util.Random()
+
+    /**
+     * After the answers of the page being written on came: asks about one newly written formula
+     * as the settings say (when it is unsure or got nothing, or now and then any).
+     */
+    private fun offerCheck(pageId: String, answers: List<PageAnswer>) {
+        val keys = answers.mapNotNull { a -> a.fix?.let { a to Correct.fingerprint(it.left + it.right.orEmpty()) } }
+        val seen = seenFormulas[pageId]
+        if (seen == null) {
+            // The page as it was opened: nothing on it is new.
+            seenFormulas[pageId] = keys.mapTo(HashSet()) { it.second }
+            return
+        }
+        val fresh = keys.filter { seen.add(it.second) }.map { it.first }
+        checkOffer = checkOffer?.takeIf { old -> answers.any { it === old } }
+        if (fresh.isEmpty()) return
+        val pick = when (math.fixes.ask) {
+            FixStore.Ask.NEVER -> null
+            FixStore.Ask.UNSURE -> fresh.lastOrNull { it.unsure || it.missing }
+            FixStore.Ask.SOMETIMES -> fresh.lastOrNull { it.unsure || it.missing } ?: fresh.last().takeIf { askRandom.nextInt(ASK_EVERY) == 0 }
+        }
+        if (pick != null) checkOffer = pick
+    }
+
+    /** The formula of [answer] was set by hand (pinned to its strokes). */
+    fun isPinned(answer: PageAnswer): Boolean {
+        val fix = answer.fix ?: return false
+        val pins = math.fixes.pins()
+        return Correct.fingerprint(fix.left) in pins || fix.right?.let { Correct.fingerprint(it) in pins } == true
+    }
+
+    /** Back to reading the formula of [answer] as recognised: its pins taken off. */
+    fun unpinFix(answer: PageAnswer) {
+        val fix = answer.fix ?: return
+        math.fixes.unpin(Correct.fingerprint(fix.left))
+        fix.right?.let { math.fixes.unpin(Correct.fingerprint(it)) }
+        val pageId = mathAnswers.entries.firstOrNull { (_, list) -> list.any { it === answer } }?.key
+        if (pageId != null) mathRevision.remove(pageId) else mathRevision.clear()
+        requestMath()
+    }
+
+    /** Opens the correction window for [answer]. */
+    fun startFix(answer: PageAnswer) {
+        checkOffer = null
+        tappedAnswer = null
+        if (answer.fix != null) fixing = answer
+    }
+
+    /**
+     * The writer's corrections: [left] and [right] (formula text) pinned to the strokes they
+     * read, when they differ from what was read; the symbols chosen learned. The page is then
+     * read anew.
+     */
+    fun applyFix(answer: PageAnswer, left: String?, right: String?, read: List<String>, chosen: List<String>) {
+        val fix = answer.fix ?: return
+        if (left != null) math.fixes.pin(Correct.fingerprint(fix.left), left)
+        if (right != null && fix.right != null) math.fixes.pin(Correct.fingerprint(fix.right), right)
+        math.fixes.learn(read, chosen)
+        val pageId = mathAnswers.entries.firstOrNull { (_, list) -> list.any { it === answer } }?.key
+        if (pageId != null) mathRevision.remove(pageId) else mathRevision.clear()
+        requestMath()
+    }
+
     /**
      * Saves the page of [answer] as a test case with the answer it should have given, and offers
      * to send the file ([onReady] gets a shareable link). Kept in the app's files too.
@@ -1677,7 +1751,8 @@ class EditorController(
     }
 
     override fun onAnswerTapped(answer: PageAnswer) {
-        tappedAnswer = answer
+        // Unsure or nothing: straight to correcting how it was read.
+        if (answer.fix != null && (answer.unsure || answer.missing)) startFix(answer) else tappedAnswer = answer
     }
 
     override fun onHint(text: String) = showStatus(text)
@@ -2525,6 +2600,7 @@ class EditorController(
             mathRevision[id] = doc.revision
             math.analyze("${notebook.id}/$id", doc.strokes, notebook.pageWidthUnits(id)) { answers ->
                 if (answers.isEmpty()) mathAnswers.remove(id) else mathAnswers[id] = answers
+                if (id == notebook.pageIds.getOrNull(pageIndex)) offerCheck(id, answers)
                 view?.refresh()
             }
         }
@@ -2691,6 +2767,8 @@ class EditorController(
         private const val KEEP_PAGES = 4
         private const val THUMBNAIL_DELAY_MS = 1200L
         private const val MATH_DELAY_MS = 700L
+        /** "Sometimes": about one formula in this many is asked about even when sure. */
+        private const val ASK_EVERY = 5
         private const val GROW_DELAY_MS = 500L
         private const val PEN_BUTTON_DEBOUNCE_MS = 400L
         /** Custom colours kept in the palette (it scrolls). */
