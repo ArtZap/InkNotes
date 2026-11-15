@@ -129,3 +129,48 @@ class FormulaKeysTest {
         assertTrue(Correct.unreadable("\\frac{□}{2}").note!!.contains("□"))
     }
 }
+
+class ComposerEraseTest {
+    @Test
+    fun erasingARootOfAnyDegreeGoesThroughBothPlacesThenTheRoot() {
+        val c = Composer.empty()
+        c.type("2")
+        c.type("+")
+        c.template("\\sqrt[#0]{#1}")
+        c.type("3")
+        c.right()
+        c.type("2")
+        c.type("7")
+        c.right()
+        assertEquals("2+\\sqrt[3]{27}", c.text())
+        c.erase() // into the radicand
+        c.erase()
+        c.erase()
+        assertEquals("2+\\sqrt[3]{□}", c.text())
+        c.erase() // on to the degree
+        c.erase()
+        assertEquals("2+\\sqrt[□]{□}", c.text())
+        c.erase() // the root itself
+        assertEquals("2+", c.text())
+        c.erase()
+        assertEquals("2", c.text())
+    }
+
+    @Test
+    fun aFractionToo() {
+        val c = Composer.of("\\frac{1}{2}")
+        c.erase()
+        c.erase()
+        c.erase()
+        c.erase()
+        assertEquals("\\frac{□}{□}", c.text())
+        c.erase()
+        assertEquals("", c.text())
+    }
+
+    @Test
+    fun anIntegralWithALetterForALimitSaysWhich() {
+        val e = runCatching { Calc.evaluate(MathPage.parseText("\\int_{o}^{1}x dx")!!, Env()) }.exceptionOrNull()
+        assertTrue(e?.message.toString(), e?.message?.contains("o") == true)
+    }
+}

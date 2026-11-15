@@ -9,14 +9,15 @@ object FormulaKeys {
      * search finds), and what it puts in: a template with empty places (#0, #1… in [pattern]) or
      * plain [text].
      */
-    class Key(val face: String, val name: String, val text: String? = null, val pattern: String? = null) {
+    /** [art]: the face set in print (a fraction stacked, with its bar) instead of [face] as text. */
+    class Key(val face: String, val name: String, val text: String? = null, val pattern: String? = null, val art: String? = null) {
         fun press(c: Composer) {
             if (pattern != null) c.template(pattern) else if (text != null) c.type(text)
         }
     }
 
     private fun t(face: String, name: String, text: String = face) = Key(face, name, text = text)
-    private fun p(face: String, name: String, pattern: String) = Key(face, name, pattern = pattern)
+    private fun p(face: String, name: String, pattern: String, art: String? = null) = Key(face, name, pattern = pattern, art = art)
 
     /** The tabs of templates and signs: everything a formula can hold, by kind. */
     fun tabs(upper: Boolean): List<Pair<String, List<Key>>> {
@@ -32,7 +33,7 @@ object FormulaKeys {
         val greek = greekLow.indices.map { k -> val ch = (if (upper) greekUp else greekLow)[k].toString(); t(ch, greekNames[k]) }
         return listOf(
             tr("Структура", "Structure") to listOf(
-                p("□⁄□", tr("дробь", "fraction"), "\\frac{#0}{#1}"),
+                p("□⁄□", tr("дробь", "fraction"), "\\frac{#0}{#1}", art = "\\frac{□}{□}"),
                 p("□ⁿ", tr("степень", "power"), "^{#0}"),
                 p("□ₙ", tr("индекс", "index"), "_{#0}"),
                 p("□ₙᵐ", tr("индекс и степень", "index and power"), "_{#0}^{#1}"),
@@ -56,9 +57,9 @@ object FormulaKeys {
                 p("∭", tr("тройной интеграл", "triple integral"), "\\iiint #0"),
                 p("∮", tr("интеграл по контуру", "contour integral"), "\\oint #0"),
                 p("□|ₐᵇ", tr("подстановка", "evaluated at"), "\\Big|_{#0}^{#1}"),
-                p("d/d□", tr("производная", "derivative"), "\\frac{d}{d#0}(#1)"),
-                p("dⁿ/dxⁿ", tr("производная n-го порядка", "n-th derivative"), "\\frac{d^{#0}}{d#1^{#0}}(#2)"),
-                p("∂□/∂□", tr("частная производная", "partial derivative"), "\\frac{\\partial #0}{\\partial #1}"),
+                p("d/d□", tr("производная", "derivative"), "\\frac{d}{d#0}(#1)", art = "\\frac{d}{d□}"),
+                p("dⁿ/dxⁿ", tr("производная n-го порядка", "n-th derivative"), "\\frac{d^{#0}}{d#1^{#0}}(#2)", art = "\\frac{d^{n}}{dx^{n}}"),
+                p("∂□/∂□", tr("частная производная", "partial derivative"), "\\frac{\\partial #0}{\\partial #1}", art = "\\frac{∂□}{∂□}"),
                 p("lim", tr("предел", "limit"), "\\lim_{#0\\to #1}#2"),
                 p("lim⁺", tr("односторонний предел", "one-sided limit"), "\\lim_{#0\\to #1^{+}}#2"),
                 p("Σ", tr("сумма", "sum"), "\\sum_{#0}^{#1}#2"),

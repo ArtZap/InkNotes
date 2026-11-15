@@ -77,11 +77,6 @@ fun Calculator(initial: String, onChange: (String) -> Unit) {
             if (bmp != null) Image(bmp.asImageBitmap(), contentDescription = c.text(), modifier = Modifier.heightIn(max = 120.dp))
             else Text(shown, fontSize = 24.sp, fontFamily = FontFamily.Serif)
         }
-        Text(
-            tr("□ — пустое место: ← → переходят по формуле, «след. □» — к следующему пустому", "□ is an empty place: ← → move through the formula, “next □” to the next empty one"),
-            fontSize = 12.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
 
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             for ((k, pair) in all.withIndex()) {
@@ -93,7 +88,7 @@ fun Calculator(initial: String, onChange: (String) -> Unit) {
                 value = query,
                 onValueChange = { query = it },
                 singleLine = true,
-                placeholder = { Text(tr("Найти: «интеграл», «не равно», «тета», «ом»…", "Find: “integral”, “not equal”, “theta”, “ohm”…")) },
+                placeholder = { Text(tr("Найти символ: «интеграл», «не равно», «тета», «ом»…; □ — пустое место, «след. □» — к нему", "Find a symbol: “integral”, “not equal”, “theta”, “ohm”…; □ is an empty place, “next □” goes to it")) },
                 modifier = Modifier.weight(1f),
             )
             TextButton(onClick = { latex = !latex }) { Text(if (latex) tr("Скрыть LaTeX", "Hide LaTeX") else tr("Ввести LaTeX", "Type LaTeX")) }
@@ -124,7 +119,7 @@ fun Calculator(initial: String, onChange: (String) -> Unit) {
                 for (row in keys.chunked(if (compact) 9 else 6)) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         for (k in row) {
-                            KeyButton(k.face, if (compact) null else k.name, Modifier.weight(1f), highlighted = k.face == "⇧" && upper) {
+                            KeyButton(k.face, if (compact) null else k.name, Modifier.weight(1f), highlighted = k.face == "⇧" && upper, art = k.art) {
                                 if (k.face == "⇧") upper = !upper else {
                                     k.press(c)
                                     changed()
@@ -151,17 +146,36 @@ fun Calculator(initial: String, onChange: (String) -> Unit) {
 }
 
 @Composable
-private fun KeyButton(face: String, name: String?, modifier: Modifier, highlighted: Boolean = false, onClick: () -> Unit) {
+private fun KeyButton(face: String, name: String?, modifier: Modifier, highlighted: Boolean = false, art: String? = null, onClick: () -> Unit) {
+    val color = MaterialTheme.colorScheme.onSurface
     Column(
-        modifier.height(if (name == null) 44.dp else 56.dp)
+        modifier.height(if (name == null) 46.dp else 74.dp)
             .background(if (highlighted) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface, RoundedCornerShape(12.dp))
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick),
+            .clickable(onClick = onClick)
+            .padding(horizontal = 4.dp, vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Text(face, fontFamily = FontFamily.Serif, fontSize = if (face.length > 5) 15.sp else 20.sp, color = MaterialTheme.colorScheme.onSurface, maxLines = 1)
-        if (name != null) Text(name, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, textAlign = TextAlign.Center)
+        // A fraction or derivative stacked as in print, its bar across.
+        val px = with(LocalDensity.current) { 15.dp.toPx() }
+        val argb = color.toArgb()
+        val bmp = remember(art, argb) { art?.let { FormulaArt.bitmap(it, px, argb) } }
+        if (bmp != null) {
+            Image(bmp.asImageBitmap(), contentDescription = name ?: face, modifier = Modifier.height(if (name == null) 34.dp else 38.dp))
+        } else {
+            Text(face, fontFamily = FontFamily.Serif, fontSize = if (face.length > 5) 16.sp else 21.sp, color = color, maxLines = 1)
+        }
+        if (name != null) {
+            Text(
+                name,
+                fontSize = 12.sp,
+                lineHeight = 13.sp,
+                color = color.copy(alpha = 0.78f),
+                maxLines = 2,
+                textAlign = TextAlign.Center,
+            )
+        }
     }
 }
 
@@ -184,7 +198,7 @@ private fun NumberPad(modifier: Modifier, onKey: (String) -> Unit) {
                     val sign = k in setOf("÷", "×", "−", "+", "=")
                     val control = k in setOf("←", "→", "□→", "⌫")
                     Box(
-                        Modifier.weight(1f).height(46.dp)
+                        Modifier.weight(1f).height(44.dp)
                             .background(
                                 when {
                                     sign -> MaterialTheme.colorScheme.secondaryContainer

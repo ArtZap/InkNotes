@@ -63,8 +63,17 @@ class Composer private constructor(val root: Seq) {
             return
         }
         val (parent, index, box) = parentOf(seq) ?: return
+        val k = box.slots.indexOfFirst { it === seq }
+        if (k > 0) {
+            // At the start of a later place (the radicand of ⁿ√, a denominator): on to the end
+            // of the place before it, to erase that next.
+            seq = box.slots[k - 1]
+            pos = seq.items.size
+            return
+        }
         seq = parent
         pos = index
+        // All its places empty: the template goes; else the cursor just steps out before it.
         if (box.slots.all { it.items.isEmpty() }) parent.items.removeAt(index)
     }
 
