@@ -47,7 +47,7 @@ private val TOPICS = listOf(
     Topic(
         tr("Новое в 0.48", "What's new in 0.48"),
         listOf(
-            tr("Несколько функций на одном графике", "Several functions on one graph") to tr("Напишите функции одну под другой — y = x², а строкой ниже y = 2x + 1 (или f(x) = …, g(x) = …): они рисуются на одном графике, каждая своим цветом, а в углу графика — какая где. До четырёх функций; строки должны идти подряд и начинаться примерно на одной высоте слева. Функции, написанные далеко друг от друга, по-прежнему получают свои графики.", "Write functions one under another — y = x², and on the next line y = 2x + 1 (or f(x) = …, g(x) = …): they are drawn on one graph, each in its own colour, with which is which in the graph's corner. Up to four functions; the lines must follow one another and start about level on the left. Functions written far apart still get graphs of their own."),
+            tr("Несколько функций на одном графике", "Several functions on one graph") to tr("Напишите функции с разными именами одну под другой — f(x) = x², а строкой ниже g(x) = 2x + 1: они рисуются на одном графике, каждая своим цветом, а в углу графика — какая где. До четырёх функций; строки должны идти подряд и начинаться примерно на одной высоте слева. Строки y = … подряд и функции, написанные далеко друг от друга, по-прежнему получают каждая свой график.", "Write functions with different names one under another — f(x) = x², and on the next line g(x) = 2x + 1: they are drawn on one graph, each in its own colour, with which is which in the graph's corner. Up to four functions; the lines must follow one another and start about level on the left. Lines of y = … in a row, and functions written far apart, still get a graph each."),
         ),
     ),
     Topic(

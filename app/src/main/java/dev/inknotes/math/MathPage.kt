@@ -266,8 +266,15 @@ object MathPage {
         // under it; never over the ink or another graph.
         class Area(val left: Float, val top: Float, val right: Float, val bottom: Float)
         val graphs = ArrayList<Area>()
-        // Functions written on lines right under one another, in the same letter, share one
-        // graph (y = x², then y = 2x + 1): drawn by the first, the others in it.
+        // Functions with different names written on lines right under one another, in the same
+        // letter, share one graph (f(x) = x², then g(x) = 2x + 1): drawn by the first, the
+        // others in it. A list of y = … lines keeps a graph each: that is how they are written
+        // to be looked at one by one.
+        fun side(e: Expr): String = when (e) {
+            is Expr.Apply -> e.name + "'".repeat(e.primes) + e.args.joinToString(", ", "(", ")") { side(it) }
+            else -> runCatching { Printer.expr(e) }.getOrDefault("?")
+        }
+        fun curveName(left: Expr, right: Expr) = side(left) + " = " + side(right)
         val joined = HashMap<Def, List<Def>>()
         val inOthers = HashSet<Def>()
         run {
@@ -282,7 +289,8 @@ object MathPage {
                     val prev = ordered[group.last().index]
                     val next = ordered[plain[j].index]
                     val near = next.cy - prev.cy < 2.6f * max(prev.h, next.h) && abs(next.left - prev.left) < 6f * max(prev.h, next.h)
-                    if (!near || fn(plain[j])?.variable != letter) break
+                    val named = group.none { it.left == plain[j].left }
+                    if (!near || !named || fn(plain[j])?.variable != letter) break
                     group += plain[j]
                     j++
                 }
@@ -303,7 +311,7 @@ object MathPage {
                 param != null && d in joined -> runCatching {
                     val group = listOf(d) + joined.getValue(d)
                     val fns = group.mapNotNull { g -> graphParam(g.left)?.let { p -> Calc.function(g.right, envAt(g.index), p.ifEmpty { null }) } }
-                    Plot.ofMany(fns.map { it.f }, fns[0].variable, fns.any { it.trig }, group.map { runCatching { Printer.expr(it.left) + " = " + Printer.expr(it.right) }.getOrDefault(Printer.expr(it.left)) })
+                    Plot.ofMany(fns.map { it.f }, fns[0].variable, fns.any { it.trig }, group.map { curveName(it.left, it.right) })
                 }.getOrNull()
                 param != null -> runCatching { Calc.graph(d.right, envAt(d.index), param.ifEmpty { null }) }.getOrNull()
                 // z = x² + y²: a surface.
