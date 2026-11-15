@@ -176,6 +176,30 @@ class MathPageTest {
         assertTrue(a.y > 158f)
     }
 
+    @Test
+    fun aSystemCanBeCorrectedEquationByEquation() {
+        val s = Sheet()
+        s.tall(null, 90f, 66f, 100f, 12f) { t -> if (t < 0.5f) 1 - 2 * t * (1 - 0.0f) else 2 * t - 1 }
+        s.glyph("x", 110f, 80f, 14f, 16f)
+        s.glyph("+", 128f, 80f, 12f, 12f)
+        s.glyph("y", 146f, 80f, 14f, 22f)
+        s.equals(166f, 88f)
+        s.glyph("3", 190f, 76f)
+        s.glyph("x", 110f, 136f, 14f, 16f)
+        s.dash(128f, 143f, 12f)
+        s.glyph("y", 146f, 136f, 14f, 22f)
+        s.equals(166f, 144f)
+        s.glyph("1", 190f, 132f, 8f)
+        val fix = s.answers().single().fix!!
+        assertEquals("a row per equation", 2, fix.rows.size)
+        assertEquals("x+y", Printer.expr(fix.rows[0].leftRead!!).replace(" ", ""))
+        // The first right side set by hand to 5: x + y = 5, x − y = 1.
+        val pinned = mapOf(Correct.fingerprint(fix.rows[0].right!!) to "5")
+        val a = MathPage.analyze(s.strokes, s.reader(emptyMap()), pinned = pinned).single()
+        assertEquals("x = 3; y = 2", text(a))
+        assertEquals("x = 3; y = 2", (Correct.outcomeSystem(listOf("x+y" to "5", "x-y" to "1"), Env()).answer as Answer.Text).lines.joinToString("; "))
+    }
+
     /** A Russian б reads as 6 first: in a system whose unknowns are a and б, 3б is 3·b, not 36. */
     @Test
     fun systemWithCyrillicB() {

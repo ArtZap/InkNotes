@@ -1673,7 +1673,7 @@ class EditorController(
      * as the settings say (when it is unsure or got nothing, or now and then any).
      */
     private fun offerCheck(pageId: String, answers: List<PageAnswer>) {
-        val keys = answers.mapNotNull { a -> a.fix?.let { a to Correct.fingerprint(it.left + it.right.orEmpty()) } }
+        val keys = answers.mapNotNull { a -> a.fix?.let { f -> a to Correct.fingerprint(f.rows.flatMap { it.left + it.right.orEmpty() }) } }
         val seen = seenFormulas[pageId]
         if (seen == null) {
             // The page as it was opened: nothing on it is new.
@@ -1695,14 +1695,16 @@ class EditorController(
     fun isPinned(answer: PageAnswer): Boolean {
         val fix = answer.fix ?: return false
         val pins = math.fixes.pins()
-        return Correct.fingerprint(fix.left) in pins || fix.right?.let { Correct.fingerprint(it) in pins } == true
+        return fix.rows.any { row -> Correct.fingerprint(row.left) in pins || row.right?.let { Correct.fingerprint(it) in pins } == true }
     }
 
     /** Back to reading the formula of [answer] as recognised: its pins taken off. */
     fun unpinFix(answer: PageAnswer) {
         val fix = answer.fix ?: return
-        math.fixes.unpin(Correct.fingerprint(fix.left))
-        fix.right?.let { math.fixes.unpin(Correct.fingerprint(it)) }
+        for (row in fix.rows) {
+            math.fixes.unpin(Correct.fingerprint(row.left))
+            row.right?.let { math.fixes.unpin(Correct.fingerprint(it)) }
+        }
         val pageId = mathAnswers.entries.firstOrNull { (_, list) -> list.any { it === answer } }?.key
         if (pageId != null) mathRevision.remove(pageId) else mathRevision.clear()
         requestMath()
@@ -1716,14 +1718,17 @@ class EditorController(
     }
 
     /**
-     * The writer's corrections: [left] and [right] (formula text) pinned to the strokes they
-     * read, when they differ from what was read; the symbols chosen learned. The page is then
-     * read anew.
+     * The writer's corrections: [texts] (left and right formula text of every formula, the
+     * equations of a system in order) pinned to the strokes they read; the symbols chosen
+     * learned. The page is then read anew.
      */
-    fun applyFix(answer: PageAnswer, left: String?, right: String?, read: List<String>, chosen: List<String>) {
+    fun applyFix(answer: PageAnswer, texts: List<Pair<String, String?>>, read: List<String>, chosen: List<String>) {
         val fix = answer.fix ?: return
-        if (left != null) math.fixes.pin(Correct.fingerprint(fix.left), left)
-        if (right != null && fix.right != null) math.fixes.pin(Correct.fingerprint(fix.right), right)
+        for ((row, text) in fix.rows.zip(texts)) {
+            val (left, right) = text
+            if (left.isNotBlank()) math.fixes.pin(Correct.fingerprint(row.left), left)
+            if (right != null && right.isNotBlank() && row.right != null) math.fixes.pin(Correct.fingerprint(row.right), right)
+        }
         math.fixes.learn(read, chosen)
         val pageId = mathAnswers.entries.firstOrNull { (_, list) -> list.any { it === answer } }?.key
         if (pageId != null) mathRevision.remove(pageId) else mathRevision.clear()
@@ -1752,7 +1757,7 @@ class EditorController(
 
     override fun onAnswerTapped(answer: PageAnswer) {
         // Unsure or nothing: straight to correcting how it was read.
-        if (answer.fix != null && (answer.unsure || answer.missing)) startFix(answer) else tappedAnswer = answer
+        if (answer.fix != null && (answer.unsure || answer.missing || answer.error)) startFix(answer) else tappedAnswer = answer
     }
 
     override fun onHint(text: String) = showStatus(text)

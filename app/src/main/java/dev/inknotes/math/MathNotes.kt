@@ -206,17 +206,24 @@ class MathNotes(
             exec.execute {
                 val draft = runCatching {
                     val learned = fixes.learned.takeIf { fixes.learn }
-                    val left = Correct.side(fix.left, fix.h, fix.axis, reader, fix.leftRead, learned)
-                    val right = fix.right?.let { Correct.side(it, fix.h, fix.axis, reader, fix.rightRead, learned) }
-                    if (left == null || fix.right != null && right == null) null else Draft(fix, left, right)
+                    val rows = fix.rows.map { row ->
+                        val left = Correct.side(row.left, row.h, row.axis, reader, row.leftRead, learned)
+                        val right = row.right?.let { Correct.side(it, row.h, row.axis, reader, row.rightRead, learned) }
+                        if (left == null || row.right != null && right == null) return@runCatching null
+                        Row(row, left, right)
+                    }
+                    Draft(fix, rows)
                 }.getOrNull()
                 main.post { onResult(draft) }
             }
         }.onFailure { onResult(null) }
     }
 
-    /** Both sides of a formula as read, symbol by symbol; [right] null for `expr =`. */
-    class Draft(val fix: Fix, val left: Correct.Side, val right: Correct.Side?)
+    /** A formula as read, symbol by symbol: its [rows] (the equations of a system, or one). */
+    class Draft(val fix: Fix, val rows: List<Row>)
+
+    /** Both sides of one formula; [right] null for `expr =`. */
+    class Row(val fix: Fix, val left: Correct.Side, val right: Correct.Side?)
 
     internal val reader = object : RunReader {
         override fun read(strokes: List<Ink>, lineHeight: Float): List<String> {

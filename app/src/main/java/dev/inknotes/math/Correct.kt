@@ -216,6 +216,21 @@ object Correct {
         }
     }
 
+    /** Solves a system written [equations] (left and right text of each), as the page does. */
+    fun outcomeSystem(equations: List<Pair<String, String>>, env: Env): Outcome {
+        val parsed = equations.mapIndexed { k, (l, r) ->
+            val le = MathPage.parseText(l)
+            val re = MathPage.parseText(r)
+            if (le == null || re == null) return Outcome(null, tr("Уравнение ${k + 1} не читается — проверьте выделенные символы", "Equation ${k + 1} does not read — check the highlighted symbols"), true)
+            le to re
+        }
+        return try {
+            Outcome(Calc.solve(parsed, env), null)
+        } catch (e: MathError) {
+            Outcome(null, e.message ?: "?", true)
+        }
+    }
+
     /** Signs told by their shape, and what else the same strokes could be. */
     private val SIGN_ALTS = mapOf(
         "+" to listOf("+", "t"),

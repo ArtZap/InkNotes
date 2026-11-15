@@ -51,7 +51,15 @@ class Fix(
     /** What the page read left and right of "=", to start from. */
     val leftRead: Expr? = null,
     val rightRead: Expr? = null,
-)
+    /**
+     * A system: its equations, each a Fix of its own (left, "=", right); this Fix's own sides
+     * are the first equation's. Empty for one formula.
+     */
+    val system: List<Fix> = emptyList(),
+) {
+    /** The formulas to correct: the equations of a system, or this one. */
+    val rows: List<Fix> get() = system.ifEmpty { listOf(this) }
+}
 
 /**
  * Finds the math on a page: every handwritten "=" (two short stacked dashes) with what is
@@ -335,7 +343,7 @@ object MathPage {
             val brace = systemOf[eq] ?: continue
             if (!done.add(brace)) continue
             val members = ordered.filter { systemOf[it] === brace }
-            solveSystem(brace, members, eqs, rest, reader, envAt(i))?.let { out += it }
+            solveSystem(brace, members, eqs, rest, reader, envAt(i), ::pin)?.let { out += it }
         }
         val anchors = eqs + ineqs.map { it.first }
         for ((a, rel) in ineqs) {
@@ -426,7 +434,7 @@ object MathPage {
         return Answer.Text(if (lines.size > 1 && lines.all { it.length < 24 }) listOf(lines.joinToString("; ")) else lines)
     }
 
-    private fun solveSystem(brace: Ink, members: List<Equals>, eqs: List<Equals>, rest: List<Ink>, reader: RunReader, env: Env): PageAnswer? {
+    private fun solveSystem(brace: Ink, members: List<Equals>, eqs: List<Equals>, rest: List<Ink>, reader: RunReader, env: Env, pin: (List<Ink>) -> Expr? = { null }): PageAnswer? {
         // Readings of every side; then the combination with as many unknowns as equations.
         val options = ArrayList<List<Expr>>()
         var bottom = brace.bottom
@@ -438,14 +446,15 @@ object MathPage {
             if (l.isEmpty() || r.isEmpty() || l.size > MAX_SIDE || r.size > MAX_SIDE) return null
             Triple(eq, l, r)
         }
-        val lefts = sides.map { (eq, l, _) -> readings(l, eq.h, eq.cy, reader, Prefer.LETTERS, maxLetters = members.size).ifEmpty { return null } }
+        // A side set by hand is read only so.
+        val lefts = sides.map { (eq, l, _) -> pin(l)?.let { listOf(it) } ?: readings(l, eq.h, eq.cy, reader, Prefer.LETTERS, maxLetters = members.size).ifEmpty { return null } }
         // The unknowns are the letters of the left sides (a = …, б = …): on the right a run that
         // reads as one of them or as digits is that letter (3б, not 36: б looks like a 6).
         val unknowns = lefts.flatMap { Algebra.freeVars(it[0]) }.filter { env.variable(it) == null }.toSet()
         for ((k, parts) in sides.withIndex()) {
             val (eq, l, r) = parts
             options += lefts[k]
-            options += readings(r, eq.h, eq.cy, reader, Prefer.NUMBERS, known = { env.variable(it) != null }, favored = unknowns).ifEmpty { return null }
+            options += pin(r)?.let { listOf(it) } ?: readings(r, eq.h, eq.cy, reader, Prefer.NUMBERS, known = { env.variable(it) != null }, favored = unknowns).ifEmpty { return null }
             bottom = max(bottom, max(l.maxOf { it.bottom }, r.maxOf { it.bottom }))
             right = max(right, r.maxOf { it.right })
             h = max(h, eq.h)
@@ -461,6 +470,11 @@ object MathPage {
             ?: options.map { it[0] }
         val equations = picked.chunked(2).map { it[0] to it[1] }
         trace?.invoke("system: $equations")
+        // To correct how it was read: every equation, from what was taken.
+        val rows = sides.mapIndexed { k, (eq, l, r) ->
+            Fix(l, r, listOf(eq.top, eq.bottom) + eq.extra, eq.h, eq.cy, env, leftRead = equations[k].first, rightRead = equations[k].second)
+        }
+        val fix = rows[0].let { f -> Fix(f.left, f.right, f.equals, f.h, f.axis, env, leftRead = f.leftRead, rightRead = f.rightRead, system = rows) }
         // Under the system, from the brace: to its right the answer runs into long equations.
         // Written smaller when the next line below leaves less room; in notes too dense for
         // that, to the right of the system if that place is free. The y is the middle of the
@@ -476,10 +490,10 @@ object MathPage {
                 val wide = lines.maxOf { it.length } * CHAR_W * h
                 val half = lines.size * perLine * h / 2
                 val taken = ink.any { it.right > at && it.left < at + wide && it.bottom > brace.cy - half && it.top < brace.cy + half }
-                if (!taken) return PageAnswer(at, brace.cy, h, answer, error, steps = if (error) null else Steps.of(equations, env))
+                if (!taken) return PageAnswer(at, brace.cy, h, answer, error, steps = if (error) null else Steps.of(equations, env), fix = fix)
             }
             val size = max(fit, MIN_UNDER * h)
-            return PageAnswer(brace.left, bottom + 0.25f * size + lines.size * perLine * size / 2, size, answer, error, steps = if (error) null else Steps.of(equations, env))
+            return PageAnswer(brace.left, bottom + 0.25f * size + lines.size * perLine * size / 2, size, answer, error, steps = if (error) null else Steps.of(equations, env), fix = fix)
         }
         return try {
             under(Calc.solve(equations, env), error = false)

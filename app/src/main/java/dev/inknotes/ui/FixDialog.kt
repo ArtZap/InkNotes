@@ -124,29 +124,43 @@ fun FixDialog(c: EditorController, answer: PageAnswer, onDismiss: () -> Unit) {
     }
 }
 
-/** A symbol on a wheel: which side of "=" ([right]) and which of its symbols. */
-private class Slot(val right: Boolean, val index: Int)
+/** A symbol on a wheel: which formula ([row], an equation of a system), which side of "=" ([right]), which of its symbols. */
+private class Slot(val row: Int, val right: Boolean, val index: Int)
 
 @Composable
 private fun FixContent(c: EditorController, answer: PageAnswer, d: MathNotes.Draft, onDismiss: () -> Unit) {
     val fix = d.fix
-    val leftPicks = remember(d) { mutableStateListOf(*d.left.initial.toTypedArray()) }
-    val rightPicks = remember(d) { mutableStateListOf(*(d.right?.initial ?: emptyList()).toTypedArray()) }
-    val slots = remember(d) { d.left.syms.indices.map { Slot(false, it) } + d.right?.syms?.indices?.map { Slot(true, it) }.orEmpty() }
-    fun sym(s: Slot) = (if (s.right) d.right!! else d.left).syms[s.index]
-    fun picks(s: Slot): SnapshotStateList<Correct.Pick> = if (s.right) rightPicks else leftPicks
+    val system = d.rows.size > 1
+    // Per formula, the picks of its left and right side.
+    val leftPicks = remember(d) { d.rows.map { mutableStateListOf(*it.left.initial.toTypedArray()) } }
+    val rightPicks = remember(d) { d.rows.map { mutableStateListOf(*(it.right?.initial ?: emptyList()).toTypedArray()) } }
+    val slots = remember(d) {
+        d.rows.flatMapIndexed { r, row -> row.left.syms.indices.map { Slot(r, false, it) } + row.right?.syms?.indices?.map { Slot(r, true, it) }.orEmpty() }
+    }
+    fun side(s: Slot) = d.rows[s.row].let { if (s.right) it.right!! else it.left }
+    fun sym(s: Slot) = side(s).syms[s.index]
+    fun picks(s: Slot): SnapshotStateList<Correct.Pick> = if (s.right) rightPicks[s.row] else leftPicks[s.row]
     var focus by remember(d) { mutableIntStateOf(slots.indexOfFirst { sym(it).unsure }.coerceAtLeast(0)) }
     var typed by remember(d) { mutableStateOf<String?>(null) }
     var learn by remember { mutableStateOf(c.math.fixes.learn) }
 
-    val leftText = Correct.text(d.left, leftPicks)
-    val rightText = d.right?.let { Correct.text(it, rightPicks) }
-    // Typed by hand: "left = right" for an equation, only the left for `expr =`.
-    val (useLeft, useRight) = typed?.let { t ->
-        if (d.right == null) t.substringBefore('=').trim() to null else t.substringBefore('=').trim() to t.substringAfter('=', "").trim()
-    } ?: (leftText to rightText)
-    val outcome by produceState<Correct.Outcome?>(null, useLeft, useRight) {
-        value = withContext(Dispatchers.Default) { runCatching { Correct.outcome(useLeft, useRight, fix.env) }.getOrNull() }
+    // Every formula as text: left, and right (null for `expr =`).
+    val shown = d.rows.mapIndexed { r, row -> Correct.text(row.left, leftPicks[r]) to row.right?.let { Correct.text(it, rightPicks[r]) } }
+    // Typed by hand: a line per formula, "left = right" (only the left for `expr =`).
+    val used: List<Pair<String, String?>> = typed?.let { t ->
+        val lines = t.lines().map { it.trim() }.filter { it.isNotEmpty() }
+        d.rows.mapIndexed { r, row ->
+            val line = lines.getOrElse(r) { "" }
+            if (row.right == null) line.substringBefore('=').trim() to null else line.substringBefore('=').trim() to line.substringAfter('=', "").trim()
+        }
+    } ?: shown
+    val outcome by produceState<Correct.Outcome?>(null, used) {
+        value = withContext(Dispatchers.Default) {
+            runCatching {
+                if (system) Correct.outcomeSystem(used.map { (l, r) -> l to (r ?: "") }, fix.env)
+                else Correct.outcome(used[0].first, used[0].second, fix.env)
+            }.getOrNull()
+        }
     }
 
     val list = rememberLazyListState()
@@ -160,13 +174,17 @@ private fun FixContent(c: EditorController, answer: PageAnswer, d: MathNotes.Dra
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(tr("Как прочитано", "How it was read"), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
+            Text(
+                if (system) tr("Как прочитана система", "How the system was read") else tr("Как прочитано", "How it was read"),
+                style = MaterialTheme.typography.headlineSmall,
+                modifier = Modifier.weight(1f),
+            )
             val before = when {
                 answer.missing -> tr("Было: ничего", "Was: nothing")
                 else -> (answer.answer as? Answer.Text)?.lines?.joinToString("; ")?.let { tr("Было: $it", "Was: $it") }
                     ?: if (answer.answer is Answer.Graph || answer.answer is Answer.Surface) tr("Было: график", "Was: a graph") else null
             }
-            if (before != null) Text(before, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
+            if (before != null) Text(before, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp, maxLines = 2)
             if (answer.unsure || answer.missing) {
                 Spacer(Modifier.width(8.dp))
                 Text(
@@ -188,7 +206,7 @@ private fun FixContent(c: EditorController, answer: PageAnswer, d: MathNotes.Dra
                 )
             }
             Panel(tr("Получается", "Reads as"), Modifier.weight(1f)) {
-                Typeset(useLeft + "=" + (useRight ?: ""))
+                for ((l, r) in used) Typeset(l + "=" + (r ?: ""), compact = system)
                 Result(outcome)
             }
         }
@@ -200,10 +218,15 @@ private fun FixContent(c: EditorController, answer: PageAnswer, d: MathNotes.Dra
                 letterSpacing = 0.5.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            // As many wheels as symbols: a long formula scrolls sideways.
+            // As many wheels as symbols: a long formula scrolls sideways. In a system the
+            // equations follow one another, each after its number.
             LazyRow(state = list, horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                 itemsIndexed(slots) { i, s ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (system && !s.right && s.index == 0) {
+                            if (s.row > 0) Box(Modifier.padding(end = 10.dp).width(1.dp).height(200.dp).background(MaterialTheme.colorScheme.outlineVariant))
+                            Text("${s.row + 1}.", fontSize = 20.sp, modifier = Modifier.padding(end = 8.dp), color = MaterialTheme.colorScheme.primary)
+                        }
                         if (s.right && s.index == 0) {
                             Text("=", fontSize = 28.sp, modifier = Modifier.padding(end = 10.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
@@ -223,9 +246,10 @@ private fun FixContent(c: EditorController, answer: PageAnswer, d: MathNotes.Dra
             OutlinedTextField(
                 value = typed ?: "",
                 onValueChange = { typed = it },
-                singleLine = true,
+                singleLine = !system,
+                minLines = if (system) d.rows.size else 1,
                 textStyle = MaterialTheme.typography.titleMedium.copy(fontFamily = FontFamily.Monospace),
-                label = { Text(tr("Формула", "Formula")) },
+                label = { Text(if (system) tr("Уравнения, по одному в строке", "Equations, one per line") else tr("Формула", "Formula")) },
                 modifier = Modifier.fillMaxWidth(),
             )
             Text(
@@ -238,7 +262,7 @@ private fun FixContent(c: EditorController, answer: PageAnswer, d: MathNotes.Dra
 
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             OutlinedButton(onClick = {
-                typed = if (typed == null) leftText + (rightText?.let { " = $it" } ?: "") else null
+                typed = if (typed == null) shown.joinToString("\n") { (l, r) -> l + (r?.let { " = $it" } ?: "") } else null
             }) {
                 Text(if (typed == null) tr("Нет нужного — набрать формулу", "Not there — type the formula") else tr("Назад к барабанам", "Back to the wheels"))
             }
@@ -254,21 +278,20 @@ private fun FixContent(c: EditorController, answer: PageAnswer, d: MathNotes.Dra
             }
             TextButton(onClick = onDismiss) { Text(tr("Отмена", "Cancel")) }
             Button(onClick = {
-                val t = typed
-                if (t != null) {
-                    c.applyFix(answer, useLeft, useRight, emptyList(), emptyList())
+                if (typed != null) {
+                    c.applyFix(answer, used, emptyList(), emptyList())
                 } else {
                     val read = ArrayList<String>()
                     val chosen = ArrayList<String>()
                     for (s in slots) {
                         val sym = sym(s)
                         if (sym.sign || picks(s)[s.index].level == Correct.OFF) continue
-                        read += sym.candidates[(if (s.right) d.right!! else d.left).initial[s.index].choice]
+                        read += sym.candidates[side(s).initial[s.index].choice]
                         chosen += sym.candidates[picks(s)[s.index].choice]
                     }
                     // What the window shows is what the page then computes: pinned as it stands,
                     // changed or not (the page may have read it otherwise).
-                    c.applyFix(answer, leftText, rightText, read, chosen)
+                    c.applyFix(answer, shown, read, chosen)
                 }
                 onDismiss()
             }) { Text(tr("Готово", "Done")) }
@@ -290,14 +313,14 @@ private fun Panel(title: String, modifier: Modifier, content: @Composable () -> 
 /** The strokes as written, symbols framed: the focused one in the accent, unsure ones dashed amber. */
 @Composable
 private fun Handwriting(fix: dev.inknotes.math.Fix, d: MathNotes.Draft, slots: List<Slot>, focus: Int, offs: List<Boolean>, sym: (Slot) -> Correct.Sym, onTap: (Int) -> Unit) {
-    val ink = fix.left + fix.equals + fix.right.orEmpty()
+    val ink = fix.rows.flatMap { it.left + it.equals + it.right.orEmpty() }
     val all = InkBox.of(ink)
     val pen = MaterialTheme.colorScheme.onSurface
     val accent = MaterialTheme.colorScheme.primary
     val boxes = remember(d) { slots.map { sym(it).box } }
     val unsure = remember(d) { slots.map { sym(it).unsure } }
     Canvas(
-        Modifier.fillMaxWidth().height(96.dp).pointerInput(d) {
+        Modifier.fillMaxWidth().height(96.dp + 48.dp * (fix.rows.size - 1).coerceAtMost(3)).pointerInput(d) {
             detectTapGestures { p ->
                 val scale = min((size.width - 16f) / max(all.width, 1f), (size.height - 16f) / max(all.height, 1f))
                 val ox = (size.width - all.width * scale) / 2 - all.left * scale
@@ -350,11 +373,11 @@ private fun Handwriting(fix: dev.inknotes.math.Fix, d: MathNotes.Draft, slots: L
 
 /** The formula set in print. */
 @Composable
-private fun Typeset(source: String) {
+private fun Typeset(source: String, compact: Boolean = false) {
     val color = MaterialTheme.colorScheme.onSurface.toArgb()
-    val letterPx = with(LocalDensity.current) { 30.dp.toPx() }
+    val letterPx = with(LocalDensity.current) { (if (compact) 22.dp else 30.dp).toPx() }
     val bmp = remember(source, color) { FormulaArt.bitmap(source, letterPx, color) }
-    Box(Modifier.fillMaxWidth().heightIn(min = 64.dp), contentAlignment = Alignment.CenterStart) {
+    Box(Modifier.fillMaxWidth().heightIn(min = if (compact) 40.dp else 64.dp), contentAlignment = Alignment.CenterStart) {
         if (bmp != null) {
             Image(bmp.asImageBitmap(), contentDescription = source, modifier = Modifier.heightIn(max = 110.dp))
         } else {
