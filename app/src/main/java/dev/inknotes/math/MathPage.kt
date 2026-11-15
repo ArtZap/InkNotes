@@ -195,6 +195,17 @@ object MathPage {
             val known = { name: String -> definedNames.any { it.equals(name, ignoreCase = true) } }
             val after = side(eq, 1, eqs, rest, limit = null).maxOfOrNull { it.right } ?: eq.right
             val at = after + 0.4f * eq.h
+            // Set by hand as something the app does not compute (a limit, a sum): said so,
+            // not read again from the strokes.
+            if (pinned.isNotEmpty() && left.isNotEmpty()) {
+                val raw = pinned[Correct.fingerprint(left)]
+                if (raw != null && parseText(raw) == null) {
+                    val after0 = side(eq, 1, eqs, rest, limit = null).maxOfOrNull { it.right } ?: eq.right
+                    out += PageAnswer(after0 + 0.4f * eq.h, eq.cy, eq.h, Answer.Text(listOf(tr("не умею считать такое", "cannot compute this"))), error = true,
+                        fix = Fix(left, null, listOf(eq.top, eq.bottom) + eq.extra, eq.h, eq.cy, envAt(i)))
+                    continue
+                }
+            }
             val pl = pin(left)
             var l = pl ?: readTrimmed(left, eq, reader, known)
             fun fix(read: Expr?) = Fix(left, null, listOf(eq.top, eq.bottom) + eq.extra, eq.h, eq.cy, envAt(i), leftRead = read)

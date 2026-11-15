@@ -242,6 +242,9 @@ private fun FixContent(c: EditorController, answer: PageAnswer, d: MathNotes.Dra
                 fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        } else if (!system) {
+            // The formula keyboard, started from what was read.
+            Calculator(typed ?: "") { typed = it }
         } else {
             OutlinedTextField(
                 value = typed ?: "",
