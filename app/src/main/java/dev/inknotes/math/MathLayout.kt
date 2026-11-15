@@ -48,8 +48,15 @@ fun interface RunReader {
 
 /** A formula as text with gaps: [Text] is structure found from the layout, [Hole] a run to read. */
 sealed class Piece {
-    class Text(val s: String) : Piece()
-    class Hole(val strokes: List<Ink>, val h: Float) : Piece()
+    /**
+     * Structure found from the layout. A sign told by its shape (+, −, a dot, °, a prime) keeps
+     * the [strokes] it was drawn with and the [level] it is on (0 the line, 1 raised, 2 lowered),
+     * so that it can be corrected like a symbol read.
+     */
+    class Text(val s: String, val strokes: List<Ink> = emptyList(), val level: Int = 0) : Piece()
+
+    /** A run to read, on one [level], made of [glyphs] left to right (each its strokes). */
+    class Hole(val strokes: List<Ink>, val h: Float, val glyphs: List<List<Ink>> = listOf(strokes), val level: Int = 0) : Piece()
 }
 
 /**
@@ -114,7 +121,7 @@ object MathLayout {
         val merged = ArrayList<Piece>()
         for (p in out) {
             val last = merged.lastOrNull()
-            if (p is Piece.Text && last is Piece.Text) merged[merged.size - 1] = Piece.Text(last.s + p.s) else merged += p
+            if (p is Piece.Text && last is Piece.Text && p.strokes.isEmpty() && last.strokes.isEmpty()) merged[merged.size - 1] = Piece.Text(last.s + p.s) else merged += p
         }
         return merged
     }
@@ -481,6 +488,11 @@ object MathLayout {
             out += Piece.Text(s)
         }
 
+        /** A sign drawn as [g], on [level]: text, with its strokes. */
+        private fun signText(s: String, g: Glyph, level: Level) {
+            out += Piece.Text(s, g.strokes.sortedBy { it.order }, level.ordinal)
+        }
+
         fun flow(items0: List<Item>, axis: Float?) {
             if (items0.isEmpty()) throw MathError(tr("пусто", "empty"))
             val items = talls(radicals(fractions(items0.toMutableList()))).sortedBy { it.box.left }
@@ -510,7 +522,8 @@ object MathLayout {
                 if (run.isEmpty()) return
                 // Symbols left to right, each in its own stroke order: a + added later between
                 // 2 and 3 must still read 2+3.
-                out += Piece.Hole(run.sortedBy { it.box.left }.flatMap { g -> g.strokes.sortedBy { it.order } }, h)
+                val glyphs = run.sortedBy { it.box.left }.map { g -> g.strokes.sortedBy { it.order } }
+                out += Piece.Hole(glyphs.flatten(), h, glyphs, cur.ordinal)
                 run.clear()
             }
             // An exponent of an exponent (e^{−x²}, a^{b^c}): the last symbol at each depth of
@@ -559,7 +572,7 @@ object MathLayout {
                 if (tiny && !point && abs(b.cy - ax) < 0.2f * h && (r == null || b.cy > r.top + 0.15f * r.height)) {
                     enter(Level.BASE)
                     flush()
-                    text("*")
+                    signText("*", item.glyph, Level.BASE)
                     continue
                 }
                 // A small circle up at the top right of a number is a degree sign: 30°, 45°. Not
@@ -571,7 +584,7 @@ object MathLayout {
                 ) {
                     enter(Level.BASE)
                     flush()
-                    text("°")
+                    signText("°", item.glyph, Level.BASE)
                     continue
                 }
                 // A short upright up at the top right is a prime (f'), unless more of an exponent
@@ -582,7 +595,7 @@ object MathLayout {
                 if (level == Level.SUP && !exponentGoesOn && item.glyph.strokes.size == 1 && b.height < 0.6f * h && b.width < 0.6f * b.height && straight(item.glyph.strokes[0], 0.12f)) {
                     enter(Level.BASE)
                     flush()
-                    text("'")
+                    signText("'", item.glyph, Level.BASE)
                     continue
                 }
                 val sign = sign(item.glyph)
@@ -592,7 +605,7 @@ object MathLayout {
                     val signLevel = if (level == Level.SUP && !refStructure && ref != null && b.bottom > ref.top + 0.1f * ref.height) Level.BASE else level
                     enter(signLevel)
                     flush()
-                    text(sign)
+                    signText(sign, item.glyph, signLevel)
                     // A new term starts: what follows a + or − on the line is not raised over
                     // the symbol before the sign (y⁵ + 3x, with a long-tailed y).
                     if (signLevel == Level.BASE) ref = null
@@ -602,7 +615,7 @@ object MathLayout {
                     // A dot in the middle of the line is multiplication.
                     enter(Level.BASE)
                     flush()
-                    text("*")
+                    signText("*", item.glyph, Level.BASE)
                     continue
                 }
                 enter(level)
