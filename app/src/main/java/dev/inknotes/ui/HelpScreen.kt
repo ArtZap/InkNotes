@@ -45,6 +45,12 @@ private class Topic(val title: String, val entries: List<Pair<String, String>>)
 
 private val TOPICS = listOf(
     Topic(
+        tr("Новое в 0.48", "What's new in 0.48"),
+        listOf(
+            tr("Несколько функций на одном графике", "Several functions on one graph") to tr("Напишите функции одну под другой — y = x², а строкой ниже y = 2x + 1 (или f(x) = …, g(x) = …): они рисуются на одном графике, каждая своим цветом, а в углу графика — какая где. До четырёх функций; строки должны идти подряд и начинаться примерно на одной высоте слева. Функции, написанные далеко друг от друга, по-прежнему получают свои графики.", "Write functions one under another — y = x², and on the next line y = 2x + 1 (or f(x) = …, g(x) = …): they are drawn on one graph, each in its own colour, with which is which in the graph's corner. Up to four functions; the lines must follow one another and start about level on the left. Functions written far apart still get graphs of their own."),
+        ),
+    ),
+    Topic(
         tr("Новое в 0.47", "What's new in 0.47"),
         listOf(
             tr("Экспорт в Markdown для Obsidian", "Export to Markdown for Obsidian") to tr("Экспорт → «Markdown (Obsidian)» → «Сохранить…» и выберите папку хранилища Obsidian. Появится заметка .md с заголовком, датой и тегом inknotes и папка с картинками страниц. В заметке под каждой страницей — рукописный текст, распознанный поиском по почерку (если он включён), и формулы страницы в LaTeX с ответами.", "Export → “Markdown (Obsidian)” → “Save…” and pick your Obsidian vault folder. A .md note appears with a title, date and the inknotes tag, and a folder of page pictures. Under each page the note has the handwriting read by handwriting search (if it is on) and the page's formulas in LaTeX with their answers."),

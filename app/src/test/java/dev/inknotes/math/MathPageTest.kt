@@ -282,6 +282,34 @@ class MathPageTest {
     }
 
     @Test
+    fun functionsOnLinesUnderOneAnotherShareAGraph() {
+        val s = Sheet()
+        // y = x², then right under it y = x + 1: one graph with two curves.
+        s.glyph("y", 100f, 108f, 14f, 22f)
+        s.equals(122f, 112f)
+        s.glyph("x", 148f, 108f, 14f, 16f)
+        s.glyph("2", 164f, 95f, 9f, 12f)
+        s.glyph("y", 100f, 158f, 14f, 22f)
+        s.equals(122f, 162f)
+        s.glyph("x+1", 148f, 156f, 40f, 16f)
+        val answers = s.answers()
+        val g = answers.single().answer as Answer.Graph
+        assertEquals(1, g.more.size)
+        assertEquals(2, g.names.size)
+        assertTrue(g.names.toString(), g.names.all { it.startsWith("y = ") })
+        // Far apart on the page: two graphs.
+        val t = Sheet()
+        t.glyph("y", 100f, 108f, 14f, 22f)
+        t.equals(122f, 112f)
+        t.glyph("x", 148f, 108f, 14f, 16f)
+        t.glyph("2", 164f, 95f, 9f, 12f)
+        t.glyph("y", 100f, 408f, 14f, 22f)
+        t.equals(122f, 412f)
+        t.glyph("x+1", 148f, 406f, 40f, 16f)
+        assertEquals(2, t.answers().count { it.answer is Answer.Graph })
+    }
+
+    @Test
     fun definitionBelowCounts() {
         val s = Sheet()
         // v + 1 = ; and v = 4 written later, lower on the page

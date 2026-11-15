@@ -450,6 +450,13 @@ private fun MiniGraph(g: Answer.Graph) {
             drawLine(axis, Offset(0f, gy(v)), Offset(w, gy(v)), 1.dp.toPx())
         }
         clipRect {
+            val extra = listOf(Color(0xFFC77700), Color(0xFF2E8B57), Color(0xFFB0306E))
+            for ((k, curve) in g.more.withIndex()) for (seg in curve) {
+                val p = Path()
+                p.moveTo(gx(seg[0]), gy(seg[1]))
+                for (i in 2 until seg.size step 2) p.lineTo(gx(seg[i]), gy(seg[i + 1]))
+                drawPath(p, extra[k % extra.size], style = Stroke(2.5f.dp.toPx(), join = androidx.compose.ui.graphics.StrokeJoin.Round))
+            }
             for (seg in g.segments) {
                 val p = Path()
                 p.moveTo(gx(seg[0]), gy(seg[1]))
