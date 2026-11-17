@@ -1774,6 +1774,8 @@ class EditorController(
 
     override fun typos(index: Int): dev.inknotes.search.PageTypos? = typos[notebook.pageIds.getOrNull(index)]
 
+    override fun hand(): dev.inknotes.math.HandGlyphs? = math.fixes.hand.takeIf { math.fixes.inHand && !it.isEmpty() }
+
     override fun onTypoTapped(page: Int, typo: dev.inknotes.search.Spelling.Typo) {
         val id = notebook.pageIds.getOrNull(page) ?: return
         tappedTypo = id to typo

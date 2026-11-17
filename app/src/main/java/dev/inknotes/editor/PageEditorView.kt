@@ -196,6 +196,9 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         /** Numbers of page [index] that can be turned on a scale (a = 3). */
         fun knobs(index: Int): List<Knob> = emptyList()
 
+        /** The writer's digits and signs, when answers are to be drawn in their hand. */
+        fun hand(): dev.inknotes.math.HandGlyphs? = null
+
         /** Words of page [index] that may be misspelt, from the last check. */
         fun typos(index: Int): dev.inknotes.search.PageTypos? = null
 
@@ -3677,14 +3680,21 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                     is Answer.Text -> {
                         val lines = if (a.unsure) ans.lines.dropLast(1) + (ans.lines.last() + " ?") else ans.lines
                         answerPaint.textAlign = Paint.Align.LEFT
+                        // In the writer's own hand when it has every symbol (not for errors).
+                        val hand = if (a.error) null else source?.hand()?.takeIf { h -> ans.lines.all { h.covers(it) } }
+                        fun widthOf(line: String): Float {
+                            if (hand == null) return answerPaint.measureText(line)
+                            val (body, tail) = splitTail(line)
+                            return (hand.layout(body, 0f, 0f, answerPaint.textSize * HAND_HEIGHT)?.width ?: answerPaint.measureText(body)) + answerPaint.measureText(tail)
+                        }
                         // An "=" near the right edge: a smaller answer, or else one under the line.
                         val room = pageWidth - ANSWER_MARGIN - a.x
-                        val wide = lines.maxOf { answerPaint.measureText(it) }
+                        val wide = lines.maxOf { widthOf(it) }
                         var x = a.x
                         var y = a.y
                         if (wide > room) {
                             answerPaint.textSize = ts * max(MIN_ANSWER_SCALE, room / wide)
-                            val w = lines.maxOf { answerPaint.measureText(it) }
+                            val w = lines.maxOf { widthOf(it) }
                             if (w > room) {
                                 answerPaint.textSize = ts
                                 x = max(ANSWER_MARGIN, pageWidth - ANSWER_MARGIN - wide)
@@ -3694,10 +3704,16 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                         val size = answerPaint.textSize
                         val lineH = size * 1.25f
                         var baseline = y - (lines.size - 1) * lineH / 2 + size * 0.36f
-                        val textW = lines.maxOf { answerPaint.measureText(it) }
+                        val textW = lines.maxOf { widthOf(it) }
                         bounds(a).set(x, baseline - size, x + textW, baseline + (lines.size - 1) * lineH + size * 0.3f)
                         for (line in lines) {
-                            canvas.drawText(line, x, baseline, answerPaint)
+                            val placed = hand?.let { h -> splitTail(line).let { (body, tail) -> h.layout(body, x, baseline, size * HAND_HEIGHT)?.let { it to tail } } }
+                            if (placed == null) {
+                                canvas.drawText(line, x, baseline, answerPaint)
+                            } else {
+                                drawHand(canvas, placed.first, color, size * HAND_HEIGHT)
+                                if (placed.second.isNotEmpty()) canvas.drawText(placed.second, x + placed.first.width, baseline, answerPaint)
+                            }
                             baseline += lineH
                         }
                     }
@@ -3779,6 +3795,39 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                     up = !up
                 }
                 canvas.drawPath(typoPath, typoPaint)
+            }
+        }
+
+        private val handPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeCap = Paint.Cap.ROUND
+            strokeJoin = Paint.Join.ROUND
+        }
+        private val handPath = Path()
+
+        /** "2,5 ?" → "2,5" and " ?": the doubt mark of an unsure answer stays in the font. */
+        private fun splitTail(line: String): Pair<String, String> =
+            if (line.endsWith(" ?")) line.dropLast(2) to " ?" else line to ""
+
+        /** An answer in the writer's hand: each stroke a smooth line through its points. */
+        private fun drawHand(canvas: Canvas, line: dev.inknotes.math.HandGlyphs.Line, color: Int, height: Float) {
+            handPaint.color = color
+            handPaint.strokeWidth = max(height * 0.085f, 1f)
+            for (g in line.glyphs) for (s in g.strokes) {
+                handPath.rewind()
+                handPath.moveTo(s[0], s[1])
+                if (s.size == 2) {
+                    handPath.lineTo(s[0] + 0.01f, s[1])
+                } else {
+                    var i = 2
+                    while (i + 2 < s.size) {
+                        // Through the middles, the points as controls: no corners.
+                        handPath.quadTo(s[i], s[i + 1], (s[i] + s[i + 2]) / 2, (s[i + 1] + s[i + 3]) / 2)
+                        i += 2
+                    }
+                    handPath.lineTo(s[s.size - 2], s[s.size - 1])
+                }
+                canvas.drawPath(handPath, handPaint)
             }
         }
 
@@ -4302,6 +4351,9 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         private const val MAX_ZOOM = 6f
         private const val TAP_TIMEOUT_MS = 300L
         private const val BUZZ_GAP_MS = 60L
+
+        /** Height of a digit against the answer font's size: answers in the writer's hand. */
+        private const val HAND_HEIGHT = 0.72f
         private const val SELECTION_COLOR = 0xFF1E5BD8.toInt()
         private const val HANDLE_DP = 9f
         private const val HANDLE_GRAB_DP = 28f

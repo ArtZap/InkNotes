@@ -29,6 +29,17 @@ class FixStore(private val dir: File?) {
     /** Where the writer puts exponents and indexes. */
     val placements: Placements
 
+    /** The writer's digits and signs for answers in their hand. */
+    val hand: HandGlyphs
+
+    /** Answers after "=" are drawn with [hand] where it has every symbol of them. */
+    @Volatile
+    var inHand: Boolean = false
+        set(value) {
+            field = value
+            saveSettings()
+        }
+
     @Volatile
     var learn: Boolean = true
         set(value) {
@@ -47,6 +58,7 @@ class FixStore(private val dir: File?) {
         learned = runCatching { Learned.parse(file(LEARNED)!!.readText()) }.getOrDefault(Learned())
         samples = runCatching { Samples.parse(file(SAMPLES)!!.readText()) }.getOrDefault(Samples())
         placements = runCatching { Placements.parse(file(PLACES)!!.readText()) }.getOrDefault(Placements())
+        hand = runCatching { HandGlyphs.parse(file(HAND)!!.readText()) }.getOrDefault(HandGlyphs())
         runCatching {
             for (line in file(PINS)!!.readLines()) {
                 val tab = line.indexOf('\t')
@@ -66,6 +78,7 @@ class FixStore(private val dir: File?) {
                 when (k) {
                     "learn" -> learn = v == "1"
                     "ask" -> ask = Ask.valueOf(v)
+                    "hand" -> inHand = v == "1"
                 }
             }
         }
@@ -113,6 +126,11 @@ class FixStore(private val dir: File?) {
         if (strokes.isNotEmpty()) runCatching { file(SAMPLES)?.writeText(samples.serialize()) }
     }
 
+    /** Writes [hand] down after a change. */
+    fun saveHand() {
+        runCatching { file(HAND)?.writeText(hand.serialize()) }
+    }
+
     /** Forgets the handwriting learned (the pinned formulas stay: they are the writer's text). */
     fun forget() {
         learned.clear()
@@ -129,7 +147,7 @@ class FixStore(private val dir: File?) {
     }
 
     private fun saveSettings() {
-        runCatching { file(SETTINGS)?.writeText("learn=${if (learn) 1 else 0}\nask=${ask.name}\n") }
+        runCatching { file(SETTINGS)?.writeText("learn=${if (learn) 1 else 0}\nask=${ask.name}\nhand=${if (inHand) 1 else 0}\n") }
     }
 
     private companion object {
@@ -139,6 +157,7 @@ class FixStore(private val dir: File?) {
         const val PLACES = "formula-places.tsv"
         const val SETTINGS = "formula-settings.txt"
         const val SCALES = "formula-scales.tsv"
+        const val HAND = "hand-glyphs.tsv"
         const val MAX_PINS = 5000
     }
 }
