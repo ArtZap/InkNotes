@@ -45,6 +45,13 @@ private class Topic(val title: String, val entries: List<Pair<String, String>>)
 
 private val TOPICS = listOf(
     Topic(
+        tr("Новое в 0.52", "What's new in 0.52"),
+        listOf(
+            tr("Проверка орфографии", "Spell check") to tr("Меню → «Орфография»: строки текущей страницы распознаются, а слова проверяет проверка правописания Android (словарь вашей клавиатуры, работает без интернета). Слова, похожие на ошибку, подчёркиваются красной волной. Коснитесь слова пальцем — появятся варианты; «Это верно» больше не будет подчёркивать это слово. Формулы, сокращения заглавными (МФТИ) и имена функций (sin, lim) не проверяются. Подчёркивание пропадает, как только на странице что-то изменится.", "Menu → “Spelling”: the lines of the current page are recognised and the words are checked by Android's spell checker (your keyboard's dictionary, works offline). Words that look misspelt get a red wavy line. Tap one with a finger to see suggestions; “It is right” stops marking that word. Formulas, abbreviations in capitals and function names (sin, lim) are not checked. The lines go away as soon as anything on the page changes."),
+            tr("Если не работает", "If it does not work") to tr("Нужно включённое распознавание почерка (поиск по почерку в библиотеке) и проверка правописания в системе: Настройки Android → Язык и ввод → Проверка правописания. Подчёркнутое слово может быть и ошибкой распознавания, а не вашей.", "Handwriting recognition must be on (handwriting search in the library), and so must the system's spell checker: Android settings → Language & input → Spell checker. An underlined word may also be misread rather than misspelt."),
+        ),
+    ),
+    Topic(
         tr("Новое в 0.51", "What's new in 0.51"),
         listOf(
             tr("Кисть под пером", "The brush under the pen") to tr("Держите перо над страницей, не касаясь: под ним видно, чем оно будет рисовать — точку размером и цветом кисти, у маркера — плоский кончик, у ластика — пунктирный круг. Работает, если перо и планшет сообщают о наведении (M-Pencil на MatePad — да).", "Hold the pen above the page without touching: under it you see what it will draw with — a dot of the brush's size and colour, the marker's flat tip, a dashed ring for the eraser. Works when the pen and tablet report hovering (M-Pencil on a MatePad does)."),

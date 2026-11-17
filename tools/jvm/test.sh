@@ -15,7 +15,7 @@ if [ -d build/crohme/CROHME_full_v2 ]; then export CROHME_DIR="$PWD/build/crohme
 export FORMULA_EXPORT=${FORMULA_EXPORT:-/tmp/formulas.tsv}
 mkdir -p "$OUT"
 # MathNotes needs ML Kit (Android): left out; LayoutTuner is a tool, not a test.
-"$KOTLINC/bin/kotlinc" $(ls $M/math/*.kt | grep -v MathNotes) $M/data/Lang.kt $M/editor/Tidy.kt \
+"$KOTLINC/bin/kotlinc" $(ls $M/math/*.kt | grep -v MathNotes) $M/data/Lang.kt $M/editor/Tidy.kt $M/search/Spelling.kt \
   $(ls $T/*.kt | grep -v LayoutTuner) app/src/sharedTest/java/dev/inknotes/math/*.kt \
   tools/jvm/junit/Shim.kt tools/jvm/junit/Toggle.kt -d "$OUT" 2>&1 | grep -E "error" | head -20 || true
 if [ $# -gt 0 ]; then CLASSES="$*"; else CLASSES=$(grep -ho "^class [A-Za-z0-9]*Test\b" $T/*.kt | awk '{print $2}' | sort -u); fi

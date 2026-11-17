@@ -384,6 +384,7 @@ fun EditorScreen(
 
     controller.recognizedText?.let { RecognizedTextDialog(it, controller, onDismiss = { controller.recognizedText = null }) }
     controller.tappedAnswer?.let { AnswerDialog(controller, it, onDismiss = { controller.tappedAnswer = null }) }
+    controller.tappedTypo?.let { (_, typo) -> TypoDialog(controller, typo) }
     controller.fixing?.let { FixDialog(controller, it, onDismiss = { controller.fixing = null }) }
     controller.studyCards?.let { CardsDialog(controller, it, onDismiss = { controller.closeCards() }) }
     if (showToc) TocDialog(controller, onDismiss = { showToc = false })
@@ -593,6 +594,7 @@ private fun barActions(
         a("add-page", tr("Добавить страницу после текущей", "Add a page after the current one"), c::addPageAfterCurrent, title = tr("Добавить страницу", "Add page")),
         a("toc", tr("Оглавление тетради", "Notebook contents"), onToc, title = tr("Оглавление…", "Contents…")),
         a("page-text", tr("Распознанный текст страницы", "Recognised text of the page"), onPageText, title = tr("Распознанный текст страницы", "Recognised text of the page")),
+        a("spelling", tr("Проверить орфографию на странице", "Check spelling on the page"), c::checkSpelling, title = tr("Проверить орфографию", "Check spelling")),
         a(
             "math",
             tr("Ответы после «=»: вычисления, переменные, системы", "Answers after “=”: calculations, variables, systems"),

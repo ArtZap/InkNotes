@@ -32,7 +32,8 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
 /** One recognized line: best guess [text], other guesses [alternatives], where it is on the page. */
-class TextLine(val text: String, val alternatives: List<String>, val box: RectF)
+/** A recognised line; [strokes]: which of the strokes given it was read from (not kept in the index). */
+class TextLine(val text: String, val alternatives: List<String>, val box: RectF, val strokes: List<Int> = emptyList())
 
 /** A search result: page [pageIndex] of [notebook]; [line] is null for a match in the title. */
 class SearchHit(val notebook: Notebook, val pageIndex: Int, val line: TextLine?)
@@ -146,6 +147,18 @@ class HandwritingIndex(
         submit {
             val lines = recognize(ink)
             main.post { onResult(lines?.joinToString("\n") { it.text }) }
+        }
+    }
+
+    /**
+     * Lines of [strokes] (a page), each with the strokes it was read from; null when
+     * recognition is off or failed. [onResult] runs on the main thread.
+     */
+    fun recognizeLines(strokes: List<PageStroke>, onResult: (List<TextLine>?) -> Unit) {
+        if (state != State.Ready) return onResult(null)
+        submit {
+            val lines = recognize(strokes)
+            main.post { onResult(lines) }
         }
     }
 
@@ -284,7 +297,7 @@ class HandwritingIndex(
                 .getOrElse { return null }
             val texts = result.candidates.map { it.text.trim() }.filter { it.isNotEmpty() }
             if (texts.isEmpty()) continue
-            out += TextLine(texts[0], texts.drop(1), box)
+            out += TextLine(texts[0], texts.drop(1), box, group)
             before = texts[0]
         }
         return out
