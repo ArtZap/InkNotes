@@ -1707,6 +1707,7 @@ private fun SelectionOptions(c: EditorController, onPickColor: () -> Unit, onHat
         TextButton(onClick = { c.scaleSelectedText(1.2f) }) { Text(tr("А+", "A+")) }
     } else {
         TextButton(onClick = { c.recognizeSelection() }) { Text(tr("Текст", "Text")) }
+        if (c.selectionLineKinds.isNotEmpty()) TextButton(onClick = { c.tidySelection() }) { Text(tr("Выровнять", "Straighten")) }
         if (c.selectionLineKinds.isNotEmpty()) TextButton(onClick = { c.formulaFromSelection() }) { Text(tr("Формула", "Formula")) }
     }
     SelectionMoreButton(c)

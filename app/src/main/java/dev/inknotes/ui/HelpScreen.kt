@@ -45,6 +45,12 @@ private class Topic(val title: String, val entries: List<Pair<String, String>>)
 
 private val TOPICS = listOf(
     Topic(
+        tr("Новое в 0.49", "What's new in 0.49"),
+        listOf(
+            tr("Выровнять почерк", "Straighten handwriting") to tr("Обведите строки лассо и нажмите «Выровнять» на панели выделения. Наклонная строка становится ровной, слова встают на одну линию, слово намного мельче или крупнее остальных подтягивается к ним, промежутки между словами становятся ровнее. Сами буквы не меняются — это ваш почерк. Черты дробей, подчёркивания и рисунки остаются на месте. «Отменить» возвращает как было.", "Circle lines with the lasso and tap “Straighten” on the selection bar. A sloping line is made level, words are set on one line, a word much smaller or larger than the others is brought closer to their size, and the gaps between words become more even. The letters themselves do not change — it is your handwriting. Fraction bars, underlines and drawings stay where they are. “Undo” brings everything back."),
+        ),
+    ),
+    Topic(
         tr("Новое в 0.48", "What's new in 0.48"),
         listOf(
             tr("Несколько функций на одном графике", "Several functions on one graph") to tr("Напишите функции с разными именами одну под другой — f(x) = x², а строкой ниже g(x) = 2x + 1: они рисуются на одном графике, каждая своим цветом, а в углу графика — какая где. До четырёх функций; строки должны идти подряд и начинаться примерно на одной высоте слева. Строки y = … подряд и функции, написанные далеко друг от друга, по-прежнему получают каждая свой график.", "Write functions with different names one under another — f(x) = x², and on the next line g(x) = 2x + 1: they are drawn on one graph, each in its own colour, with which is which in the graph's corner. Up to four functions; the lines must follow one another and start about level on the left. Lines of y = … in a row, and functions written far apart, still get a graph each."),

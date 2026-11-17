@@ -279,6 +279,11 @@ class EditorController(
 
     fun flipSelection(horizontal: Boolean) = view?.flipSelection(horizontal)
 
+    /** «Выровнять почерк»: the selected handwriting straightened; undo brings it back. */
+    fun tidySelection() {
+        if (view?.tidySelection() != true) showStatus(tr("Почерк уже ровный", "The handwriting is already straight"))
+    }
+
     fun addToTable(row: Boolean) = view?.addToTable(row)
 
     fun removeFromTable(row: Boolean) {
