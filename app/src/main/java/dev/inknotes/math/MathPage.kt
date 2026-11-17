@@ -62,6 +62,45 @@ class Fix(
 }
 
 /**
+ * A number given to a letter on the page (a = 3): it can be turned on a scale beside it, and
+ * the lines that use it change at once. [written]: the number as read off the ink; [value]:
+ * the one in use, set on the scale when [set]. [key]: [Correct.fingerprint] of the number's
+ * strokes, where the set value is kept; the box ([left]…[bottom]) is those strokes.
+ */
+class Knob(
+    val name: String,
+    val value: Double,
+    val written: Double,
+    val set: Boolean,
+    val key: String,
+    val left: Float,
+    val top: Float,
+    val right: Float,
+    val bottom: Float,
+    val h: Float,
+) {
+    /** The step of one mark on the scale: the last written digit (1 for 3, 0.1 for 2.5). */
+    val step: Double get() = stepOf(written)
+
+    companion object {
+        fun stepOf(v: Double): Double {
+            for (d in 0..3) {
+                val k = Math.pow(10.0, d.toDouble())
+                if (abs(v * k - Math.rint(v * k)) < 1e-6) return 1 / k
+            }
+            return 0.001
+        }
+
+        /** A plain number, or one with a minus: what a scale can turn. */
+        fun constant(e: Expr): Double? = when (e) {
+            is Expr.Num -> e.v
+            is Expr.Mul -> if (e.factors.size == 2 && e.factors.all { it is Expr.Num }) e.factors.fold(1.0) { p, f -> p * (f as Expr.Num).v } else null
+            else -> null
+        }?.takeIf { it.isFinite() }
+    }
+}
+
+/**
  * Finds the math on a page: every handwritten "=" (two short stacked dashes) with what is
  * written to its left and right. Read top to bottom:
  * - `expr =` with nothing after it gets an answer;
@@ -86,7 +125,16 @@ object MathPage {
      * The answers on a page. [pinned]: formula text the writer set by hand for strokes, by
      * their [Correct.fingerprint]; taken instead of reading them.
      */
-    fun analyze(strokes: List<Ink>, reader: RunReader, pageWidth: Float = 1000f, pinned: Map<String, String> = emptyMap()): List<PageAnswer> {
+    fun analyze(
+        strokes: List<Ink>,
+        reader: RunReader,
+        pageWidth: Float = 1000f,
+        pinned: Map<String, String> = emptyMap(),
+        /** Numbers set on a scale, by [Correct.fingerprint] of their strokes. */
+        scaled: Map<String, Double> = emptyMap(),
+        /** Filled with the page's numbers that can be turned on a scale. */
+        knobs: MutableList<Knob>? = null,
+    ): List<PageAnswer> {
         fun pin(side: List<Ink>): Expr? = if (pinned.isEmpty() || side.isEmpty()) null else pinned[Correct.fingerprint(side)]?.let(::parseText)
         val ink = strokes.filter { it.height < MAX_STROKE && it.width < MAX_STROKE }
         val eqs = findEquals(ink).take(MAX_EQUALS)
@@ -169,6 +217,17 @@ object MathPage {
             }
             // Set by hand: read as set, not otherwise.
             val pinnedHere = pl != null || pr != null
+            // a = 3: a number that can be turned on a scale; the value set there replaces it.
+            val written = if (l is Expr.Sym && graphParam(l) == null && Calc.isDefinition(l)) Knob.constant(r) else null
+            if (written != null) {
+                val key = Correct.fingerprint(right)
+                val v = scaled[key]
+                knobs?.add(Knob((l as Expr.Sym).name, v ?: written, written, v != null, key, right.minOf { it.left }, right.minOf { it.top }, right.maxOf { it.right }, right.maxOf { it.bottom }, eq.h))
+                if (v != null) {
+                    defs += Def(i, l, Expr.Num(v), leftInk = left, rightInk = right)
+                    continue
+                }
+            }
             if (Calc.isDefinition(l)) defs += Def(i, l, r, leftInk = left, rightInk = right) else single += Def(i, l, r, again.takeIf { !pinnedHere }, left, right)
         }
         val definedNames = defs.mapNotNull { Calc.definedName(it.left) }.toSet()

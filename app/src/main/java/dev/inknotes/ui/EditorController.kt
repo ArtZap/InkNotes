@@ -366,6 +366,7 @@ class EditorController(
 
     // Answers after "=" by page id, and the page revision they were computed from.
     private val mathAnswers = HashMap<String, List<PageAnswer>>()
+    private val mathKnobs = HashMap<String, List<dev.inknotes.math.Knob>>()
     private val mathRevision = HashMap<String, Int>()
     private val mathRunnable = Runnable { requestMath() }
 
@@ -1452,7 +1453,7 @@ class EditorController(
                     // Formulas and their answers, as on the page.
                     val content = runCatching { repo.loadPage(nb, pageId) }.getOrNull()
                     val answers = if (content == null || math.state != MathNotes.State.Ready) emptyList() else
-                        waitFor<List<PageAnswer>> { cb -> math.analyze("export/${nb.id}/$pageId", content.strokes, nb.pageWidthUnits(pageId), cb) }.orEmpty()
+                        waitFor<List<PageAnswer>> { cb -> math.analyze("export/${nb.id}/$pageId", content.strokes, nb.pageWidthUnits(pageId), onResult = cb) }.orEmpty()
                     val formulas = answers.mapNotNull { a ->
                         val fix = a.fix ?: return@mapNotNull null
                         val left = fix.leftRead ?: return@mapNotNull null
@@ -1861,6 +1862,55 @@ class EditorController(
             showStatus(tr("Пример сохранён", "Example saved"))
             onReady(FileProvider.getUriForFile(context, context.packageName + ".files", file))
         }
+    }
+
+    /** A number on its scale: [knob] of page [pageId], now at [value]. */
+    class Scaling(val pageId: String, val knob: dev.inknotes.math.Knob, val value: Double)
+
+    /** The scale shown under the page, or null. */
+    var scaling by mutableStateOf<Scaling?>(null)
+        private set
+
+    override fun onKnobTapped(page: Int, knob: dev.inknotes.math.Knob) {
+        val id = notebook.pageIds.getOrNull(page) ?: return
+        scaling?.let { if (it.knob.key != knob.key) endScaling() }
+        checkOffer = null
+        scaling = Scaling(id, knob, knob.value)
+        math.turning = knob.key to knob.value
+        view?.refresh()
+    }
+
+    override fun knobs(index: Int): List<dev.inknotes.math.Knob> =
+        if (math.state == MathNotes.State.Ready) mathKnobs[notebook.pageIds.getOrNull(index)].orEmpty() else emptyList()
+
+    override fun turning(): Pair<String, Double>? = scaling?.let { it.knob.key to it.value }
+
+    /** The number on the scale set to [value]: the page's answers follow at once. */
+    fun turnTo(value: Double) {
+        val s = scaling ?: return
+        if (!value.isFinite() || value == s.value) return
+        scaling = Scaling(s.pageId, s.knob, value)
+        math.turning = s.knob.key to value
+        mathRevision.remove(s.pageId)
+        requestMath()
+        view?.refresh()
+    }
+
+    /** The scale closed: the value kept (as written again when it is the written one). */
+    fun endScaling() {
+        val s = scaling ?: return
+        math.fixes.scale(s.knob.key, s.value.takeIf { abs(it - s.knob.written) > 1e-12 })
+        math.turning = null
+        scaling = null
+        mathRevision.remove(s.pageId)
+        requestMath()
+        view?.refresh()
+    }
+
+    /** Back to the number as written. */
+    fun resetScaling() {
+        val s = scaling ?: return
+        turnTo(s.knob.written)
     }
 
     override fun onAnswerTapped(answer: PageAnswer) {
@@ -2711,7 +2761,7 @@ class EditorController(
             val doc = docs[id] ?: continue
             if (mathRevision[id] == doc.revision) continue
             mathRevision[id] = doc.revision
-            math.analyze("${notebook.id}/$id", doc.strokes, notebook.pageWidthUnits(id)) { answers ->
+            math.analyze("${notebook.id}/$id", doc.strokes, notebook.pageWidthUnits(id), onKnobs = { k -> if (k.isEmpty()) mathKnobs.remove(id) else mathKnobs[id] = k }) { answers ->
                 if (answers.isEmpty()) mathAnswers.remove(id) else mathAnswers[id] = answers
                 if (id == notebook.pageIds.getOrNull(pageIndex)) offerCheck(id, answers)
                 view?.refresh()
@@ -2724,6 +2774,8 @@ class EditorController(
         if (math.state == MathNotes.State.Ready || math.state == MathNotes.State.Downloading) {
             math.disable()
             mathAnswers.clear()
+            mathKnobs.clear()
+            scaling = null
             mathRevision.clear()
             view?.refresh()
         } else {

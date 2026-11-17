@@ -44,6 +44,7 @@ import dev.inknotes.data.PageStroke
 import java.util.Collections
 import java.util.IdentityHashMap
 import dev.inknotes.math.Answer
+import dev.inknotes.math.Knob
 import dev.inknotes.math.PageAnswer
 import dev.inknotes.math.Printer
 import dev.inknotes.math.Plot
@@ -128,6 +129,9 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         /** A finger tapped an answer after "=": show how it was found. */
         fun onAnswerTapped(answer: PageAnswer) {}
 
+        /** A finger tapped the number of a = 3 on page [page]: its scale. */
+        fun onKnobTapped(page: Int, knob: Knob) {}
+
         /** A short message for the user (e.g. why a tap did nothing). */
         fun onHint(text: String) {}
 
@@ -185,6 +189,12 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
 
         /** Answers computed after "=" on page [index]. */
         fun answers(index: Int): List<PageAnswer> = emptyList()
+
+        /** Numbers of page [index] that can be turned on a scale (a = 3). */
+        fun knobs(index: Int): List<Knob> = emptyList()
+
+        /** The key of the number being turned now, and its value; null when none is. */
+        fun turning(): Pair<String, Double>? = null
 
         /** Rectangles of the links on page [index] (shown with a frame; a finger tap follows them). */
         fun links(index: Int): List<RectF> = emptyList()
@@ -2098,7 +2108,12 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             pageLayer.invalidate()
             return
         }
-        pageLayer.answerAt(page, p[0], p[1], 8 * density / currentScale())?.let {
+        val near = 8 * density / currentScale()
+        source?.knobs(page)?.firstOrNull { k -> p[0] in k.left - near..k.right + near && p[1] in k.top - near..k.bottom + near }?.let {
+            listener?.onKnobTapped(page, it)
+            return
+        }
+        pageLayer.answerAt(page, p[0], p[1], near)?.let {
             listener?.onAnswerTapped(it)
             return
         }
@@ -3452,6 +3467,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                 drawElements(canvas, src, doc, pageToCanvas, region, exclude = hidden)
                 drawSpoilers(canvas, doc, pageToCanvas, region, hidden)
                 drawAnswers(canvas, src.answers(page), widths[page])
+                drawKnobs(canvas, src.knobs(page), src.turning())
             }
             canvas.restore()
         }
@@ -3512,6 +3528,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                 // The selection lies on top; while dragged it is drawn above all pages instead.
                 if (sel.isNotEmpty() && !dragging) drawElements(canvas, src, doc, toScreen, null, only = sel)
                 drawAnswers(canvas, src.answers(i), widths[i])
+                drawKnobs(canvas, src.knobs(i), src.turning())
                 if (!(dragging && i == selectionPage)) drawOverlays(canvas, i)
                 if (i == zoomRegionPage && zoomPad != null) {
                     zoomFramePaint.strokeWidth = 2f * density / scale
@@ -3638,6 +3655,37 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                         }
                     }
                 }
+            }
+        }
+
+        private val knobFill = Paint(Paint.ANTI_ALIAS_FLAG)
+        private val knobEdge = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
+
+        /**
+         * Numbers set on a scale, and the one being turned: a chip over the written number
+         * with the value in use. The ink stays under it: «Как написано» takes it back.
+         */
+        private fun drawKnobs(canvas: Canvas, knobs: List<Knob>, turning: Pair<String, Double>?) {
+            for (k in knobs) {
+                val active = turning?.first == k.key
+                if (!k.set && !active) continue
+                val value = if (active) turning!!.second else k.value
+                val label = runCatching { Printer.number(value) }.getOrDefault("?")
+                val blue = if (dark) 0xFF82AAFF.toInt() else ANSWER_COLOR
+                answerPaint.textSize = k.h * 0.85f
+                answerPaint.textAlign = Paint.Align.CENTER
+                answerPaint.color = blue
+                val pad = k.h * 0.15f
+                val w = max(k.right - k.left, answerPaint.measureText(label)) + 2 * pad
+                val cx = (k.left + k.right) / 2
+                val cy = (k.top + k.bottom) / 2
+                val r = RectF(cx - w / 2, min(k.top, cy - k.h / 2) - pad, cx + w / 2, max(k.bottom, cy + k.h / 2) + pad)
+                knobFill.color = if (dark) 0xF0202124.toInt() else 0xF8FFFFFF.toInt()
+                canvas.drawRoundRect(r, k.h * 0.25f, k.h * 0.25f, knobFill)
+                knobEdge.color = blue
+                knobEdge.strokeWidth = max(1f, k.h * if (active) 0.08f else 0.04f)
+                canvas.drawRoundRect(r, k.h * 0.25f, k.h * 0.25f, knobEdge)
+                canvas.drawText(label, r.centerX(), r.centerY() + answerPaint.textSize * 0.36f, answerPaint)
             }
         }
 
