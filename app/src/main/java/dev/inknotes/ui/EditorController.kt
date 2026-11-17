@@ -2903,6 +2903,8 @@ class EditorController(
         v.spoilerColor = spoilerColor
         v.spoilerSize = spoilerSize
         v.scribbleErase = scribbleErase
+        v.haptics = prefs.haptics
+        v.brushPreview = prefs.brushPreview
         v.penPressure = penPressure
         v.compassOn = compassOn
         v.pdfDark = pdfDark

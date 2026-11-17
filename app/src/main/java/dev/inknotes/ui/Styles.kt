@@ -30,7 +30,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.Switch
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -328,6 +331,8 @@ fun SettingsDialog(
                 Spacer(Modifier.height(4.dp))
                 LanguageChoice()
                 Spacer(Modifier.height(4.dp))
+                FeelSettings()
+                Spacer(Modifier.height(4.dp))
                 FormulaFixSettings(AppServices.get(androidx.compose.ui.platform.LocalContext.current).math.fixes)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                     Button(onClick = onDismiss) { Text(tr("Готово", "Done")) }
@@ -410,6 +415,42 @@ private fun StylePreview(style: UiStyle, dark: Boolean, modifier: Modifier) {
                 }
             }
         }
+    }
+}
+
+/** How editing feels: ticks under the fingers, the brush shown under the pen. */
+@Composable
+private fun FeelSettings() {
+    val prefs = AppServices.get(androidx.compose.ui.platform.LocalContext.current).prefs
+    var haptics by remember { mutableStateOf(prefs.haptics) }
+    var preview by remember { mutableStateOf(prefs.brushPreview) }
+    SwitchRow(
+        tr("Тактильный отклик", "Haptic feedback"),
+        tr("Лёгкий щелчок, когда фигура выпрямилась, штрих стёрт, линейка встала на 0°, 45°, 90°, выделено лассо, отменено двумя пальцами", "A light tick when a shape snaps, a stroke is erased, the ruler meets 0°, 45°, 90°, the lasso selects, two fingers undo"),
+        haptics,
+    ) {
+        haptics = it
+        prefs.haptics = it
+    }
+    SwitchRow(
+        tr("Кисть под пером", "Brush under the pen"),
+        tr("Перо над страницей показывает кисть, которой будет рисовать: её размер и цвет, у ластика — круг", "The pen above the page shows the brush it will draw with: its size and colour; a ring for the eraser"),
+        preview,
+    ) {
+        preview = it
+        prefs.brushPreview = it
+    }
+}
+
+@Composable
+private fun SwitchRow(title: String, note: String, on: Boolean, onChange: (Boolean) -> Unit) {
+    Row(Modifier.fillMaxWidth().clickable { onChange(!on) }, verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.titleMedium)
+            Text(note, fontSize = 12.sp, lineHeight = 16.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Spacer(Modifier.width(12.dp))
+        Switch(checked = on, onCheckedChange = onChange)
     }
 }
 

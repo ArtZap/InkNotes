@@ -302,6 +302,23 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
     /** A zigzag scribbled over writing erases it. */
     var scribbleErase = true
 
+    /** A light tick under the fingers: a shape snapped, a stroke erased, an angle met. */
+    var haptics = true
+
+    /** The pen held over the page shows the brush it will draw with: its size and colour. */
+    var brushPreview = true
+
+    private var lastBuzz = 0L
+
+    /** A tick, unless the writer turned them off; light ones no more often than [BUZZ_GAP_MS]. */
+    private fun buzz(kind: Int = HapticFeedbackConstants.CLOCK_TICK) {
+        if (!haptics) return
+        val now = android.os.SystemClock.uptimeMillis()
+        if (kind == HapticFeedbackConstants.CLOCK_TICK && now - lastBuzz < BUZZ_GAP_MS) return
+        lastBuzz = now
+        performHapticFeedback(kind)
+    }
+
     /** Layers not drawn; and those whose elements are not erased, selected or moved (hidden or locked). */
     var hiddenLayers: Set<Int> = emptySet()
         set(value) {
@@ -1761,7 +1778,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                     val drop: MutableSet<PageStroke> = Collections.newSetFromMap(IdentityHashMap())
                     drop.addAll(gone)
                     doc.edit(strokes = doc.strokes.filterNot { it in drop })
-                    performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
+                    buzz(HapticFeedbackConstants.CONTEXT_CLICK)
                     continue
                 }
             }
@@ -1875,7 +1892,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         val shapeStrokes = paths.map { path -> PageStroke(kind, Stroke(brush, shapeInputs(path, pressure)), if (kind == InkKind.DASHED) wet.dash else null) }
         doc?.let { it.edit(strokes = it.strokes + shapeStrokes, fills = it.fills + shapeFills) }
         shapeStrokes.mapNotNull { PageEdits.bounds(it) }.reduceOrNull { a, b -> RectF(a).apply { union(b) } }?.let { listener?.onInkAdded(wet.page, it) }
-        performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
+        buzz(HapticFeedbackConstants.CONTEXT_CLICK)
         changed()
     }
 
@@ -1955,6 +1972,8 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             strokes = doc.strokes.filterNot { near(it) && PageEdits.strokeTouched(it, ax, ay, bx, by, r) }
             fills = if (target.fills) doc.fills.filterNot { editable(it) && PageEdits.fillTouched(it, bx, by, r) } else doc.fills
             changed = strokes.size != doc.strokes.size || fills.size != doc.fills.size
+            // A whole stroke gone: a tick for each (the partial eraser cuts all the time).
+            if (changed) buzz()
         } else {
             val kept = ArrayList<PageStroke>(doc.strokes.size)
             for (s in doc.strokes) {
@@ -2022,7 +2041,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         val p = toPage(activePage, downX, downY)
         tracePoints += p[0]
         tracePoints += p[1]
-        performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+        buzz(HapticFeedbackConstants.LONG_PRESS)
         pageLayer.invalidate()
     }
 
@@ -2090,6 +2109,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         doc.images.filterTo(items) { editable(it) && PageEdits.imageInLasso(it, lasso) }
         selectionPage = activePage
         reselect(items)
+        if (items.isNotEmpty()) buzz()
     }
 
     /**
@@ -2208,7 +2228,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                 }
                 clearPendingArea()
                 doc.edit(fills = doc.fills + PageFill(outline, pattern, color, style = style))
-                performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
+                buzz(HapticFeedbackConstants.CONTEXT_CLICK)
                 changed()
             }
         }
@@ -2771,6 +2791,8 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             val pivot = floatArrayOf(x, y).also(viewToWorld::mapPoints)
             val before = ruler.angle
             ruler.angle = ruler.snapAngle(rulerAngle0 + fingerAngle(e, 0, 1) - rulerTurn0)
+            // Caught by 0°, 45°, 90°…: felt as well as seen.
+            if (ruler.angle != before && ruler.angle % 45f == 0f && before % 45f != 0f) buzz()
             val d = Math.toRadians((ruler.angle - before).toDouble())
             val dx = ruler.cx - pivot[0]
             val dy = ruler.cy - pivot[1]
@@ -3359,8 +3381,14 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             if (quick && travel < touchSlop * 2) {
                 when (maxPointers) {
                     1 -> fingerTap(e.x, e.y)
-                    2 -> listener?.onUndoGesture()
-                    3 -> listener?.onRedoGesture()
+                    2 -> {
+                        buzz(HapticFeedbackConstants.CONTEXT_CLICK)
+                        listener?.onUndoGesture()
+                    }
+                    3 -> {
+                        buzz(HapticFeedbackConstants.CONTEXT_CLICK)
+                        listener?.onRedoGesture()
+                    }
                 }
                 return
             }
@@ -3431,6 +3459,63 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             style = Paint.Style.STROKE
             strokeWidth = 1.5f * density
             color = 0x99000000.toInt()
+        }
+        private val previewFill = Paint(Paint.ANTI_ALIAS_FLAG)
+        private val previewEdge = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
+        private val eraserDash = android.graphics.DashPathEffect(floatArrayOf(4f, 3f), 0f)
+
+        /**
+         * Where the pen held above the page will touch. With [brushPreview]: the brush itself —
+         * a dot of its size and colour (the marker as its flat tip, the eraser as a dashed
+         * ring); without it, a plain ring, as before. Light and dark outlines keep it seen on
+         * any paper.
+         */
+        private fun drawBrushPreview(canvas: Canvas, x: Float, y: Float, scale: Float) {
+            val erasing = mode == Mode.ERASE || tool == Tool.ERASER
+            val radius = when {
+                erasing -> eraserRadiusDp * density
+                tool == Tool.HIGHLIGHTER -> highlighterSize / 2 * scale
+                tool == Tool.SPOILER -> spoilerSize / 2 * scale
+                tool == Tool.FOUNTAIN -> max(fountainSize / 4 * scale, 2 * density)
+                tool == Tool.NEON -> max(neonSize / 2 * scale, 2 * density)
+                else -> max(penSize / 2 * scale, 2 * density)
+            }
+            if (!brushPreview || tool == Tool.LASSO || tool == Tool.AREA || tool == Tool.LASER) {
+                canvas.drawCircle(x, y, radius, cursorPaint)
+                return
+            }
+            val color = when {
+                erasing -> 0
+                tool == Tool.HIGHLIGHTER -> highlighterColor
+                tool == Tool.SPOILER -> spoilerColor
+                tool == Tool.FOUNTAIN -> fountainColor
+                tool == Tool.NEON -> neonColor
+                else -> penColor
+            }
+            val outer = max(radius, 2.5f * density)
+            previewEdge.pathEffect = if (erasing) eraserDash else null
+            if (tool == Tool.HIGHLIGHTER && !erasing) {
+                // The marker's flat tip: as wide as the stroke, a third as tall.
+                val r = RectF(x - outer, y - outer / 3, x + outer, y + outer / 3)
+                previewFill.color = (color and 0x00FFFFFF) or 0x99000000.toInt()
+                canvas.drawRoundRect(r, outer / 6, outer / 6, previewFill)
+                previewEdge.strokeWidth = 1f * density
+                previewEdge.color = if (dark) 0xCCFFFFFF.toInt() else 0xAA000000.toInt()
+                canvas.drawRoundRect(r, outer / 6, outer / 6, previewEdge)
+                return
+            }
+            if (!erasing) {
+                previewFill.color = (color and 0x00FFFFFF) or 0xCC000000.toInt()
+                canvas.drawCircle(x, y, radius, previewFill)
+            }
+            // Two rings, light over dark: seen on white paper, on black and on the colour itself.
+            previewEdge.strokeWidth = 2.2f * density
+            previewEdge.color = if (dark) 0x99000000.toInt() else 0xCCFFFFFF.toInt()
+            canvas.drawCircle(x, y, outer + 1.2f * density, previewEdge)
+            previewEdge.strokeWidth = 1f * density
+            previewEdge.color = if (dark) 0xCCFFFFFF.toInt() else 0x99000000.toInt()
+            canvas.drawCircle(x, y, outer + 1.2f * density, previewEdge)
+            previewEdge.pathEffect = null
         }
         private val tracePath = Path()
         private val answerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { typeface = ANSWER_TYPEFACE }
@@ -3546,15 +3631,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
 
             if (!cursorX.isNaN() && cursorPage in tops.indices) {
                 val p = pageToViewPoint(cursorPage, cursorX, cursorY)
-                val radius = when {
-                    mode == Mode.ERASE || tool == Tool.ERASER -> eraserRadiusDp * density
-                    tool == Tool.HIGHLIGHTER -> highlighterSize / 2 * scale
-                    tool == Tool.SPOILER -> spoilerSize / 2 * scale
-                    tool == Tool.FOUNTAIN -> max(fountainSize / 4 * scale, 2 * density)
-                    tool == Tool.NEON -> max(neonSize / 2 * scale, 2 * density)
-                    else -> max(penSize / 2 * scale, 2 * density)
-                }
-                canvas.drawCircle(p[0], p[1], radius, cursorPaint)
+                drawBrushPreview(canvas, p[0], p[1], scale)
             }
             drawLoupe(canvas)
         }
@@ -4177,6 +4254,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         const val MAX_PAGE_SHIFT = 0.45f
         private const val MAX_ZOOM = 6f
         private const val TAP_TIMEOUT_MS = 300L
+        private const val BUZZ_GAP_MS = 60L
         private const val SELECTION_COLOR = 0xFF1E5BD8.toInt()
         private const val HANDLE_DP = 9f
         private const val HANDLE_GRAB_DP = 28f
