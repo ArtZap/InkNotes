@@ -63,6 +63,16 @@ class Samples(private val byToken: MutableMap<String, ArrayDeque<FloatArray>> = 
     @Synchronized
     fun clear() = byToken.clear()
 
+    /** Takes in what [other] holds (restored from a backup into an empty store). */
+    @Synchronized
+    fun absorb(other: Samples) {
+        for ((t, list) in other.byToken) for (s in list) {
+            val mine = byToken.getOrPut(t) { ArrayDeque() }
+            mine.addLast(s)
+            while (mine.size > PER_TOKEN) mine.removeFirst()
+        }
+    }
+
     /** One line per sample: the symbol, tab, its shape's numbers. */
     @Synchronized
     fun serialize(): String = buildString {

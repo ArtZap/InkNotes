@@ -71,6 +71,10 @@ class CloudSync(private val context: Context, private val repo: NotebookReposito
      */
     fun connectWebDav(account: dev.inknotes.data.WebDavAccount) {
         if (signingIn) return
+        if (account.insecure) {
+            status = tr("Адрес должен начинаться с https:// — иначе пароль уйдёт открытым текстом. http:// можно только для сервера в домашней сети.", "The address must start with https:// — otherwise the password goes in the open. http:// is allowed only for a server on your home network.")
+            return
+        }
         signingIn = true
         status = tr("Подключение…", "Connecting…")
         val mine = ++attempt

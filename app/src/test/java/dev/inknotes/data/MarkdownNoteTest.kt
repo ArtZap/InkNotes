@@ -26,4 +26,26 @@ class MarkdownNoteTest {
         val md = MarkdownNote.build("A", "2026-11-15", listOf(MarkdownNote.Page(1, "A-p1.png", emptyList(), emptyList())), textMissing = true)
         assertEquals(1, Regex("поиск по почерку|handwriting search").findAll(md).count())
     }
+
+    @Test
+    fun aSecondExportTakesNewNames() {
+        val taken = setOf("Матан.md", "Матан_files")
+        assertEquals("Матан 2", MarkdownNote.freeName("Матан", taken))
+        assertEquals("Матан", MarkdownNote.freeName("Матан", setOf("Другое.md")))
+        val long = "x".repeat(80)
+        val first = MarkdownNote.freeName(long, emptySet())
+        val second = MarkdownNote.freeName(long, setOf(MarkdownNote.noteName(first)))
+        assertTrue(second != first && second.endsWith(" 2"))
+    }
+
+    @Test
+    fun linesStayTextAndTheTitleStaysYaml() {
+        assertEquals("\\# 1 вопрос", MarkdownNote.plain("# 1 вопрос"))
+        assertEquals("\\1. пункт", MarkdownNote.plain("1. пункт"))
+        assertEquals("обычная строка", MarkdownNote.plain("обычная строка"))
+        assertEquals("a \\\"b\\\" c\\\\d e", MarkdownNote.yaml("a \"b\" c\\d\ne"))
+        val md = MarkdownNote.build("T", "2026-11-17", listOf(MarkdownNote.Page(1, "t-p1.png", listOf("- не список"), emptyList())), folder = "T 2_files")
+        assertTrue(md, md.contains("](T 2_files/t-p1.png)"))
+        assertTrue(md, md.contains("\\- не список"))
+    }
 }

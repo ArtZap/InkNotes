@@ -1435,18 +1435,20 @@ class EditorController(
      * search by handwriting is on) and its formulas in LaTeX with their answers. On a
      * background thread; [done] gets whether it was written.
      */
-    private fun runMarkdown(pages: List<Int>, out: MarkdownOut, done: (Boolean) -> Unit) {
+    private fun runMarkdown(pages: List<Int>, out: MarkdownOut, base: String? = null, done: (Boolean) -> Unit) {
         flush()
         val nb = notebook
+        // The files are named after [base] (one not taken in the folder), the note after the notebook.
+        val name = base ?: nb.title
         status = tr("Экспорт Markdown…", "Exporting Markdown…")
         Thread({
             val missing = ArrayList<Int>()
             var textMissing = handwriting.state != HandwritingIndex.State.Ready
             val result = runCatching {
-                val folder = dev.inknotes.data.MarkdownNote.folderName(nb.title)
+                val folder = dev.inknotes.data.MarkdownNote.folderName(name)
                 val list = pages.mapIndexed { k, i ->
                     val pageId = nb.pageIds[i]
-                    val image = dev.inknotes.data.MarkdownNote.imageName(nb.title, i + 1)
+                    val image = dev.inknotes.data.MarkdownNote.imageName(name, i + 1)
                     val wrote = out.image(folder, image)?.use { o -> PdfExporter.writePng(repo, nb, i, o).also { if (!it) missing += i + 1 } } != null
                     // The handwriting as the search index read it.
                     val lines = if (textMissing) emptyList() else waitFor<List<TextLine>> { cb -> handwriting.pageText(nb, pageId, cb) }.orEmpty().map { it.text }
@@ -1467,8 +1469,8 @@ class EditorController(
                 }
                 if (!textMissing && list.all { it.lines.isEmpty() }) textMissing = true
                 val date = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.ROOT).format(java.util.Date())
-                val text = dev.inknotes.data.MarkdownNote.build(nb.title, date, list, textMissing)
-                (out.note(dev.inknotes.data.MarkdownNote.noteName(nb.title)) ?: error("cannot open output")).use { it.write(text.toByteArray()) }
+                val text = dev.inknotes.data.MarkdownNote.build(nb.title, date, list, textMissing, folder)
+                (out.note(dev.inknotes.data.MarkdownNote.noteName(name)) ?: error("cannot open output")).use { it.write(text.toByteArray()) }
             }
             handler.post {
                 status = null
@@ -1498,8 +1500,18 @@ class EditorController(
     fun exportMarkdownToFolder(tree: Uri, resolver: ContentResolver, pages: List<Int>) {
         if (pages.isEmpty()) return
         val root = android.provider.DocumentsContract.buildDocumentUriUsingTree(tree, android.provider.DocumentsContract.getTreeDocumentId(tree))
+        // Exported here before (or another notebook of this name): new names, not "X (1).md"
+        // linking to the old pictures' folder.
+        val taken = HashSet<String>()
+        runCatching {
+            val children = android.provider.DocumentsContract.buildChildDocumentsUriUsingTree(tree, android.provider.DocumentsContract.getTreeDocumentId(tree))
+            resolver.query(children, arrayOf(android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME), null, null, null)?.use { c ->
+                while (c.moveToNext()) c.getString(0)?.let(taken::add)
+            }
+        }
+        val base = dev.inknotes.data.MarkdownNote.freeName(notebook.title, taken)
         var dir: Uri? = null
-        runMarkdown(pages, object : MarkdownOut {
+        runMarkdown(pages, base = base, out = object : MarkdownOut {
             override fun note(name: String) = android.provider.DocumentsContract.createDocument(resolver, root, "text/markdown", name)?.let { resolver.openOutputStream(it, "wt") }
             override fun image(folder: String, name: String): java.io.OutputStream? {
                 val d = dir ?: android.provider.DocumentsContract.createDocument(resolver, root, android.provider.DocumentsContract.Document.MIME_TYPE_DIR, folder).also { dir = it } ?: return null

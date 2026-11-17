@@ -16,15 +16,36 @@ object MarkdownNote {
 
     fun folderName(title: String) = slug(title).replace(' ', '_') + "_files"
 
+    /** [title], or "[title] 2", "… 3": the first whose note and pictures' folder are not in [taken]. */
+    fun freeName(title: String, taken: Set<String>): String {
+        // Room for the number within the length a name is cut to.
+        val short = slug(title).take(54).trim()
+        for (n in 1..999) {
+            val name = if (n == 1) slug(title) else "$short $n"
+            if (noteName(name) !in taken && folderName(name) !in taken) return name
+        }
+        return "$short ${System.currentTimeMillis()}"
+    }
+
+    /** [s] inside double quotes in YAML. */
+    fun yaml(s: String) = s.replace("\\", "\\\\").replace("\"", "\\\"").replace(Regex("[\r\n\t]"), " ")
+
+    /**
+     * A recognised line as plain text, not Markdown: one starting like a heading, a list, a
+     * quote or a table ("# 1", "- x", "1. y", "> z", "| a") gets a backslash before it.
+     */
+    fun plain(line: String): String =
+        if (Regex("^([#>|+*-]|\\d+[.)])").containsMatchIn(line)) "\\" + line else line
+
     fun imageName(title: String, n: Int) = slug(title).replace(' ', '_') + "-p$n.png"
 
     /**
      * The note's text. [date]: the day exported (yyyy-mm-dd). [textMissing]: the handwriting was
      * not read (search by handwriting off): said once, not page by page.
      */
-    fun build(title: String, date: String, pages: List<Page>, textMissing: Boolean = false): String = buildString {
+    fun build(title: String, date: String, pages: List<Page>, textMissing: Boolean = false, folder: String = folderName(title)): String = buildString {
         append("---\n")
-        append("title: \"").append(title.replace("\"", "\\\"")).append("\"\n")
+        append("title: \"").append(yaml(title)).append("\"\n")
         append("source: InkNotes\n")
         append("exported: ").append(date).append('\n')
         append("pages: ").append(pages.size).append('\n')
@@ -37,9 +58,9 @@ object MarkdownNote {
         for (p in pages) {
             append("## ").append(tr("Страница ${p.number}", "Page ${p.number}")).append("\n\n")
             if (p.image != null) {
-                append("![").append(tr("Страница ${p.number}", "Page ${p.number}")).append("](").append(folderName(title)).append('/').append(p.image).append(")\n\n")
+                append("![").append(tr("Страница ${p.number}", "Page ${p.number}")).append("](").append(folder).append('/').append(p.image).append(")\n\n")
             }
-            for (line in p.lines) if (line.isNotBlank()) append(line.trim()).append("  \n")
+            for (line in p.lines) if (line.isNotBlank()) append(plain(line.trim())).append("  \n")
             if (p.lines.any { it.isNotBlank() }) append('\n')
             if (p.formulas.isNotEmpty()) {
                 append("**").append(tr("Формулы", "Formulas")).append("**\n\n")

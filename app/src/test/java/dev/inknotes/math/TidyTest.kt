@@ -124,4 +124,17 @@ class TidyTest {
             assertTrue("$name: moved ${worst / h} letter heights", worst < 2.5f * h)
         }
     }
+
+    @Test
+    fun anExponentDoesNotPullItsWordDown() {
+        // x² beside other words: the x stays on the line, the 2 above it.
+        val ms = line(200f, listOf(3, 4)).toMutableList()
+        ms += letter(280f, 200f)
+        ms += letter(296f, 188f, h = 12f, w = 9f)
+        ms += line(200f, listOf(3)).map { m -> Tidy.Mark(FloatArray(m.xs.size) { m.xs[it] + 240f }, m.ys) }
+        val out = apply(ms)
+        val x = ms.size - 5
+        assertTrue("x moved ${out[x].bottom - ms[x].bottom}", abs(out[x].bottom - ms[x].bottom) < 0.5f)
+        assertTrue("${ms.map { it.bottom }} -> ${out.map { it.bottom }}", out[x + 1].bottom < out[x].bottom - 5f)
+    }
 }

@@ -71,6 +71,21 @@ data class WebDavAccount(val url: String, val user: String, val password: String
     /** The server's address with one slash at the end. */
     val base get() = url.trim().trimEnd('/') + "/"
 
+    /**
+     * The password would go in the open: an address without https, outside the home network.
+     * A server at home (192.168.…, 10.…, 172.16–31.…, localhost, ….local) may use http.
+     */
+    val insecure: Boolean
+        get() {
+            val u = url.trim().lowercase()
+            if (u.startsWith("https://")) return false
+            val host = u.removePrefix("http://").substringBefore('/').substringBefore(':')
+            val parts = host.split('.').mapNotNull { it.toIntOrNull() }
+            val private = host == "localhost" || host.endsWith(".local") || host.endsWith(".lan") ||
+                parts.size == 4 && (parts[0] == 10 || parts[0] == 127 || parts[0] == 192 && parts[1] == 168 || parts[0] == 172 && parts[1] in 16..31)
+            return !private
+        }
+
     /** Yandex Disk's address, Nextcloud's form of it: what to suggest in the form. */
     companion object {
         const val YANDEX = "https://webdav.yandex.ru"

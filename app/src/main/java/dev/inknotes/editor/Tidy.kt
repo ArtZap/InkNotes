@@ -192,8 +192,10 @@ object Tidy {
     internal fun baseline(ms: List<Mark>): Float {
         // Dots and accents stand above it, tails (у, р, д) reach below: the middle of the
         // bottoms of the strokes that are letters, the upper one of two.
+        // Nor does an exponent: a stroke ending above the middle of the tallest one floats.
         val h = letterHeight(ms)
-        val bottoms = ms.filter { max(it.h, it.right - it.left) >= 0.4f * h }.ifEmpty { ms }.map { it.bottom }.sorted()
+        val tallest = ms.maxBy { it.h }
+        val bottoms = ms.filter { max(it.h, it.right - it.left) >= 0.4f * h && it.bottom > tallest.cy }.ifEmpty { ms }.map { it.bottom }.sorted()
         return bottoms[(bottoms.size - 1) / 2]
     }
 

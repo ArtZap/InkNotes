@@ -50,6 +50,12 @@ class HandGlyphs(private val byChar: MutableMap<Char, ArrayDeque<Glyph>> = HashM
     @Synchronized
     fun clear() = byChar.clear()
 
+    /** Takes in what [other] holds (restored from a backup into an empty store). */
+    @Synchronized
+    fun absorb(other: HandGlyphs) {
+        for ((c, list) in other.byChar) for (g in list) add(c, g)
+    }
+
     /** The glyph that stands for [c]: itself, or the plain symbol of a raised or lowered one. */
     private fun source(c: Char): Pair<Char, Shift>? {
         if (c == ' ') return null

@@ -5,12 +5,19 @@ import java.io.File
 /**
  * What the writer corrected by hand, on the device only: formula text pinned to the strokes it
  * was written with ([Correct.fingerprint]), the symbols they chose instead of the reader's
- * ([Learned]), and the two settings of the correction window. Small files in [dir], written
- * at once on each change.
+ * ([Learned]), and the two settings of the correction window. Small files in [dir].
+ *
+ * Every file is written whole to a side file and renamed over the old one, so a write cut off
+ * leaves the old file. With [background] the writing goes on one thread of its own, in order,
+ * the latest text of each file only; the caller never waits for the disk. A file that cannot
+ * be read is kept as `….broken` instead of being written over.
  */
-class FixStore(private val dir: File?) {
+class FixStore(private val dir: File?, private val background: Boolean = false) {
 
     enum class Ask { UNSURE, SOMETIMES, NEVER }
+
+    /** The thread files are written on, in order (declared first: init already writes). */
+    private val io = if (background) java.util.concurrent.Executors.newSingleThreadExecutor { r -> Thread(r, "fix-store").apply { isDaemon = true } } else null
 
     private val pins = object : LinkedHashMap<String, String>(64, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String>?) = size > MAX_PINS
@@ -54,26 +61,35 @@ class FixStore(private val dir: File?) {
             saveSettings()
         }
 
+    /** The text of file [name], or null; one there but unreadable is set aside, not lost. */
+    private fun read(name: String): String? {
+        val f = file(name)?.takeIf { it.exists() } ?: return null
+        return runCatching { f.readText() }.getOrElse {
+            runCatching { f.renameTo(File(f.parentFile, f.name + ".broken")) }
+            null
+        }
+    }
+
     init {
-        learned = runCatching { Learned.parse(file(LEARNED)!!.readText()) }.getOrDefault(Learned())
-        samples = runCatching { Samples.parse(file(SAMPLES)!!.readText()) }.getOrDefault(Samples())
-        placements = runCatching { Placements.parse(file(PLACES)!!.readText()) }.getOrDefault(Placements())
-        hand = runCatching { HandGlyphs.parse(file(HAND)!!.readText()) }.getOrDefault(HandGlyphs())
-        runCatching {
-            for (line in file(PINS)!!.readLines()) {
+        learned = read(LEARNED)?.let { runCatching { Learned.parse(it) }.getOrNull() } ?: Learned()
+        samples = read(SAMPLES)?.let { runCatching { Samples.parse(it) }.getOrNull() } ?: Samples()
+        placements = read(PLACES)?.let { runCatching { Placements.parse(it) }.getOrNull() } ?: Placements()
+        hand = read(HAND)?.let { runCatching { HandGlyphs.parse(it) }.getOrNull() } ?: HandGlyphs()
+        read(PINS)?.let { text ->
+            for (line in text.lines()) {
                 val tab = line.indexOf('\t')
                 if (tab > 0) pins[line.substring(0, tab)] = line.substring(tab + 1)
             }
         }
-        runCatching {
-            for (line in file(SCALES)!!.readLines()) {
+        read(SCALES)?.let { text ->
+            for (line in text.lines()) {
                 val tab = line.indexOf('\t')
                 val v = line.substring(tab + 1).toDoubleOrNull()
                 if (tab > 0 && v != null && v.isFinite()) scales[line.substring(0, tab)] = v
             }
         }
-        runCatching {
-            for (line in file(SETTINGS)!!.readLines()) {
+        read(SETTINGS)?.let { text ->
+            for (line in text.lines()) {
                 val (k, v) = line.split('=', limit = 2).takeIf { it.size == 2 } ?: continue
                 when (k) {
                     "learn" -> learn = v == "1"
@@ -98,7 +114,7 @@ class FixStore(private val dir: File?) {
     @Synchronized
     fun scale(key: String, value: Double?) {
         if (value == null) scales.remove(key) else scales[key] = value
-        runCatching { file(SCALES)?.writeText(scales.entries.joinToString("") { (k, v) -> k + "\t" + v + "\n" }) }
+        write(SCALES, scales.entries.joinToString("") { (k, v) -> k + "\t" + v + "\n" })
     }
 
     @Synchronized
@@ -118,36 +134,113 @@ class FixStore(private val dir: File?) {
      */
     fun learn(read: List<String>, chosen: List<String>, strokes: List<List<Ink>> = emptyList(), places: List<Placements.P> = emptyList()) {
         if (!learn) return
-        places.forEach(placements::add)
-        if (places.isNotEmpty()) runCatching { file(PLACES)?.writeText(placements.serialize()) }
-        for (i in read.indices) learned.record(read[i], chosen.getOrElse(i) { read[i] })
-        for ((i, s) in strokes.withIndex()) chosen.getOrNull(i)?.let { samples.add(it, s) }
-        runCatching { file(LEARNED)?.writeText(learned.serialize()) }
-        if (strokes.isNotEmpty()) runCatching { file(SAMPLES)?.writeText(samples.serialize()) }
+        // Counting and the shapes (32 points each) are work too: done where the writing is.
+        later {
+            places.forEach(placements::add)
+            for (i in read.indices) learned.record(read[i], chosen.getOrElse(i) { read[i] })
+            for ((i, s) in strokes.withIndex()) chosen.getOrNull(i)?.let { samples.add(it, s) }
+            if (places.isNotEmpty()) put(PLACES, placements.serialize())
+            put(LEARNED, learned.serialize())
+            if (strokes.isNotEmpty()) put(SAMPLES, samples.serialize())
+        }
     }
 
     /** Writes [hand] down after a change. */
-    fun saveHand() {
-        runCatching { file(HAND)?.writeText(hand.serialize()) }
-    }
+    fun saveHand() = later { put(HAND, hand.serialize()) }
 
     /** Forgets the handwriting learned (the pinned formulas stay: they are the writer's text). */
-    fun forget() {
+    fun forget() = later {
         learned.clear()
         samples.clear()
         placements.clear()
-        runCatching { file(PLACES)?.delete() }
-        runCatching { file(LEARNED)?.delete() }
-        runCatching { file(SAMPLES)?.delete() }
+        for (name in listOf(PLACES, LEARNED, SAMPLES)) runCatching { file(name)?.delete() }
     }
 
     @Synchronized
     private fun savePins() {
-        runCatching { file(PINS)?.writeText(pins.entries.joinToString("") { (k, v) -> k + "\t" + v.replace('\n', ' ') + "\n" }) }
+        write(PINS, pins.entries.joinToString("") { (k, v) -> k + "\t" + v.replace('\n', ' ') + "\n" })
     }
 
     private fun saveSettings() {
-        runCatching { file(SETTINGS)?.writeText("learn=${if (learn) 1 else 0}\nask=${ask.name}\nhand=${if (inHand) 1 else 0}\n") }
+        write(SETTINGS, "learn=${if (learn) 1 else 0}\nask=${ask.name}\nhand=${if (inHand) 1 else 0}\n")
+    }
+
+    // --- writing
+
+    /** [job] on the writing thread (at once without [background]), after what came before. */
+    private fun later(job: () -> Unit) {
+        val run = { runCatching(job) }
+        if (io == null) run() else io.execute { run() }
+    }
+
+    /** [text] into file [name], on the writing thread. */
+    private fun write(name: String, text: String) = later { put(name, text) }
+
+    /** On the writing thread: the whole file to a side file, then renamed over the old one. */
+    private fun put(name: String, text: String) {
+        val f = file(name) ?: return
+        val tmp = File(f.parentFile, f.name + ".tmp")
+        runCatching {
+            java.io.FileOutputStream(tmp).use { out ->
+                out.write(text.toByteArray())
+                out.flush()
+                out.fd.sync()
+            }
+            if (!tmp.renameTo(f)) throw java.io.IOException("rename failed: $tmp")
+        }.onFailure { runCatching { tmp.delete() } }
+    }
+
+    /** Waits until everything asked before is on disk (for a backup, a restart, tests). */
+    fun awaitWrites(timeoutMs: Long = 5000) {
+        val q = io ?: return
+        val done = java.util.concurrent.CountDownLatch(1)
+        runCatching { q.execute { done.countDown() } }
+        runCatching { done.await(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS) }
+    }
+
+    // --- backup
+
+    /** The files a backup takes, as they are on disk now: name to text. */
+    fun backupFiles(): Map<String, String> {
+        awaitWrites()
+        return FILES.mapNotNull { n -> file(n)?.takeIf { it.isFile }?.let { f -> runCatching { n to f.readText() }.getOrNull() } }.toMap()
+    }
+
+    /**
+     * Files from a backup ([backupFiles]), into what is empty here only: a new tablet, or the
+     * app installed again. What this device has learned already is never replaced.
+     * Returns whether anything came in.
+     */
+    fun restore(files: Map<String, String>): Boolean {
+        var any = false
+        files[LEARNED]?.takeIf { learned.isEmpty() }?.let { runCatching { Learned.parse(it) }.getOrNull() }?.takeIf { !it.isEmpty() }?.let { learned.absorb(it); write(LEARNED, learned.serialize()); any = true }
+        files[SAMPLES]?.takeIf { samples.isEmpty() }?.let { runCatching { Samples.parse(it) }.getOrNull() }?.takeIf { !it.isEmpty() }?.let { samples.absorb(it); write(SAMPLES, samples.serialize()); any = true }
+        files[PLACES]?.takeIf { placements.isEmpty() }?.let { runCatching { Placements.parse(it) }.getOrNull() }?.takeIf { !it.isEmpty() }?.let { placements.absorb(it); write(PLACES, placements.serialize()); any = true }
+        files[HAND]?.takeIf { hand.isEmpty() }?.let { runCatching { HandGlyphs.parse(it) }.getOrNull() }?.takeIf { !it.isEmpty() }?.let { hand.absorb(it); write(HAND, hand.serialize()); any = true }
+        synchronized(this) {
+            files[PINS]?.takeIf { pins.isEmpty() }?.let { text ->
+                for (line in text.lines()) {
+                    val tab = line.indexOf('\t')
+                    if (tab > 0) pins[line.substring(0, tab)] = line.substring(tab + 1)
+                }
+                if (pins.isNotEmpty()) {
+                    savePins()
+                    any = true
+                }
+            }
+            files[SCALES]?.takeIf { scales.isEmpty() }?.let { text ->
+                for (line in text.lines()) {
+                    val tab = line.indexOf('\t')
+                    val v = line.substring(tab + 1).toDoubleOrNull()
+                    if (tab > 0 && v != null && v.isFinite()) scales[line.substring(0, tab)] = v
+                }
+                if (scales.isNotEmpty()) {
+                    write(SCALES, scales.entries.joinToString("") { (k, v) -> k + "\t" + v + "\n" })
+                    any = true
+                }
+            }
+        }
+        return any
     }
 
     private companion object {
@@ -158,6 +251,9 @@ class FixStore(private val dir: File?) {
         const val SETTINGS = "formula-settings.txt"
         const val SCALES = "formula-scales.tsv"
         const val HAND = "hand-glyphs.tsv"
+
+        /** What a backup takes (the settings stay with the device). */
+        val FILES = listOf(PINS, LEARNED, SAMPLES, PLACES, SCALES, HAND)
         const val MAX_PINS = 5000
     }
 }
