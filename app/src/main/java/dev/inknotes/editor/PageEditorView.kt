@@ -749,7 +749,15 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
 
     // ------------------------------------------------------------ selection
 
+    /**
+     * The selection is a copy just made (duplicated, pasted, inserted): nothing is joined to it
+     * yet, so moving it pulls no lines along — the original's lines it lies on are not its
+     * connectors. Until something is selected anew.
+     */
+    private var freshCopy = false
+
     fun clearSelection() {
+        freshCopy = false
         if (selected.isEmpty()) return
         selected.clear()
         pageLayer.invalidate()
@@ -798,6 +806,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             .map { PageEdits.translate(it, DUPLICATE_OFFSET, DUPLICATE_OFFSET) }
         doc.edit(doc.strokes + strokes, doc.fills + fills, doc.images + images)
         reselect(strokes + fills + images)
+        freshCopy = true
         changed()
     }
 
@@ -1044,6 +1053,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         doc.edit(strokes = doc.strokes + strokes, fills = doc.fills + fills, images = doc.images + images)
         selectionPage = page
         reselect(strokes + fills + images)
+        freshCopy = true
         changed()
     }
 
@@ -2123,6 +2133,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         doc.fills.filterTo(items) { editable(it) && PageEdits.fillInLasso(it, lasso) }
         doc.images.filterTo(items) { editable(it) && PageEdits.imageInLasso(it, lasso) }
         selectionPage = activePage
+        freshCopy = false
         reselect(items)
         if (items.isNotEmpty()) buzz()
     }
@@ -2173,6 +2184,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             return
         }
         selectionPage = page
+        freshCopy = false
         // The whole figure first (a stamp, a table, a drawing); a second tap picks a part of it.
         reselect(Objects.joined(doc, hit, ::editable))
     }
@@ -2212,13 +2224,18 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         val doc = doc(page)
         val p = toPage(page, viewX, viewY)
         val hit = doc?.let { hitAt(it, p[0], p[1]) }
+        // A part of a fresh copy is still the copy; anything beyond it is chosen anew.
+        fun pick(items: Collection<Any>) {
+            if (items.any { it !in selected }) freshCopy = false
+            reselect(items)
+        }
         when {
             doc == null || hit == null -> pageLayer.invalidate()
-            hit !in selected -> reselect(Objects.joined(doc, hit, ::editable))
-            selected.size > 1 -> reselect(listOf(hit))
+            hit !in selected -> pick(Objects.joined(doc, hit, ::editable))
+            selected.size > 1 -> pick(listOf(hit))
             else -> {
                 val group = Objects.joined(doc, hit, ::editable)
-                if (group.size > 1) reselect(group) else pageLayer.invalidate()
+                if (group.size > 1) pick(group) else pageLayer.invalidate()
             }
         }
     }
@@ -2465,7 +2482,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             return
         }
         if (rotating || resizing) return
-        connectors = findConnectors(doc)
+        connectors = if (freshCopy) emptyList() else findConnectors(doc)
         moveBounds = RectF(raw)
         guideBoxes = guideTargets(doc)
         // What the selection can stick to, and its own points that stick.

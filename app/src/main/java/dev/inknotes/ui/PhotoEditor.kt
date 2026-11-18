@@ -45,6 +45,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
@@ -59,6 +60,7 @@ import dev.inknotes.editor.PhotoMath
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.hypot
 import kotlin.math.max
@@ -163,7 +165,8 @@ fun PhotoEditorDialog(
 
     // Per-step settings; reset when the picture changes.
     var generation by remember { mutableIntStateOf(0) }
-    val crop = remember(generation) { mutableStateListOf(0.05f, 0.05f, 0.95f, 0.95f) }
+    // The frame starts on the picture's edges: drag a corner or a side in to cut.
+    val crop = remember(generation) { mutableStateListOf(0f, 0f, 1f, 1f) }
     val corners = remember(generation) { mutableStateListOf(0.08f, 0.08f, 0.92f, 0.08f, 0.92f, 0.92f, 0.08f, 0.92f) }
     var aroundX by remember(generation) { mutableFloatStateOf(0f) }
     var aroundY by remember(generation) { mutableFloatStateOf(0f) }
@@ -226,10 +229,20 @@ fun PhotoEditorDialog(
                                     grabbed = if (mode == PhotoMode.CROP) {
                                         val pts = listOf(crop[0] to crop[1], crop[2] to crop[1], crop[2] to crop[3], crop[0] to crop[3])
                                         val near = pts.indexOfFirst { (fx, fy) -> hypot(fit.left + fx * fit.width - p.x, fit.top + fy * fit.height - p.y) < handle }
+                                        val l = fit.left + crop[0] * fit.width
+                                        val t = fit.top + crop[1] * fit.height
+                                        val r = fit.left + crop[2] * fit.width
+                                        val b = fit.top + crop[3] * fit.height
+                                        val alongY = p.y in t..b
+                                        val alongX = p.x in l..r
                                         when {
                                             near >= 0 -> near
-                                            p.x in fit.left + crop[0] * fit.width..fit.left + crop[2] * fit.width &&
-                                                p.y in fit.top + crop[1] * fit.height..fit.top + crop[3] * fit.height -> 4
+                                            // A side alone: the frame lies on the picture's edges at first.
+                                            alongY && abs(p.x - l) < handle -> 5
+                                            alongY && abs(p.x - r) < handle -> 6
+                                            alongX && abs(p.y - t) < handle -> 7
+                                            alongX && abs(p.y - b) < handle -> 8
+                                            alongX && alongY -> 4
                                             else -> -1
                                         }
                                     } else {
@@ -248,6 +261,10 @@ fun PhotoEditorDialog(
                                             1 -> { crop[2] = max(fx, crop[0] + minSize); crop[1] = min(fy, crop[3] - minSize) }
                                             2 -> { crop[2] = max(fx, crop[0] + minSize); crop[3] = max(fy, crop[1] + minSize) }
                                             3 -> { crop[0] = min(fx, crop[2] - minSize); crop[3] = max(fy, crop[1] + minSize) }
+                                            5 -> crop[0] = min(fx, crop[2] - minSize)
+                                            6 -> crop[2] = max(fx, crop[0] + minSize)
+                                            7 -> crop[1] = min(fy, crop[3] - minSize)
+                                            8 -> crop[3] = max(fy, crop[1] + minSize)
                                             4 -> {
                                                 val dx = (p.x - last.x) / fit.width
                                                 val dy = (p.y - last.y) / fit.height
@@ -290,6 +307,13 @@ fun PhotoEditorDialog(
                                 drawRect(shade, Offset(r.right, r.top), Size(fit.right - r.right, r.height))
                                 drawRect(accent, r.topLeft, r.size, style = Stroke(2.dp.toPx()))
                                 for (c in listOf(r.topLeft, r.topRight, r.bottomRight, r.bottomLeft)) drawCircle(accent, 9.dp.toPx(), c)
+                                // Bars in the middle of the sides: they can be dragged too.
+                                val bar = 14.dp.toPx()
+                                val thick = 5.dp.toPx()
+                                drawLine(accent, Offset(r.center.x - bar, r.top), Offset(r.center.x + bar, r.top), thick, StrokeCap.Round)
+                                drawLine(accent, Offset(r.center.x - bar, r.bottom), Offset(r.center.x + bar, r.bottom), thick, StrokeCap.Round)
+                                drawLine(accent, Offset(r.left, r.center.y - bar), Offset(r.left, r.center.y + bar), thick, StrokeCap.Round)
+                                drawLine(accent, Offset(r.right, r.center.y - bar), Offset(r.right, r.center.y + bar), thick, StrokeCap.Round)
                             }
                             PhotoMode.CORNERS -> {
                                 val pts = (0 until 4).map { Offset(fit.left + corners[2 * it] * fit.width, fit.top + corners[2 * it + 1] * fit.height) }
@@ -312,8 +336,10 @@ fun PhotoEditorDialog(
                     val hint = Color(0xFFB0BEC5)
                     when (mode) {
                         PhotoMode.CROP -> Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(tr("Тяните углы рамки или саму рамку.", "Drag the corners of the frame or the frame itself."), color = hint, fontSize = 13.sp, modifier = Modifier.weight(1f))
-                            Button(enabled = !busy, onClick = {
+                            Text(tr("Тяните углы или стороны рамки внутрь, потом саму рамку.", "Drag the corners or sides of the frame in, then the frame itself."), color = hint, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                            // The whole picture: nothing to cut yet.
+                            val whole = crop[0] <= 0f && crop[1] <= 0f && crop[2] >= 1f && crop[3] >= 1f
+                            Button(enabled = !busy && !whole, onClick = {
                                 val (l, t, r, b) = crop.toList()
                                 apply { PhotoEdits.crop(it, l, t, r, b) }
                             }) { Text(tr("Обрезать", "Crop")) }
