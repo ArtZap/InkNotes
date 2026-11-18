@@ -853,8 +853,8 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             }
         }
         doc.edit(strokes = strokes)
-        now += doc.fills.filter { it in selected }
-        now += doc.images.filter { it in selected }
+        now.addAll(doc.fills.filter { it in selected })
+        now.addAll(doc.images.filter { it in selected })
         reselect(now)
         changed()
     }

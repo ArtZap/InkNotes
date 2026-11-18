@@ -343,12 +343,12 @@ class EditorController(
 
     /** Kinds of line among the selection that its line type can be changed from; empty: none. */
     var selectionLineKinds by mutableStateOf<Set<InkKind>>(emptySet())
+        private set
 
     /** Straight or dashed lines are selected: whether they follow shapes (null: mixed or none). */
     var selectionCanBind by mutableStateOf(false)
         private set
     var selectionBound by mutableStateOf<Boolean?>(null)
-        private set
         private set
     var fillColor by mutableIntStateOf(FILL_COLORS[0])
         private set
