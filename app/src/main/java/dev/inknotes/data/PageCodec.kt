@@ -63,11 +63,17 @@ enum class InkKind {
  * Identity matters: selection and undo track elements by reference, so no data class.
  * [dash] is the pattern of a [InkKind.DASHED] line (null: the stock dashes of older notes).
  */
-class PageStroke(val kind: InkKind, val stroke: Stroke, val dash: DashStyle? = null, val layer: Int = Layers.active) {
-    /** The same line with another stroke (moved, recoloured, cut…), its dash pattern and layer kept. */
-    fun with(stroke: Stroke, kind: InkKind = this.kind) = PageStroke(kind, stroke, if (kind == InkKind.DASHED) dash else null, layer)
+/**
+ * A line of a page. [follows]: its ends stay on the shapes they touch — moving a shape pulls
+ * the line along, as connectors in a diagram. Off unless the writer turns it on for the line.
+ */
+class PageStroke(val kind: InkKind, val stroke: Stroke, val dash: DashStyle? = null, val layer: Int = Layers.active, val follows: Boolean = false) {
+    /** The same line with another stroke (moved, recoloured, cut…), its dash pattern, layer and binding kept. */
+    fun with(stroke: Stroke, kind: InkKind = this.kind) = PageStroke(kind, stroke, if (kind == InkKind.DASHED) dash else null, layer, follows)
 
-    fun onLayer(layer: Int) = PageStroke(kind, stroke, dash, layer)
+    fun onLayer(layer: Int) = PageStroke(kind, stroke, dash, layer, follows)
+
+    fun following(on: Boolean) = if (on == follows) this else PageStroke(kind, stroke, dash, layer, on)
 }
 
 /**
@@ -418,7 +424,7 @@ class PageTooComplexException(message: String) : IOException(message)
 
 object PageCodec {
     private const val MAGIC = 0x494E4B50 // "INKP"
-    private const val VERSION = 12
+    private const val VERSION = 13
 
     /** v2 pattern ordinals: SOLID, DIAGONAL, CROSS, HORIZONTAL, DOTS (all with fixed looks). */
     private val V2_PATTERNS = listOf(
@@ -503,6 +509,7 @@ object PageCodec {
         data.writeInt(MAGIC)
         data.writeInt(
             when {
+                content.strokes.any { it.follows } -> 13
                 content.images.any { it.isText } || anyLayer(content) -> 12
                 content.strokes.any { it.dash != null } -> 11
                 content.strokes.any { it.kind == InkKind.LINE || it.kind == InkKind.SPOILER } || content.fills.any { it.pattern == FillPattern.INK } -> 10
@@ -552,7 +559,11 @@ object PageCodec {
         // v11: dash patterns, by index of the line (only lines that have one).
         val dashed = content.strokes.withIndex().filter { it.value.dash != null }
         val texts = content.images.filter { it.isText }
-        val version = if (texts.isNotEmpty() || anyLayer(content)) 12 else 0
+        val version = when {
+            content.strokes.any { it.follows } -> 13
+            texts.isNotEmpty() || anyLayer(content) -> 12
+            else -> 0
+        }
         if (dashed.isNotEmpty() || version >= 12) {
             data.writeInt(dashed.size)
             for ((i, s) in dashed) {
@@ -583,6 +594,12 @@ object PageCodec {
                 data.writeInt(i)
                 data.writeByte(layer)
             }
+        }
+        // v13: lines bound to shapes, by index.
+        if (version >= 13) {
+            val bound = content.strokes.withIndex().filter { it.value.follows }
+            data.writeInt(bound.size)
+            for ((i, _) in bound) data.writeInt(i)
         }
         data.flush()
     }
@@ -710,6 +727,12 @@ object PageCodec {
                         2 -> if (i in imageList.indices) imageList[i] = imageList[i].onLayer(layer) else throw IOException("bad layer index")
                         else -> throw IOException("bad layer kind")
                     }
+                }
+            }
+            if (version >= 13) {
+                repeat(data.readCount(limits.elements)) {
+                    val i = data.readInt()
+                    if (i in strokes.indices) strokes[i] = strokes[i].following(true) else throw IOException("bad line index")
                 }
             }
             PageContent(strokes, fillList, imageList)

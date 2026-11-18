@@ -77,6 +77,27 @@ class PageCodecTest {
         assertEquals(7, version(plain))
     }
 
+    /** Lines bound to shapes survive a round trip as v13, with layers and dashes; unbound pages stay older. */
+    @Test
+    fun boundLinesRoundTrip() {
+        val batch = androidx.ink.strokes.MutableStrokeInputBatch()
+        for (i in 0..10) batch.add(androidx.ink.brush.InputToolType.STYLUS, i * 10f, 50f, i * 8L)
+        fun line(layer: Int, follows: Boolean) =
+            PageStroke(InkKind.LINE, androidx.ink.strokes.Stroke(InkBrushes.create(InkKind.LINE, Color.BLACK, 3f), batch), null, layer, follows)
+        fun version(f: File) = java.io.DataInputStream(f.inputStream()).use { it.readInt(); it.readInt() }
+        val file = File(dir, "v13.ink")
+        file.outputStream().use { PageCodec.write(it, PageContent(listOf(line(0, false), line(2, true), line(0, true)), emptyList())) }
+        assertEquals(13, version(file))
+        val read = PageCodec.read(file)
+        assertEquals(listOf(false, true, true), read.strokes.map { it.follows })
+        assertEquals(listOf(0, 2, 0), read.strokes.map { it.layer })
+        // Moved, the line keeps its binding.
+        assertEquals(true, read.strokes[1].with(read.strokes[1].stroke).follows)
+        val plain = File(dir, "unbound.ink")
+        plain.outputStream().use { PageCodec.write(it, PageContent(listOf(line(0, false)), emptyList())) }
+        assertEquals(10, version(plain))
+    }
+
     /** Neon survives a round trip; pages without it stay readable by v7 apps. */
     @Test
     fun neonInkRoundTripAndVersion() {

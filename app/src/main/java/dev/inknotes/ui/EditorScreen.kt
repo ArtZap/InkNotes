@@ -1711,6 +1711,11 @@ private fun SelectionOptions(c: EditorController, onPickColor: () -> Unit, onHat
     } else {
         TextButton(onClick = { c.recognizeSelection() }) { Text(tr("Текст", "Text")) }
         if (c.selectionLineKinds.isNotEmpty()) TextButton(onClick = { c.tidySelection() }) { Text(tr("Выровнять", "Straighten")) }
+        if (c.selectionCanBind) {
+            TextButton(onClick = { c.toggleBinding() }) {
+                Text(if (c.selectionBound == true) tr("Отвязать", "Unbind") else tr("Привязать", "Bind"))
+            }
+        }
         if (c.selectionLineKinds.isNotEmpty()) TextButton(onClick = { c.formulaFromSelection() }) { Text(tr("Формула", "Formula")) }
     }
     SelectionMoreButton(c)

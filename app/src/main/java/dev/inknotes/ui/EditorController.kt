@@ -279,6 +279,16 @@ class EditorController(
 
     fun flipSelection(horizontal: Boolean) = view?.flipSelection(horizontal)
 
+    /** The selected lines follow the shapes they touch (or stop following): mixed or off → on. */
+    fun toggleBinding() {
+        val on = selectionBound != true
+        view?.bindSelection(on)
+        showStatus(
+            if (on) tr("Линии привязаны: концы следуют за фигурами, которых касаются", "Lines bound: their ends follow the shapes they touch")
+            else tr("Линии отвязаны", "Lines unbound"),
+        )
+    }
+
     /** «Выровнять почерк»: the selected handwriting straightened; undo brings it back. */
     fun tidySelection() {
         if (view?.tidySelection() != true) showStatus(tr("Почерк уже ровный", "The handwriting is already straight"))
@@ -333,6 +343,12 @@ class EditorController(
 
     /** Kinds of line among the selection that its line type can be changed from; empty: none. */
     var selectionLineKinds by mutableStateOf<Set<InkKind>>(emptySet())
+
+    /** Straight or dashed lines are selected: whether they follow shapes (null: mixed or none). */
+    var selectionCanBind by mutableStateOf(false)
+        private set
+    var selectionBound by mutableStateOf<Boolean?>(null)
+        private set
         private set
     var fillColor by mutableIntStateOf(FILL_COLORS[0])
         private set
@@ -2437,7 +2453,7 @@ class EditorController(
         val content = docs[pageId]?.content() ?: repo.loadPage(notebook, pageId)
         // New elements: selection and undo go by identity, so the pages share none.
         val copy = PageContent(
-            content.strokes.map { PageStroke(it.kind, it.stroke, it.dash, it.layer) },
+            content.strokes.map { PageStroke(it.kind, it.stroke, it.dash, it.layer, it.follows) },
             content.fills.map { it.copy() },
             content.images.map { it.moved() },
         )
@@ -2739,6 +2755,8 @@ class EditorController(
         selectedFills = view?.selectedFillCount() ?: 0
         selectionIsTable = count > 0 && view?.selectionIsTable() == true
         selectionLineKinds = if (count > 0) view?.selectedLineKinds().orEmpty() else emptySet()
+        selectionCanBind = count > 0 && view?.canBind() == true
+        selectionBound = if (selectionCanBind) view?.selectedBinding() else null
         selectionLineWidth = if (count > 0) view?.selectionLineWidth() else null
         selectedText = if (count == 1) view?.selectedTextBox()?.text?.text else null
         selectedPicture = if (count == 1) view?.selectedPicture() else null

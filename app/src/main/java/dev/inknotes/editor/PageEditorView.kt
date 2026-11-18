@@ -829,6 +829,36 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
      * Kinds of line among the selection that can be changed into one another (not markers),
      * once each; empty when there are none.
      */
+    /**
+     * Whether the selected straight and dashed lines follow shapes: true or false when all
+     * agree, null when they differ; no such lines — also null, and [canBind] says so.
+     */
+    fun selectedBinding(): Boolean? {
+        val lines = selected.mapNotNull { (it as? PageStroke)?.takeIf { s -> s.kind == InkKind.LINE || s.kind == InkKind.DASHED } }
+        return lines.map { it.follows }.distinct().singleOrNull()
+    }
+
+    /** Straight or dashed lines among the selection: they can be bound to shapes. */
+    fun canBind(): Boolean = selected.any { (it as? PageStroke)?.let { s -> s.kind == InkKind.LINE || s.kind == InkKind.DASHED } == true }
+
+    /** The selected straight and dashed lines bound to the shapes they touch ([on]) or set free. */
+    fun bindSelection(on: Boolean) {
+        val doc = doc(selectionPage) ?: return
+        val now = ArrayList<Any>()
+        val strokes = doc.strokes.map { s ->
+            if (s in selected) {
+                (if (s.kind == InkKind.LINE || s.kind == InkKind.DASHED) s.following(on) else s).also(now::add)
+            } else {
+                s
+            }
+        }
+        doc.edit(strokes = strokes)
+        now += doc.fills.filter { it in selected }
+        now += doc.images.filter { it in selected }
+        reselect(now)
+        changed()
+    }
+
     fun selectedLineKinds(): Set<InkKind> =
         selected.mapNotNullTo(LinkedHashSet()) { (it as? PageStroke)?.kind?.takeIf { k -> k in LINE_KINDS } }
 
@@ -866,7 +896,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             else -> sizeOf(kind)
         }
         val dash = if (kind == InkKind.DASHED) s.dash ?: dashStyle else null
-        return PageStroke(kind, Stroke(InkBrushes.create(kind, s.stroke.brush.colorIntArgb, size), s.stroke.inputs), dash, s.layer)
+        return PageStroke(kind, Stroke(InkBrushes.create(kind, s.stroke.brush.colorIntArgb, size), s.stroke.inputs), dash, s.layer, s.follows)
     }
 
     /** Width a line shows (page units): a fountain pen's size is its nib, twice its usual line. */
@@ -916,7 +946,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             when {
                 s !in selected -> s
                 s.kind != InkKind.DASHED -> s.also(newSelection::add)
-                else -> PageStroke(s.kind, s.stroke, style, s.layer).also(newSelection::add)
+                else -> PageStroke(s.kind, s.stroke, style, s.layer, s.follows).also(newSelection::add)
             }
         }
         doc.edit(strokes = strokes)
@@ -2400,7 +2430,8 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         val heads = doc.fills.filter { it !in selected && it.pattern == FillPattern.INK && it.outline.size == 6 && it.cuts.isEmpty() }
         val out = ArrayList<Connector>()
         for (st in doc.strokes) {
-            if (st in selected || (st.kind != InkKind.LINE && st.kind != InkKind.DASHED)) continue
+            // Only lines the writer bound to shapes follow them.
+            if (st in selected || !st.follows || (st.kind != InkKind.LINE && st.kind != InkKind.DASHED)) continue
             val pl = Magnet.polyline(st) ?: continue
             if (pl.size < 4) continue
             val n = pl.size
@@ -4070,6 +4101,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                 for (k in 2 until tracePoints.size step 2) tracePath.lineTo(tracePoints[k], tracePoints[k + 1])
                 canvas.drawPath(tracePath, dashPaint)
             }
+            if (selectionPage == i) source?.document(i)?.let { drawBound(canvas, it) }
             if (selectionPage == i) {
                 selectionBounds()?.let { r ->
                     val scale = currentScale()
@@ -4277,6 +4309,27 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             drawOverlays(canvas, page)
             drawSnap(canvas, page)
             canvas.restore()
+        }
+
+        /** Small rings on the ends of selected lines bound to shapes: which ones follow. */
+        private fun drawBound(canvas: Canvas, doc: PageDocument) {
+            if (selected.isEmpty()) return
+            val scale = currentScale()
+            // While the selection is dragged (not turned or sized), its rings go with it.
+            val moving = dragging && moveKx == 1f && moveKy == 1f && moveAngle == 0f
+            val dx = if (moving) moveDx else 0f
+            val dy = if (moving) moveDy else 0f
+            handlePaint.style = Paint.Style.STROKE
+            handlePaint.strokeWidth = 2f * density / scale
+            handlePaint.color = SNAP_COLOR
+            for (s in doc.strokes) {
+                if (!s.follows || s !in selected) continue
+                val pl = Magnet.polyline(s) ?: continue
+                if (pl.size < 4) continue
+                val r = 5f * density / scale
+                canvas.drawCircle(pl[0] + dx, pl[1] + dy, r, handlePaint)
+                canvas.drawCircle(pl[pl.size - 2] + dx, pl[pl.size - 1] + dy, r, handlePaint)
+            }
         }
 
         /** Ring where the moved line or corner snapped; guides the selection lines up along. */
