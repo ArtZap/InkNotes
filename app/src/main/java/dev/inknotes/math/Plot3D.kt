@@ -14,8 +14,8 @@ object Plot3D {
     /** Grid lines along each axis. */
     const val N = 25
 
-    fun of(f: (Double, Double) -> Double, xv: String, yv: String, trig: Boolean): Answer.Surface? {
-        val r = if (trig) Math.PI else 3.0
+    fun of(f: (Double, Double) -> Double, xv: String, yv: String, trig: Boolean, range: Double? = null): Answer.Surface? {
+        val r = range ?: if (trig) Math.PI else 3.0
         val zs = FloatArray(N * N)
         val finite = ArrayList<Float>()
         for (i in 0 until N) for (j in 0 until N) {

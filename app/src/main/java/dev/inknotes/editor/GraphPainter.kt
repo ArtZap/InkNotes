@@ -53,6 +53,8 @@ class GraphPainter(private val unit: Float) {
         points: List<Pair<Double, Double>>,
         probe: Pair<Double, Int>?,
         colors: Colors,
+        /** The writer's point picked by a finger: ringed. */
+        picked: Int = -1,
     ) {
         if (w <= 1 || h <= 1 || !(v.w > 0) || !(v.h > 0)) return
         fun px(x: Double) = ((x - v.x0) / v.w * w).toFloat()
@@ -118,12 +120,18 @@ class GraphPainter(private val unit: Float) {
             if (signed++ < 12) label(c, "(${GraphMath.label(m.x, sx)}; ${GraphMath.label(m.y, sy)})", x, y, w, colors.ink, colors.background)
         }
         // The writer's points.
-        for ((px0, py0) in points) {
+        for ((k, pt) in points.withIndex()) {
+            val (px0, py0) = pt
             if (px0 !in v.x0..v.x1 || py0 !in v.y0..v.y1) continue
             val x = px(px0)
             val y = py(py0)
             fill.color = colors.accent
             c.drawCircle(x, y, 5.5f * unit, fill)
+            if (k == picked) {
+                line.color = colors.accent
+                line.strokeWidth = 2 * unit
+                c.drawCircle(x, y, 11 * unit, line)
+            }
             label(c, "(${GraphMath.label(px0, sx)}; ${GraphMath.label(py0, sy)})", x, y, w, colors.accent, colors.background)
         }
         // The value a finger asked for.
@@ -162,6 +170,30 @@ class GraphPainter(private val unit: Float) {
         c.restore()
     }
 
+    /**
+     * A surface z = f(x, y), turned by [azimuth] and tilted by [elevation], fitted into the
+     * [w]×[h] box; its formula at the top left.
+     */
+    fun drawSurface(c: Canvas, w: Float, h: Float, s: dev.inknotes.math.Answer.Surface, azimuth: Float, elevation: Float, title: String, colors: Colors) {
+        if (w <= 1 || h <= 1) return
+        fill.color = colors.background
+        c.drawRect(0f, 0f, w, h, fill)
+        val k = dev.inknotes.math.Plot.HEIGHT / dev.inknotes.math.Plot.WIDTH
+        val bw = minOf(w, h / k)
+        c.save()
+        c.translate((w - bw) / 2, (h - bw * k) / 2)
+        SurfaceArt.draw(c, s, bw, curveColor(0, colors.dark), colors.dark, azimuth, elevation)
+        c.restore()
+        text.textSize = 12 * unit
+        text.color = colors.ink
+        text.isFakeBoldText = false
+        if (title.isNotEmpty()) c.drawText(title, 10 * unit, 8 * unit + text.textSize, text)
+        text.textSize = 11 * unit
+        text.color = (colors.ink and 0x00FFFFFF) or 0xB0000000.toInt()
+        val range = "${s.xv}, ${s.yv}: ${GraphMath.label(s.x0.toDouble(), 0.1)} … ${GraphMath.label(s.x1.toDouble(), 0.1)}"
+        c.drawText(range, 10 * unit, h - 8 * unit, text)
+    }
+
     /** A label beside a point, on a backing so the grid does not cross it. */
     private fun label(c: Canvas, s: String, at: Float, atY: Float, w: Float, color: Int, back: Int, bold: Boolean = false) {
         text.textSize = 11 * unit
@@ -184,13 +216,18 @@ class GraphPainter(private val unit: Float) {
         fun picture(spec: GraphSpec, width: Int, height: Int, dark: Boolean): Bitmap {
             val bmp = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
             val unit = width / 420f
-            val fns = spec.fns()
-            val marks = runCatching { GraphMath.marks(fns, spec.x0, spec.x1) }.getOrDefault(emptyList())
             val colors = if (dark) {
                 Colors(0xF2202124.toInt(), 0xFFE8EAED.toInt(), 0x33FFFFFF, 0xFFF48FB1.toInt(), true)
             } else {
                 Colors(0xF8FFFFFF.toInt(), 0xFF202124.toInt(), 0x22000000, 0xFFD81B60.toInt(), false)
             }
+            if (spec.isSurface) {
+                val s = spec.surface() ?: error("no surface")
+                GraphPainter(unit).drawSurface(Canvas(bmp), width.toFloat(), height.toFloat(), s, spec.azimuth, spec.elevation, spec.titles.firstOrNull().orEmpty(), colors)
+                return bmp
+            }
+            val fns = spec.fns()
+            val marks = runCatching { GraphMath.marks(fns, spec.x0, spec.x1) }.getOrDefault(emptyList())
             GraphPainter(unit).draw(
                 Canvas(bmp), width.toFloat(), height.toFloat(), View(spec.x0, spec.x1, spec.y0, spec.y1),
                 fns, spec.titles, marks, spec.points, null, colors,

@@ -374,7 +374,7 @@ object MathPage {
                 }.getOrNull()
                 param != null -> runCatching { Calc.graph(d.right, envAt(d.index), param.ifEmpty { null })?.titled(listOf(curveName(d.left, d.right))) }.getOrNull()
                 // z = x² + y²: a surface.
-                isSurface -> runCatching { Calc.surface(d.right, envAt(d.index)) }.getOrNull()
+                isSurface -> runCatching { Calc.surface(d.right, envAt(d.index))?.let { sf -> sf.expr?.let { e -> sf.withExpr(e, sf.trig, curveName(d.left, d.right)) } ?: sf } }.getOrNull()
                 else -> null
             } ?: run {
                 // A graph was meant but none came out: a mark beside the line.

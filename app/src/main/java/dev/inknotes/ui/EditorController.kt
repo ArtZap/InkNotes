@@ -2059,13 +2059,15 @@ class EditorController(
 
     override fun onAnswerTapped(answer: PageAnswer) {
         val g = answer.answer as? dev.inknotes.math.Answer.Graph
+        val surface = (answer.answer as? dev.inknotes.math.Answer.Surface)?.spec(graphKey(answer))
         when {
             // Unsure or nothing: straight to correcting how it was read.
             answer.fix != null && (answer.unsure || answer.missing || answer.error) -> startFix(answer)
             // A graph: its own window over the page.
-            g != null && g.fns.isNotEmpty() && g.exprs.size == g.fns.size -> {
+            (g != null && g.fns.isNotEmpty() && g.exprs.size == g.fns.size) || surface != null -> {
                 val id = mathAnswers.entries.firstOrNull { (_, list) -> answer in list }?.key ?: notebook.pageIds.getOrNull(pageIndex)
-                if (id != null) graphWin = GraphWin(g.spec(graphKey(answer)), id, answer, null)
+                val spec = surface ?: g!!.spec(graphKey(answer))
+                if (id != null) graphWin = GraphWin(spec, id, answer, null)
             }
             else -> tappedAnswer = answer
         }
@@ -2080,7 +2082,7 @@ class EditorController(
     private val graphSpecs = HashMap<String, dev.inknotes.math.GraphSpec?>()
 
     private fun graphKey(a: PageAnswer): String? =
-        a.fix?.takeIf { a.answer is dev.inknotes.math.Answer.Graph }?.let { f -> dev.inknotes.math.Correct.fingerprint(f.left + f.right.orEmpty()) }
+        a.fix?.takeIf { a.answer is dev.inknotes.math.Answer.Graph || a.answer is dev.inknotes.math.Answer.Surface }?.let { f -> dev.inknotes.math.Correct.fingerprint(f.left + f.right.orEmpty()) }
 
     /** What the picture [file] shows when it is a graph's; read once from the file. */
     private fun graphSpecOf(file: String): dev.inknotes.math.GraphSpec? =
