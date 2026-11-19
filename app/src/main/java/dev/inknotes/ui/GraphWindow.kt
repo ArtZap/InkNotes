@@ -4,7 +4,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -32,6 +33,7 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
@@ -45,6 +47,7 @@ import dev.inknotes.math.GraphMath
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.math.roundToInt
 
@@ -81,6 +84,8 @@ fun GraphWindow(c: EditorController, win: EditorController.GraphWin, modifier: M
     var azimuth by remember(win) { mutableStateOf(spec.azimuth) }
     var elevation by remember(win) { mutableStateOf(spec.elevation) }
     var range by remember(win) { mutableStateOf(spec.x1) }
+    // One to one: cells square, both axes stretch alike.
+    var square by remember(win) { mutableStateOf(spec.square) }
     val surface = remember(win, range) { if (spec.isSurface) runCatching { spec.surface(range) }.getOrNull() else null }
 
     // Crossings for what is in view, once the view stops moving.
@@ -145,9 +150,47 @@ fun GraphWindow(c: EditorController, win: EditorController.GraphWin, modifier: M
         probe = near?.let { x to it.first }
     }
 
+    /** The view with a unit on y as long as a unit on x, around the middle of y. */
+    fun squared(v: GraphPainter.View): GraphPainter.View {
+        if (area.width == 0 || area.height == 0) return v
+        val h = v.w / area.width * area.height
+        val mid = (v.y0 + v.y1) / 2
+        return GraphPainter.View(v.x0, v.x1, mid - h / 2, mid + h / 2)
+    }
+
+    /**
+     * The fingers moved by [pan] and spread [kx] times along x, [ky] along y, around [at]: the
+     * view follows them (a surface turns and comes nearer instead).
+     */
+    fun move(pan: Offset, kx: Double, ky: Double, at: Offset) {
+        if (area.width == 0 || area.height == 0) return
+        if (spec.isSurface) {
+            azimuth = (azimuth - pan.x * 0.4f) % 360f
+            elevation = (elevation + pan.y * 0.3f).coerceIn(5f, 85f)
+            range = (range / kx.coerceIn(0.5, 2.0)).coerceIn(0.05, 1e4)
+            return
+        }
+        val v = view
+        val cx = v.x0 + at.x / area.width * v.w
+        val cy = v.y1 - at.y / area.height * v.h
+        val w = (v.w / kx.coerceIn(0.5, 2.0)).coerceIn(1e-6, 1e7)
+        val h = (v.h / ky.coerceIn(0.5, 2.0)).coerceIn(1e-6, 1e7)
+        val dx = -pan.x / area.width * w
+        val dy = pan.y / area.height * h
+        val nx0 = cx - (cx - v.x0) / v.w * w + dx
+        val ny0 = cy - (cy - v.y0) / v.h * h + dy
+        val next = GraphPainter.View(nx0, nx0 + w, ny0, ny0 + h)
+        view = if (square) squared(next) else next
+    }
+
+    // At 1:1 a window sized anew keeps its cells square.
+    LaunchedEffect(win, area, square) {
+        if (square && !spec.isSurface) view = squared(view)
+    }
+
     fun save() {
         val v = view
-        val kept = if (spec.isSurface) spec.turned(azimuth, elevation, range) else spec.with(v.x0, v.x1, v.y0, v.y1, points)
+        val kept = if (spec.isSurface) spec.turned(azimuth, elevation, range) else spec.with(v.x0, v.x1, v.y0, v.y1, points, square)
         c.saveGraph(win, kept, area.width.toFloat() / area.height.coerceAtLeast(1))
     }
 
@@ -188,12 +231,12 @@ fun GraphWindow(c: EditorController, win: EditorController.GraphWin, modifier: M
                     }) { Text(tr("Готово", "Done"), fontSize = 13.sp) }
                 }
                 TextButton(onClick = {
-                    view = start
+                    view = if (square) squared(start) else start
                     probe = null
                     azimuth = spec.azimuth
                     elevation = spec.elevation
                     range = spec.x1
-                }) { Text(tr("Вписать", "Fit"), fontSize = 13.sp) }
+                }) { Text(tr("Исходный вид", "First view"), fontSize = 13.sp) }
                 TextButton(onClick = { save() }) {
                     Text(if (win.image != null) tr("Сохранить", "Save") else tr("В тетрадь", "To the page"), fontSize = 13.sp)
                 }
@@ -213,26 +256,36 @@ fun GraphWindow(c: EditorController, win: EditorController.GraphWin, modifier: M
                         .onSizeChanged { area = it }
                         .pointerInput(win, active) {
                             if (!active) return@pointerInput
-                            detectTransformGestures { centroid, pan, zoom, _ ->
-                                if (area.width == 0 || area.height == 0) return@detectTransformGestures
-                                if (spec.isSurface) {
-                                    // A finger turns and tilts it, two fingers bring it nearer.
-                                    azimuth = (azimuth - pan.x * 0.4f) % 360f
-                                    elevation = (elevation + pan.y * 0.3f).coerceIn(5f, 85f)
-                                    range = (range / zoom.coerceIn(0.5f, 2f)).coerceIn(0.05, 1e4)
-                                    return@detectTransformGestures
-                                }
-                                val v = view
-                                val cx = v.x0 + centroid.x / area.width * v.w
-                                val cy = v.y1 - centroid.y / area.height * v.h
-                                val k = zoom.coerceIn(0.5f, 2f).toDouble()
-                                val w = (v.w / k).coerceIn(1e-6, 1e7)
-                                val h = (v.h / k).coerceIn(1e-6, 1e7)
-                                val dx = -pan.x / area.width * w
-                                val dy = pan.y / area.height * h
-                                val nx0 = cx - (cx - v.x0) / v.w * w + dx
-                                val ny0 = cy - (cy - v.y0) / v.h * h + dy
-                                view = GraphPainter.View(nx0, nx0 + w, ny0, ny0 + h)
+                            // One finger moves (turns a surface); two fingers apart along x
+                            // stretch x, along y stretch y, slantwise both — or both alike at 1:1.
+                            awaitEachGesture {
+                                awaitFirstDown(requireUnconsumed = false)
+                                do {
+                                    val event = awaitPointerEvent()
+                                    val down = event.changes.filter { it.pressed && it.previousPressed }
+                                    if (down.size == 1) {
+                                        val d = down[0].position - down[0].previousPosition
+                                        if (d != Offset.Zero) move(d, 1.0, 1.0, down[0].position)
+                                    } else if (down.size >= 2) {
+                                        val a = down[0]
+                                        val b = down[1]
+                                        val mid = (a.position + b.position) / 2f
+                                        val was = (a.previousPosition + b.previousPosition) / 2f
+                                        val spanX = abs(a.position.x - b.position.x)
+                                        val spanY = abs(a.position.y - b.position.y)
+                                        val wasX = abs(a.previousPosition.x - b.previousPosition.x)
+                                        val wasY = abs(a.previousPosition.y - b.previousPosition.y)
+                                        val dist = (a.position - b.position).getDistance()
+                                        val wasDist = (a.previousPosition - b.previousPosition).getDistance()
+                                        val min = 48 * screen.density
+                                        val k = if (wasDist > 1f) (dist / wasDist).toDouble() else 1.0
+                                        // An axis stretches only when the fingers are apart along it.
+                                        val kx = if (wasX > min && spanX > min) (spanX / wasX).toDouble() else 1.0
+                                        val ky = if (wasY > min && spanY > min) (spanY / wasY).toDouble() else 1.0
+                                        if (spec.isSurface || square) move(mid - was, k, k, mid) else move(mid - was, kx, ky, mid)
+                                    }
+                                    event.changes.forEach { if (it.positionChanged()) it.consume() }
+                                } while (event.changes.any { it.pressed })
                             }
                         }
                         .pointerInput(win, active, pointMode, points, marks, view, picked) {
@@ -246,7 +299,7 @@ fun GraphWindow(c: EditorController, win: EditorController.GraphWin, modifier: M
                         if (spec.isSurface) {
                             surface?.let { s -> painter.drawSurface(it.nativeCanvas, size.width, size.height, s, azimuth, elevation, spec.titles.firstOrNull().orEmpty(), colors) }
                         } else {
-                            painter.draw(it.nativeCanvas, size.width, size.height, view, fns, spec.titles, marks, points, probe, colors, picked)
+                            painter.draw(it.nativeCanvas, size.width, size.height, view, fns, spec.titles, marks, points, probe, colors, picked, square)
                         }
                     }
                 }
@@ -260,6 +313,10 @@ fun GraphWindow(c: EditorController, win: EditorController.GraphWin, modifier: M
                 } else if (!spec.isSurface) {
                     // The points: put them, take one or all away.
                     Row(Modifier.align(Alignment.BottomStart).padding(start = 4.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                        TextButton(onClick = {
+                            square = !square
+                            if (square) view = squared(view)
+                        }) { Text(if (square) "✓ 1:1" else "1:1", fontSize = 12.sp) }
                         TextButton(onClick = {
                             pointMode = !pointMode
                             picked = -1
