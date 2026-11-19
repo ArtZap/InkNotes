@@ -84,9 +84,12 @@ class AppPrefs(context: Context) {
         get() = runCatching { ThemeMode.valueOf(prefs.getString(THEME, null)!!) }.getOrDefault(ThemeMode.SYSTEM)
         set(value) = prefs.edit().putString(THEME, value.name).apply()
 
-    var recentColors: List<Int>
-        get() = prefs.getString(RECENT, "").orEmpty().split(',').mapNotNull { it.toLongOrNull(16)?.toInt() }
-        set(value) = prefs.edit().putString(RECENT, value.joinToString(",") { Integer.toHexString(it) }).apply()
+    /** The writer's own colours added to the palette of light ([dark] false) or dark paper. */
+    fun colors(dark: Boolean): List<Int> =
+        prefs.getString(if (dark) RECENT_DARK else RECENT, "").orEmpty().split(',').mapNotNull { it.toLongOrNull(16)?.toInt() }
+
+    fun setColors(dark: Boolean, value: List<Int>) =
+        prefs.edit().putString(if (dark) RECENT_DARK else RECENT, value.joinToString(",") { Integer.toHexString(it) }).apply()
 
     var hatchPattern: FillPattern
         get() = runCatching { FillPattern.valueOf(prefs.getString(HATCH_PATTERN, null)!!) }.getOrDefault(FillPattern.LINES)
@@ -317,6 +320,7 @@ class AppPrefs(context: Context) {
         const val THEME = "theme"
         const val STYLE = "uiStyle"
         const val RECENT = "recentColors"
+        const val RECENT_DARK = "recentColorsDark"
         const val HATCH_PATTERN = "hatchPattern"
         const val HATCH_STYLE = "hatchStyle"
         const val HANDWRITING = "handwriting"

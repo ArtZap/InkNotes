@@ -54,6 +54,7 @@ import kotlin.math.ceil
 import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.sign
 
 /** Direction a finger scroll keeps to (see FingerGesture). */
 private enum class ScrollAxis { UNDECIDED, VERTICAL, HORIZONTAL, FREE }
@@ -437,6 +438,11 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
     // turning it with the handle above the frame: [moveAngle] degrees around the pivot.
     private var resizing = false
     private var resizeAxis = Axis.BOTH
+
+    // Which handle is held: -1 left / top, 1 right / bottom, 0 the middle of a side. The side
+    // or corner across from it stays where it is.
+    private var grabSx = 1
+    private var grabSy = 1
     private var rotating = false
 
     /** A move that has not yet gone past the touch slop: lifting now is a tap on the selection. */
@@ -1550,13 +1556,25 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                 val inside = raw != null && raw.width() < 2 * grab && raw.height() < 2 * grab && raw.contains(p[0], p[1])
                 vertexIndex = if (inside) -1 else vertexAt(p[0], p[1], grab)
                 rotating = !inside && vertexIndex < 0 && hypot(p[0] - bounds.centerX(), p[1] - (bounds.top - rotateHandleOffset())) < grab
-                val axis = when {
+                // Eight handles: the corners resize in proportion, the sides stretch one way.
+                fun near(hx: Float, hy: Float) = hypot(p[0] - hx, p[1] - hy) < grab
+                val hit: Triple<Axis, Int, Int>? = when {
                     inside || vertexIndex >= 0 || rotating -> null
-                    hypot(p[0] - bounds.right, p[1] - bounds.bottom) < grab -> Axis.BOTH
+                    near(bounds.right, bounds.bottom) -> Triple(Axis.BOTH, 1, 1)
+                    near(bounds.left, bounds.bottom) -> Triple(Axis.BOTH, -1, 1)
+                    near(bounds.right, bounds.top) -> Triple(Axis.BOTH, 1, -1)
+                    near(bounds.left, bounds.top) -> Triple(Axis.BOTH, -1, -1)
                     // Side handles from outside the shape only: on a slim one they reach over it.
-                    raw != null && p[0] > raw.right && hypot(p[0] - bounds.right, p[1] - bounds.centerY()) < grab -> Axis.X
-                    raw != null && p[1] > raw.bottom && hypot(p[0] - bounds.centerX(), p[1] - bounds.bottom) < grab -> Axis.Y
+                    raw != null && p[0] > raw.right && near(bounds.right, bounds.centerY()) -> Triple(Axis.X, 1, 0)
+                    raw != null && p[0] < raw.left && near(bounds.left, bounds.centerY()) -> Triple(Axis.X, -1, 0)
+                    raw != null && p[1] > raw.bottom && near(bounds.centerX(), bounds.bottom) -> Triple(Axis.Y, 0, 1)
+                    raw != null && p[1] < raw.top && near(bounds.centerX(), bounds.top) -> Triple(Axis.Y, 0, -1)
                     else -> null
+                }
+                val axis = hit?.first
+                if (hit != null) {
+                    grabSx = hit.second
+                    grabSy = hit.third
                 }
                 resizing = axis != null
                 resizeAxis = axis ?: Axis.BOTH
@@ -1732,8 +1750,8 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         }
         val color = colorOf(kind)
         val size = sizeOf(kind)
-        val shownDark = (paper.color?.let(PaperStyle::isDark) ?: dark) && source?.pdfBitmap(page) == null
-        val shown = InkColors.forPaper(color, shownDark)
+        // The colour as chosen: never swapped for the paper (the owner's rule).
+        val shown = color
         // Without pressure the pen line is as wide all along as a medium press makes it.
         val even = kind == InkKind.PEN && !penPressure
         val brush = when {
@@ -2483,10 +2501,11 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         moveKy = 1f
         moveAngle = 0f
         val raw = rawSelectionBounds() ?: RectF()
-        anchorX = raw.left
-        anchorY = raw.top
-        cornerX = raw.right
-        cornerY = raw.bottom
+        // The anchor is across from the handle held; the corner is the handle's own.
+        anchorX = if (resizing && grabSx < 0) raw.right else raw.left
+        anchorY = if (resizing && grabSy < 0) raw.bottom else raw.top
+        cornerX = if (resizing && grabSx < 0) raw.left else raw.right
+        cornerY = if (resizing && grabSy < 0) raw.top else raw.bottom
         turnX = raw.centerX()
         turnY = raw.centerY()
         clearSnap()
@@ -2617,18 +2636,21 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             if (abs(angle - nearest) < SNAP_TOLERANCE) angle = nearest
             moveAngle = angle
         } else if (resizing) {
-            // Around the top-left corner: in proportion by the corner, one way by a side.
+            // Around the corner or side across from the handle: in proportion by a corner,
+            // one way by a side. [w] and [h] are negative when the handle is left or above.
             val w = cornerX - anchorX
             val h = cornerY - anchorY
+            val dx = x - moveStartX
+            val dy = y - moveStartY
             when (resizeAxis) {
                 Axis.BOTH -> {
-                    val span = w + h
-                    if (span > 0f) moveKx = ((cornerX + x - moveStartX - anchorX) + (cornerY + y - moveStartY - anchorY)) / span
+                    val span = abs(w) + abs(h)
+                    if (span > 0f) moveKx = (span + dx * sign(w) + dy * sign(h)) / span
                     moveKx = moveKx.coerceIn(MIN_RESIZE, MAX_RESIZE)
                     moveKy = moveKx
                 }
-                Axis.X -> if (w > 0f) moveKx = ((w + x - moveStartX) / w).coerceIn(MIN_RESIZE, MAX_RESIZE)
-                Axis.Y -> if (h > 0f) moveKy = ((h + y - moveStartY) / h).coerceIn(MIN_RESIZE, MAX_RESIZE)
+                Axis.X -> if (w != 0f) moveKx = ((w + dx) / w).coerceIn(MIN_RESIZE, MAX_RESIZE)
+                Axis.Y -> if (h != 0f) moveKy = ((h + dy) / h).coerceIn(MIN_RESIZE, MAX_RESIZE)
             }
         } else if (vertexIndex >= 0) {
             val pts = vertexStart.copyOf()
@@ -4122,9 +4144,11 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                     handlePaint.strokeWidth = 1.5f * density / scale
                     canvas.drawArc(hx - handle * 0.5f, hy - handle * 0.5f, hx + handle * 0.5f, hy + handle * 0.5f, -60f, 270f, false, handlePaint)
                     // Corner handle for resizing, side handles for stretching one way.
-                    drawHandle(canvas, r.right, r.bottom, handle, scale)
+                    for (cx in floatArrayOf(r.left, r.right)) for (cy in floatArrayOf(r.top, r.bottom)) drawHandle(canvas, cx, cy, handle, scale)
                     drawHandle(canvas, r.right, r.centerY(), handle * SIDE_HANDLE, scale)
+                    drawHandle(canvas, r.left, r.centerY(), handle * SIDE_HANDLE, scale)
                     drawHandle(canvas, r.centerX(), r.bottom, handle * SIDE_HANDLE, scale)
+                    drawHandle(canvas, r.centerX(), r.top, handle * SIDE_HANDLE, scale)
                     canvas.restore()
                     if (!dragging) selectedShape()?.let(::handlePoints)?.let { drawCorners(canvas, it, scale) }
                     if (rotating && mode == Mode.MOVE) {
@@ -4196,7 +4220,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             ruler.draw(canvas, dark, 1f / scale, showAngle = mode == Mode.RULER, pointer = pointer)
             if (mode == Mode.RULER_DRAW && rulerEdge == Ruler.ARC && rulerTo > rulerFrom) {
                 val (_, color, size) = rulerInk()
-                previewPaint.color = InkColors.forPaper(color, dark)
+                previewPaint.color = color
                 previewPaint.strokeWidth = size
                 tracePath.rewind()
                 val pts = arcPath(activePage)
@@ -4207,7 +4231,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                 val (_, color, size) = rulerInk()
                 val a = ruler.world(rulerFrom, ruler.edgeLine(rulerEdge, rulerOffset))
                 val b = ruler.world(rulerTo, ruler.edgeLine(rulerEdge, rulerOffset))
-                previewPaint.color = InkColors.forPaper(color, dark)
+                previewPaint.color = color
                 previewPaint.strokeWidth = size
                 canvas.drawLine(a[0], a[1], b[0], b[1], previewPaint)
             }
@@ -4240,7 +4264,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             canvas.drawLine(compassX, compassY, last[0], last[1], previewPaint)
             canvas.drawCircle(compassX, compassY, 3f / scale, previewPaint)
             compassShape()?.let { (r, from, sweep) ->
-                previewPaint.color = InkColors.forPaper(color, dark)
+                previewPaint.color = color
                 previewPaint.strokeWidth = size
                 tracePath.rewind()
                 val pts = compassPoints(r, from, sweep)
@@ -4271,7 +4295,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             val shape = selectedShape()
             if (corners != null && shape != null) {
                 // A corner being dragged: the shape as it will be.
-                previewPaint.color = InkColors.forPaper(shape.stroke.brush.colorIntArgb, dark)
+                previewPaint.color = shape.stroke.brush.colorIntArgb
                 previewPaint.strokeWidth = shape.stroke.brush.size
                 val line = shapeThrough(corners)
                 tracePath.rewind()
@@ -4297,7 +4321,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             if (moveKx == 1f && moveKy == 1f && moveAngle == 0f) {
                 for (c in connectors) {
                     val (pts, heads) = follow(c, moveDx, moveDy)
-                    previewPaint.color = InkColors.forPaper(c.line.stroke.brush.colorIntArgb, dark)
+                    previewPaint.color = c.line.stroke.brush.colorIntArgb
                     previewPaint.strokeWidth = c.line.stroke.brush.size
                     tracePath.rewind()
                     tracePath.moveTo(pts[0], pts[1])
