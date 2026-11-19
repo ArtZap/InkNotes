@@ -498,6 +498,7 @@ class EditorController(
         for (id in drop) {
             docs.remove(id)
             mathAnswers.remove(id)
+            mathRaw.remove(id)
             mathRevision.remove(id)
         }
         // Pages still being read: not wanted now; read again when the tab is shown.
@@ -2057,8 +2058,84 @@ class EditorController(
     }
 
     override fun onAnswerTapped(answer: PageAnswer) {
-        // Unsure or nothing: straight to correcting how it was read.
-        if (answer.fix != null && (answer.unsure || answer.missing || answer.error)) startFix(answer) else tappedAnswer = answer
+        val g = answer.answer as? dev.inknotes.math.Answer.Graph
+        when {
+            // Unsure or nothing: straight to correcting how it was read.
+            answer.fix != null && (answer.unsure || answer.missing || answer.error) -> startFix(answer)
+            // A graph: its own window over the page.
+            g != null && g.fns.isNotEmpty() -> graphWin = GraphWin(answer, g, graphKey(answer))
+            else -> tappedAnswer = answer
+        }
+    }
+
+    // --- graphs placed by hand
+
+    /** Answers as analysed, before graphs are moved to where the writer put them. */
+    private val mathRaw = HashMap<String, List<PageAnswer>>()
+
+    /** The key of each graph answer shown (its formula's strokes): where its place and points are kept. */
+    private val graphKeys = java.util.WeakHashMap<PageAnswer, String>()
+
+    /** A graph being dragged now: its page, key and place (dx, dy, size). */
+    private var liveGraph: Triple<String, String, FloatArray>? = null
+
+    private fun graphKey(a: PageAnswer): String? =
+        a.fix?.takeIf { a.answer is dev.inknotes.math.Answer.Graph }?.let { f -> dev.inknotes.math.Correct.fingerprint(f.left + f.right.orEmpty()) }
+
+    /** The answers of page [id] with every graph where the writer put it. */
+    private fun placeAnswers(id: String) {
+        val raw = mathRaw[id]
+        if (raw == null) {
+            mathAnswers.remove(id)
+            return
+        }
+        mathAnswers[id] = raw.map { a ->
+            val key = graphKey(a) ?: return@map a
+            val p = liveGraph?.takeIf { it.first == id && it.second == key }?.third ?: math.fixes.place(key)
+            (if (p == null) a else a.placed(p[0], p[1], p[2])).also { graphKeys[it] = key }
+        }
+    }
+
+    override fun onGraphMoved(page: Int, answer: PageAnswer, dx: Float, dy: Float, k: Float, done: Boolean) {
+        val id = notebook.pageIds.getOrNull(page) ?: return
+        val key = graphKeys[answer] ?: return
+        val base = math.fixes.place(key) ?: floatArrayOf(0f, 0f, 1f)
+        val p = floatArrayOf(base[0] + dx, base[1] + dy, (base[2] * k).coerceIn(0.4f, 4f))
+        if (done) {
+            liveGraph = null
+            math.fixes.setPlace(key, p.takeIf { abs(it[0]) > 0.5f || abs(it[1]) > 0.5f || abs(it[2] - 1f) > 0.01f })
+        } else {
+            liveGraph = Triple(id, key, p)
+        }
+        placeAnswers(id)
+        view?.refresh()
+    }
+
+    /** The graph of the window is moved or sized on the page by hand. */
+    fun graphPlaced(w: GraphWin): Boolean = w.key?.let { math.fixes.place(it) } != null
+
+    /** Back where it was drawn, its own size. */
+    fun resetGraphPlace(w: GraphWin) {
+        val key = w.key ?: return
+        math.fixes.setPlace(key, null)
+        notebook.pageIds.forEach { if (mathRaw.containsKey(it)) placeAnswers(it) }
+        view?.refresh()
+    }
+
+    /** A graph of the page in its own window; [key]: where its points are kept (null: nowhere). */
+    class GraphWin(val answer: PageAnswer, val graph: dev.inknotes.math.Answer.Graph, val key: String?)
+
+    var graphWin by mutableStateOf<GraphWin?>(null)
+        private set
+
+    fun closeGraph() {
+        graphWin = null
+    }
+
+    fun graphPoints(w: GraphWin): List<Pair<Double, Double>> = w.key?.let { math.fixes.points(it) }.orEmpty()
+
+    fun setGraphPoints(w: GraphWin, points: List<Pair<Double, Double>>) {
+        w.key?.let { math.fixes.setPoints(it, points) }
     }
 
     override fun onHint(text: String) = showStatus(text)
@@ -2908,7 +2985,8 @@ class EditorController(
             if (mathRevision[id] == doc.revision) continue
             mathRevision[id] = doc.revision
             math.analyze("${notebook.id}/$id", doc.strokes, notebook.pageWidthUnits(id), onKnobs = { k -> if (k.isEmpty()) mathKnobs.remove(id) else mathKnobs[id] = k }) { answers ->
-                if (answers.isEmpty()) mathAnswers.remove(id) else mathAnswers[id] = answers
+                if (answers.isEmpty()) mathRaw.remove(id) else mathRaw[id] = answers
+                placeAnswers(id)
                 if (id == notebook.pageIds.getOrNull(pageIndex)) offerCheck(id, answers)
                 view?.refresh()
             }
@@ -2920,6 +2998,7 @@ class EditorController(
         if (math.state == MathNotes.State.Ready || math.state == MathNotes.State.Downloading) {
             math.disable()
             mathAnswers.clear()
+            mathRaw.clear()
             mathKnobs.clear()
             scaling = null
             mathRevision.clear()

@@ -30,8 +30,8 @@ android {
         applicationId = "dev.inknotes"
         minSdk = 29
         targetSdk = 36
-        versionCode = 36
-        versionName = "0.57"
+        versionCode = 37
+        versionName = "0.58"
         // The device tests in a set language (dev.inknotes.InkTestRunner).
         testInstrumentationRunner = "dev.inknotes.InkTestRunner"
         buildConfigField("String", "GOOGLE_CLIENT_ID", "\"${googleProp("clientId")}\"")

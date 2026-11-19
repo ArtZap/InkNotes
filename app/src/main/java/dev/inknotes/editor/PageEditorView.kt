@@ -133,6 +133,12 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         /** A finger tapped the number of a = 3 on page [page]: its scale. */
         fun onKnobTapped(page: Int, knob: Knob) {}
 
+        /**
+         * A graph is dragged by a finger held on it: by ([dx], [dy]) from where it was, [k]
+         * times its size (by its corner); [done] when the finger lifts.
+         */
+        fun onGraphMoved(page: Int, answer: PageAnswer, dx: Float, dy: Float, k: Float, done: Boolean) {}
+
         /** A finger tapped a word underlined as maybe misspelt. */
         fun onTypoTapped(page: Int, typo: dev.inknotes.search.Spelling.Typo) {}
 
@@ -389,7 +395,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
     private val density = resources.displayMetrics.density
     private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop.toFloat()
 
-    private enum class Mode { NONE, DRAW, SNAPPED, ERASE, GESTURE, PATH, MOVE, LASER, RULER, RULER_DRAW, SPACE, COMPASS, PDF_TEXT }
+    private enum class Mode { NONE, DRAW, SNAPPED, ERASE, GESTURE, PATH, MOVE, LASER, RULER, RULER_DRAW, SPACE, COMPASS, PDF_TEXT, GRAPH }
 
     private var mode = Mode.NONE
 
@@ -1374,6 +1380,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                     val i = e.findPointerIndex(activePointerId)
                     if (i >= 0) spaceTo(toPage(spacePage, e.getX(i), e.getY(i))[1])
                 }
+                Mode.GRAPH -> graphTo(e, done = false)
                 Mode.NONE, Mode.SNAPPED -> Unit
             }
 
@@ -1398,6 +1405,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                     Mode.COMPASS -> endCompass()
                     Mode.PDF_TEXT -> endPdfText()
                     Mode.SPACE -> endSpace()
+                    Mode.GRAPH -> graphTo(e, done = true)
                     Mode.NONE, Mode.SNAPPED -> Unit
                 }
                 mode = Mode.NONE
@@ -1445,6 +1453,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                         pageLayer.invalidate()
                     }
                     Mode.PDF_TEXT -> clearPdfText()
+                    Mode.GRAPH -> graphTo(e, done = true)
                     else -> Unit
                 }
                 mode = Mode.NONE
@@ -1490,7 +1499,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             Mode.COMPASS -> startCompass(e, index)
             Mode.PDF_TEXT -> startPdfText(e, index)
             Mode.SPACE -> startSpace(e, index)
-            Mode.NONE, Mode.SNAPPED -> Unit
+            Mode.NONE, Mode.SNAPPED, Mode.GRAPH -> Unit
         }
     }
 
@@ -2103,9 +2112,62 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         pageLayer.invalidate()
     }
 
-    /** The finger stayed still: from here it draws a lasso. */
+    // A graph held by a finger: its answer, page, box at the start, by its corner (sizing) or not.
+    private var graphHeld: PageAnswer? = null
+    private var graphPage = 0
+    private var graphBox = RectF()
+    private var graphCorner = false
+    private var graphStartX = 0f
+    private var graphStartY = 0f
+
+    /** The graph under ([x], [y]) on [page], and whether the point is at its sizing corner. */
+    private fun graphAt(page: Int, x: Float, y: Float): Pair<PageAnswer, Boolean>? {
+        val grab = HANDLE_GRAB_DP * density / currentScale()
+        for (a in source?.answers(page).orEmpty()) {
+            if (a.answer !is Answer.Graph) continue
+            val box = RectF(a.x, a.y, a.x + a.size * Plot.WIDTH, a.y + a.size * Plot.HEIGHT)
+            val corner = hypot(x - box.right, y - box.bottom) < grab
+            if (corner || box.contains(x, y)) return a to corner
+        }
+        return null
+    }
+
+    /** The finger stayed still on a graph: from here it moves it, or sizes it by its corner. */
+    private fun startGraphDrag(): Boolean {
+        val page = pageAt(downX, downY)
+        val p = toPage(page, downX, downY)
+        val (a, corner) = graphAt(page, p[0], p[1]) ?: return false
+        mode = Mode.GRAPH
+        graphHeld = a
+        graphPage = page
+        graphBox = RectF(a.x, a.y, a.x + a.size * Plot.WIDTH, a.y + a.size * Plot.HEIGHT)
+        graphCorner = corner
+        graphStartX = p[0]
+        graphStartY = p[1]
+        buzz(HapticFeedbackConstants.LONG_PRESS)
+        return true
+    }
+
+    private fun graphTo(e: MotionEvent, done: Boolean) {
+        val a = graphHeld ?: return
+        val i = e.findPointerIndex(activePointerId).takeIf { it >= 0 } ?: e.actionIndex
+        val p = toPage(graphPage, e.getX(i), e.getY(i))
+        val dx = p[0] - graphStartX
+        val dy = p[1] - graphStartY
+        if (graphCorner) {
+            // Sized from its top-left corner, in proportion.
+            val k = ((graphBox.width() + dx) / graphBox.width() + (graphBox.height() + dy) / graphBox.height()) / 2
+            listener?.onGraphMoved(graphPage, a, 0f, 0f, k.coerceIn(0.3f, 4f), done)
+        } else {
+            listener?.onGraphMoved(graphPage, a, dx, dy, 1f, done)
+        }
+        if (done) graphHeld = null
+    }
+
+    /** The finger stayed still: from here it draws a lasso (or, on a graph, moves the graph). */
     private fun startFingerLasso() {
         if (mode != Mode.GESTURE || tops.isEmpty()) return
+        if (startGraphDrag()) return
         mode = Mode.PATH
         fingerLasso = true
         activePage = pageAt(downX, downY)

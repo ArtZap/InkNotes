@@ -373,6 +373,7 @@ fun EditorScreen(
                 // A formula just written may be misread: asked about, without stopping the writing.
                 controller.checkOffer?.let { CheckOffer(controller, it, Modifier.align(Alignment.BottomCenter).padding(bottom = 24.dp)) }
                 controller.scaling?.let { ScaleBar(controller, it, Modifier.align(Alignment.BottomCenter).padding(start = 12.dp, end = 12.dp, bottom = 24.dp)) }
+                controller.graphWin?.let { GraphWindow(controller, it) }
             }
             if (showSearch) {
                 VerticalDivider(color = MaterialTheme.colorScheme.outlineVariant)
