@@ -2063,67 +2063,48 @@ class EditorController(
             // Unsure or nothing: straight to correcting how it was read.
             answer.fix != null && (answer.unsure || answer.missing || answer.error) -> startFix(answer)
             // A graph: its own window over the page.
-            g != null && g.fns.isNotEmpty() -> graphWin = GraphWin(answer, g, graphKey(answer))
+            g != null && g.fns.isNotEmpty() && g.exprs.size == g.fns.size -> {
+                val id = mathAnswers.entries.firstOrNull { (_, list) -> answer in list }?.key ?: notebook.pageIds.getOrNull(pageIndex)
+                if (id != null) graphWin = GraphWin(g.spec(graphKey(answer)), id, answer, null)
+            }
             else -> tappedAnswer = answer
         }
     }
 
-    // --- graphs placed by hand
+    // --- graphs as pictures in the notebook
 
-    /** Answers as analysed, before graphs are moved to where the writer put them. */
+    /** Answers as analysed, before the small graphs already put in the notebook as pictures are left out. */
     private val mathRaw = HashMap<String, List<PageAnswer>>()
 
-    /** The key of each graph answer shown (its formula's strokes): where its place and points are kept. */
-    private val graphKeys = java.util.WeakHashMap<PageAnswer, String>()
-
-    /** A graph being dragged now: its page, key and place (dx, dy, size). */
-    private var liveGraph: Triple<String, String, FloatArray>? = null
+    /** What each graph picture of the notebook shows, by file (null: an ordinary picture). */
+    private val graphSpecs = HashMap<String, dev.inknotes.math.GraphSpec?>()
 
     private fun graphKey(a: PageAnswer): String? =
         a.fix?.takeIf { a.answer is dev.inknotes.math.Answer.Graph }?.let { f -> dev.inknotes.math.Correct.fingerprint(f.left + f.right.orEmpty()) }
 
-    /** The answers of page [id] with every graph where the writer put it. */
+    /** What the picture [file] shows when it is a graph's; read once from the file. */
+    private fun graphSpecOf(file: String): dev.inknotes.math.GraphSpec? =
+        graphSpecs.getOrPut(file) { repo.graphSpec(notebook, file)?.let { dev.inknotes.math.GraphSpec.decode(it) } }
+
+    override fun isGraphPicture(file: String): Boolean = graphSpecOf(file) != null
+
+    /** The answers of page [id], without the small graphs whose picture is already on the page. */
     private fun placeAnswers(id: String) {
         val raw = mathRaw[id]
         if (raw == null) {
             mathAnswers.remove(id)
             return
         }
-        mathAnswers[id] = raw.map { a ->
-            val key = graphKey(a) ?: return@map a
-            val p = liveGraph?.takeIf { it.first == id && it.second == key }?.third ?: math.fixes.place(key)
-            (if (p == null) a else a.placed(p[0], p[1], p[2])).also { graphKeys[it] = key }
-        }
+        val doc = docs[id]
+        val inPictures = doc?.images.orEmpty().mapNotNull { if (it.isText) null else graphSpecOf(it.file)?.key }.toSet()
+        mathAnswers[id] = if (inPictures.isEmpty()) raw else raw.filter { a -> graphKey(a)?.let { it !in inPictures } ?: true }
     }
 
-    override fun onGraphMoved(page: Int, answer: PageAnswer, dx: Float, dy: Float, k: Float, done: Boolean) {
-        val id = notebook.pageIds.getOrNull(page) ?: return
-        val key = graphKeys[answer] ?: return
-        val base = math.fixes.place(key) ?: floatArrayOf(0f, 0f, 1f)
-        val p = floatArrayOf(base[0] + dx, base[1] + dy, (base[2] * k).coerceIn(0.4f, 4f))
-        if (done) {
-            liveGraph = null
-            math.fixes.setPlace(key, p.takeIf { abs(it[0]) > 0.5f || abs(it[1]) > 0.5f || abs(it[2] - 1f) > 0.01f })
-        } else {
-            liveGraph = Triple(id, key, p)
-        }
-        placeAnswers(id)
-        view?.refresh()
-    }
-
-    /** The graph of the window is moved or sized on the page by hand. */
-    fun graphPlaced(w: GraphWin): Boolean = w.key?.let { math.fixes.place(it) } != null
-
-    /** Back where it was drawn, its own size. */
-    fun resetGraphPlace(w: GraphWin) {
-        val key = w.key ?: return
-        math.fixes.setPlace(key, null)
-        notebook.pageIds.forEach { if (mathRaw.containsKey(it)) placeAnswers(it) }
-        view?.refresh()
-    }
-
-    /** A graph of the page in its own window; [key]: where its points are kept (null: nowhere). */
-    class GraphWin(val answer: PageAnswer, val graph: dev.inknotes.math.Answer.Graph, val key: String?)
+    /**
+     * A graph in its own window: from a small graph after "=" ([answer]) or from its picture
+     * in the notebook ([image]), on page [pageId].
+     */
+    class GraphWin(val spec: dev.inknotes.math.GraphSpec, val pageId: String, val answer: PageAnswer?, val image: PageImage?)
 
     var graphWin by mutableStateOf<GraphWin?>(null)
         private set
@@ -2132,10 +2113,51 @@ class EditorController(
         graphWin = null
     }
 
-    fun graphPoints(w: GraphWin): List<Pair<Double, Double>> = w.key?.let { math.fixes.points(it) }.orEmpty()
+    override fun onGraphPictureTapped(page: Int, image: PageImage): Boolean {
+        val spec = graphSpecOf(image.file) ?: return false
+        val id = notebook.pageIds.getOrNull(page) ?: return false
+        graphWin = GraphWin(spec, id, null, image)
+        return true
+    }
 
-    fun setGraphPoints(w: GraphWin, points: List<Pair<Double, Double>>) {
-        w.key?.let { math.fixes.setPoints(it, points) }
+    /**
+     * What the window shows ([spec]) into the notebook as a picture, [aspect] wide to tall: a
+     * new picture where the small graph was, or the old picture redrawn in its place.
+     */
+    fun saveGraph(w: GraphWin, spec: dev.inknotes.math.GraphSpec, aspect: Float) {
+        val nb = notebook
+        val k = aspect.takeIf { it.isFinite() && it > 0.2f && it < 5f } ?: 1.5f
+        val pxW = GRAPH_PICTURE_PX
+        val pxH = (pxW / k).toInt().coerceIn(200, 2400)
+        val darkPaper = paperDark
+        graphWin = null
+        showStatus(tr("Рисую график…", "Drawing the graph…"))
+        Thread {
+            val bmp = runCatching { dev.inknotes.editor.GraphPainter.picture(spec, pxW, pxH, darkPaper) }.getOrNull()
+            handler.post {
+                if (bmp == null) return@post showStatus(tr("Не удалось нарисовать график", "Could not draw the graph"))
+                repo.saveGraphAsync(nb, bmp, spec.encode()) { saved ->
+                    val (file, _, _) = saved ?: return@saveGraphAsync showStatus(tr("Не удалось сохранить график", "Could not save the graph"))
+                    graphSpecs[file] = spec
+                    val page = notebook.pageIds.indexOf(w.pageId).takeIf { it >= 0 } ?: return@saveGraphAsync
+                    val v = view ?: return@saveGraphAsync
+                    val old = w.image
+                    if (old != null) {
+                        // Redrawn in its place: as wide as it was, as tall as the window's view.
+                        v.replaceImage(page, old, PageImage(file, old.x, old.y, old.w, old.w / k, old.rotation, null, old.layer))
+                    } else {
+                        val a = w.answer
+                        val width = (a?.size ?: 40f) * dev.inknotes.math.Plot.WIDTH * 1.6f
+                        val x = a?.x ?: v.visibleCenter(page)[0] - width / 2
+                        val y = a?.y ?: v.visibleCenter(page)[1]
+                        v.insert(page, images = listOf(PageImage(file, x, y, width, width / k)))
+                    }
+                    placeAnswers(w.pageId)
+                    view?.refresh()
+                    showStatus(tr("График в тетради. Коснитесь его, затем ещё раз — откроется окно графика", "The graph is in the notebook. Tap it, then again, to open its window"))
+                }
+            }
+        }.start()
     }
 
     override fun onHint(text: String) = showStatus(text)
@@ -3194,6 +3216,9 @@ class EditorController(
         private const val MAX_PDF_TEXT_PAGES = 200
         private const val MAX_PDF_WIDTH_PX = 2560
         /** The starting palette of light paper: black, blue, red, green. */
+        /** A graph's picture in the notebook: this many pixels wide. */
+        const val GRAPH_PICTURE_PX = 1200
+
         val PEN_COLORS = listOf(0xFF1A1A1A, 0xFF1E5BD8, 0xFFD32F2F, 0xFF2E7D32).map { it.toInt() }
 
         /** The starting palette of dark paper: the same four, light enough to read on it. */
