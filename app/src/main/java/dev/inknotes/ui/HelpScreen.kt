@@ -45,6 +45,12 @@ private class Topic(val title: String, val entries: List<Pair<String, String>>)
 
 private val TOPICS = listOf(
     Topic(
+        tr("Новое в 0.66", "What's new in 0.66"),
+        listOf(
+            tr("Уравнения", "Equations") to tr("Если в уравнении прочиталось две неизвестные (9a + 6 = 2 как «ga + 6 = 2») или у него вышло «нет решений», программа пробует другие прочтения — цифру вместо похожей буквы, букву x вместо нуля — и показывает решение серым «под вопросом» с причиной. Нажмите на ответ, чтобы проверить прочтение.", "When an equation reads with two unknowns (9a + 6 = 2 as \"ga + 6 = 2\") or comes out with no solutions, the app tries other readings — a digit for a lookalike letter, x for a zero — and shows the solution grey, \"unsure\", with the reason. Tap the answer to check the reading."),
+        ),
+    ),
+    Topic(
         tr("Новое в 0.65", "What's new in 0.65"),
         listOf(
             tr("Окно «Как прочитано»", "The \"As read\" window") to tr("Окно показывает ровно то прочтение, по которому посчитан ответ на странице, и только те штрихи, что в него вошли (без слова «Ответ:» перед формулой).", "The window shows exactly the reading the page computed its answer from, and only the strokes that went into it (without a word like \"Answer:\" before the formula)."),

@@ -100,6 +100,22 @@ class MathPageTest {
     }
 
     @Test
+    fun equationWithTwoUnknownsIsReadAgainWithOne() {
+        // 9a + 6 = 2 with the 9 read as g: two unknowns, nothing to solve. Read again with one
+        // letter (g → 9): a = −4/9, shown unsure with the reason.
+        val s = Sheet()
+        s.glyph("g", 100f, 100f)
+        s.glyph("a", 116f, 106f, 12f, 18f)
+        s.glyph("+", 136f, 106f, 12f, 12f)
+        s.glyph("6", 156f, 100f)
+        s.equals(178f, 112f)
+        s.glyph("2", 204f, 100f)
+        val a = s.answers().single()
+        assertEquals("a = −4/9", text(a))
+        assertTrue(a.unsure)
+    }
+
+    @Test
     fun simpleSum() {
         val s = Sheet()
         s.glyph("2", 100f, 100f)

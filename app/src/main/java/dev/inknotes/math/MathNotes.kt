@@ -272,7 +272,12 @@ class MathNotes(
     private fun read(run: List<Ink>, h: Float): List<String> {
         val key = signature(run)
         val cacheKey = key + ReadOptions.key() + (if (ReadOptions.mathFirst) "m" else "")
-        cache[cacheKey]?.let { return it }
+        cache[cacheKey]?.let { texts ->
+            // The device bench records every run of every formula, those read before too
+            // (the same glyph in two synthetic formulas): a run missing from the record reads as nothing.
+            onRecognized?.let { record -> guessed[key]?.let { (plain, math) -> record(run, plain, math) } }
+            return texts
+        }
         val r = recognizer ?: DigitalInkRecognition.getClient(
             DigitalInkRecognizerOptions.builder(model).setMaxResultCount(CANDIDATES).build(),
         ).also { recognizer = it }
@@ -302,6 +307,7 @@ class MathNotes(
         if (plain.isEmpty() && math.isEmpty()) return emptyList()
         doubts[key] = Doubt(plain.firstOrNull() == math.firstOrNull(), margins.minOrNull())
         onRecognized?.invoke(run, plain, math)
+        if (onRecognized != null) guessed[key] = plain to math
         val texts = ReadOptions.interleave(plain, math)
         cache[cacheKey] = texts
         return texts
@@ -314,9 +320,14 @@ class MathNotes(
      */
     class Doubt(val agree: Boolean, val margin: Float?)
 
-    /** Every run ML Kit reads (not from the cache), with its guesses as is and after arithmetic: the device bench records them to replay on a computer. */
+    /** Every run ML Kit reads, with its guesses as is and after arithmetic (from the cache too, once recorded): the device bench records them to replay on a computer. */
     @Volatile
     internal var onRecognized: ((run: List<Ink>, plain: List<String>, math: List<String>) -> Unit)? = null
+
+    /** Both guess lists by run, kept only while the device bench records (math thread). */
+    private val guessed = object : LinkedHashMap<String, Pair<List<String>, List<String>>>(256, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Pair<List<String>, List<String>>>?) = size > CACHE_SIZE
+    }
 
     // Math thread only, as the cache, and as large.
     private val doubts = object : LinkedHashMap<String, Doubt>(256, 0.75f, true) {

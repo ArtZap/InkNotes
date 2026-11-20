@@ -296,3 +296,314 @@ CROHME2012_data/testDataGT/formulaire057-equation036	UNSURE
 CROHME2012_data/testDataGT/formulaire058-equation011	NONE	
 CROHME2012_data/testDataGT/formulaire058-equation028	WRONG	
 CROHME2012_data/testDataGT/formulaire058-equation053	WRONG	
+synthetic/arith-0	WRONG	WRONG
+synthetic/arith-1	RIGHT	RIGHT
+synthetic/arith-2	WRONG	NONE
+synthetic/arith-3	WRONG	NONE
+synthetic/arith-4	WRONG	RIGHT
+synthetic/arith-5	RIGHT	RIGHT
+synthetic/arith-6	RIGHT	RIGHT
+synthetic/arith-7	WRONG	NONE
+synthetic/arith-8	RIGHT	RIGHT
+synthetic/arith-9	RIGHT	RIGHT
+synthetic/arith-10	RIGHT	WRONG
+synthetic/arith-11	WRONG	WRONG
+synthetic/arith-12	RIGHT	RIGHT
+synthetic/arith-13	RIGHT	RIGHT
+synthetic/arith-14	RIGHT	RIGHT
+synthetic/arith-15	UNSURE	UNSURE
+synthetic/arith-16	WRONG	NONE
+synthetic/arith-17	RIGHT	RIGHT
+synthetic/arith-18	NONE	NONE
+synthetic/arith-19	WRONG	UNSURE
+synthetic/arith-20	WRONG	WRONG
+synthetic/arith-21	WRONG	NONE
+synthetic/arith-22	RIGHT	NONE
+synthetic/arith-23	WRONG	WRONG
+synthetic/arith-24	WRONG	NONE
+synthetic/arith-25	WRONG	WRONG
+synthetic/arith-26	RIGHT	RIGHT
+synthetic/arith-27	WRONG	NONE
+synthetic/arith-28	RIGHT	RIGHT
+synthetic/arith-29	WRONG	RIGHT
+synthetic/arith-30	RIGHT	RIGHT
+synthetic/arith-31	RIGHT	UNSURE
+synthetic/arith-32	RIGHT	RIGHT
+synthetic/arith-33	WRONG	WRONG
+synthetic/arith-34	WRONG	NONE
+synthetic/arith-35	WRONG	RIGHT
+synthetic/arith-36	WRONG	UNSURE
+synthetic/arith-37	WRONG	WRONG
+synthetic/arith-38	RIGHT	RIGHT
+synthetic/arith-39	WRONG	WRONG
+synthetic/fraction-0	RIGHT	RIGHT
+synthetic/fraction-1	RIGHT	UNSURE
+synthetic/fraction-2	RIGHT	WRONG
+synthetic/fraction-3	UNSURE	RIGHT
+synthetic/fraction-4	WRONG	WRONG
+synthetic/fraction-5	WRONG	UNSURE
+synthetic/fraction-6	WRONG	UNSURE
+synthetic/fraction-7	WRONG	RIGHT
+synthetic/fraction-8	WRONG	WRONG
+synthetic/fraction-9	WRONG	RIGHT
+synthetic/fraction-10	WRONG	RIGHT
+synthetic/fraction-11	WRONG	WRONG
+synthetic/fraction-12	RIGHT	RIGHT
+synthetic/fraction-13	WRONG	WRONG
+synthetic/fraction-14	WRONG	UNSURE
+synthetic/fraction-15	NONE	NONE
+synthetic/fraction-16	RIGHT	RIGHT
+synthetic/fraction-17	WRONG	WRONG
+synthetic/fraction-18	WRONG	WRONG
+synthetic/fraction-19	WRONG	RIGHT
+synthetic/fraction-20	NONE	NONE
+synthetic/fraction-21	RIGHT	RIGHT
+synthetic/fraction-22	WRONG	UNSURE
+synthetic/fraction-23	RIGHT	WRONG
+synthetic/fraction-24	WRONG	WRONG
+synthetic/fraction-25	RIGHT	RIGHT
+synthetic/fraction-26	WRONG	RIGHT
+synthetic/fraction-27	WRONG	NONE
+synthetic/fraction-28	WRONG	WRONG
+synthetic/fraction-29	WRONG	UNSURE
+synthetic/fraction-30	RIGHT	RIGHT
+synthetic/fraction-31	WRONG	UNSURE
+synthetic/fraction-32	NONE	NONE
+synthetic/fraction-33	WRONG	RIGHT
+synthetic/fraction-34	WRONG	WRONG
+synthetic/fraction-35	WRONG	WRONG
+synthetic/fraction-36	WRONG	WRONG
+synthetic/fraction-37	WRONG	UNSURE
+synthetic/fraction-38	NONE	WRONG
+synthetic/fraction-39	RIGHT	RIGHT
+synthetic/power-0	WRONG	WRONG
+synthetic/power-1	RIGHT	RIGHT
+synthetic/power-2	WRONG	UNSURE
+synthetic/power-3	RIGHT	RIGHT
+synthetic/power-4	RIGHT	RIGHT
+synthetic/power-5	RIGHT	RIGHT
+synthetic/power-6	RIGHT	RIGHT
+synthetic/power-7	RIGHT	RIGHT
+synthetic/power-8	WRONG	UNSURE
+synthetic/power-9	RIGHT	RIGHT
+synthetic/power-10	RIGHT	RIGHT
+synthetic/power-11	WRONG	WRONG
+synthetic/power-12	WRONG	NONE
+synthetic/power-13	RIGHT	RIGHT
+synthetic/power-14	UNSURE	UNSURE
+synthetic/power-15	RIGHT	RIGHT
+synthetic/power-16	NONE	NONE
+synthetic/power-17	RIGHT	WRONG
+synthetic/power-18	RIGHT	RIGHT
+synthetic/power-19	RIGHT	RIGHT
+synthetic/power-20	RIGHT	RIGHT
+synthetic/power-21	RIGHT	RIGHT
+synthetic/power-22	RIGHT	RIGHT
+synthetic/power-23	RIGHT	WRONG
+synthetic/power-24	UNSURE	UNSURE
+synthetic/power-25	RIGHT	RIGHT
+synthetic/power-26	WRONG	RIGHT
+synthetic/power-27	RIGHT	UNSURE
+synthetic/power-28	WRONG	WRONG
+synthetic/power-29	RIGHT	RIGHT
+synthetic/power-30	WRONG	WRONG
+synthetic/power-31	RIGHT	RIGHT
+synthetic/power-32	WRONG	RIGHT
+synthetic/power-33	RIGHT	UNSURE
+synthetic/power-34	RIGHT	WRONG
+synthetic/power-35	RIGHT	UNSURE
+synthetic/power-36	RIGHT	RIGHT
+synthetic/power-37	WRONG	UNSURE
+synthetic/power-38	RIGHT	RIGHT
+synthetic/power-39	RIGHT	RIGHT
+synthetic/root-0	RIGHT	RIGHT
+synthetic/root-1	RIGHT	RIGHT
+synthetic/root-2	RIGHT	RIGHT
+synthetic/root-3	WRONG	RIGHT
+synthetic/root-4	WRONG	RIGHT
+synthetic/root-5	RIGHT	UNSURE
+synthetic/root-6	WRONG	UNSURE
+synthetic/root-7	WRONG	RIGHT
+synthetic/root-8	NONE	NONE
+synthetic/root-9	RIGHT	RIGHT
+synthetic/root-10	RIGHT	RIGHT
+synthetic/root-11	RIGHT	RIGHT
+synthetic/root-12	RIGHT	RIGHT
+synthetic/root-13	RIGHT	RIGHT
+synthetic/root-14	WRONG	RIGHT
+synthetic/root-15	RIGHT	RIGHT
+synthetic/root-16	RIGHT	RIGHT
+synthetic/root-17	RIGHT	RIGHT
+synthetic/root-18	RIGHT	RIGHT
+synthetic/root-19	RIGHT	RIGHT
+synthetic/root-20	NONE	NONE
+synthetic/root-21	RIGHT	RIGHT
+synthetic/root-22	RIGHT	RIGHT
+synthetic/root-23	RIGHT	RIGHT
+synthetic/root-24	RIGHT	RIGHT
+synthetic/root-25	RIGHT	RIGHT
+synthetic/root-26	WRONG	UNSURE
+synthetic/root-27	RIGHT	RIGHT
+synthetic/root-28	RIGHT	RIGHT
+synthetic/root-29	WRONG	UNSURE
+synthetic/root-30	RIGHT	RIGHT
+synthetic/root-31	RIGHT	RIGHT
+synthetic/root-32	RIGHT	RIGHT
+synthetic/root-33	RIGHT	RIGHT
+synthetic/root-34	RIGHT	RIGHT
+synthetic/root-35	RIGHT	RIGHT
+synthetic/root-36	RIGHT	UNSURE
+synthetic/root-37	RIGHT	RIGHT
+synthetic/root-38	WRONG	WRONG
+synthetic/root-39	WRONG	UNSURE
+synthetic/letters-0	WRONG	
+synthetic/letters-1	RIGHT	
+synthetic/letters-2	NONE	
+synthetic/letters-3	RIGHT	
+synthetic/letters-4	RIGHT	
+synthetic/letters-5	RIGHT	
+synthetic/letters-6	RIGHT	
+synthetic/letters-7	RIGHT	
+synthetic/letters-8	UNSURE	
+synthetic/letters-9	WRONG	
+synthetic/letters-10	RIGHT	
+synthetic/letters-11	RIGHT	
+synthetic/letters-12	WRONG	
+synthetic/letters-13	UNSURE	
+synthetic/letters-14	WRONG	
+synthetic/letters-15	WRONG	
+synthetic/letters-16	WRONG	
+synthetic/letters-17	WRONG	
+synthetic/letters-18	NONE	
+synthetic/letters-19	RIGHT	
+synthetic/letters-20	WRONG	
+synthetic/letters-21	RIGHT	
+synthetic/letters-22	WRONG	
+synthetic/letters-23	WRONG	
+synthetic/letters-24	WRONG	
+synthetic/letters-25	RIGHT	
+synthetic/letters-26	RIGHT	
+synthetic/letters-27	WRONG	
+synthetic/letters-28	WRONG	
+synthetic/letters-29	WRONG	
+synthetic/letters-30	RIGHT	
+synthetic/letters-31	WRONG	
+synthetic/letters-32	WRONG	
+synthetic/letters-33	WRONG	
+synthetic/letters-34	RIGHT	
+synthetic/letters-35	WRONG	
+synthetic/letters-36	RIGHT	
+synthetic/letters-37	RIGHT	
+synthetic/letters-38	WRONG	
+synthetic/letters-39	WRONG	
+synthetic/equation-linear-0	SKIP	WRONG
+synthetic/equation-linear-1	SKIP	NONE
+synthetic/equation-linear-2	SKIP	UNSURE
+synthetic/equation-linear-3	SKIP	NONE
+synthetic/equation-linear-4	SKIP	NONE
+synthetic/equation-linear-5	SKIP	UNSURE
+synthetic/equation-linear-6	SKIP	RIGHT
+synthetic/equation-linear-7	SKIP	NONE
+synthetic/equation-linear-8	SKIP	UNSURE
+synthetic/equation-linear-9	SKIP	NONE
+synthetic/equation-linear-10	SKIP	RIGHT
+synthetic/equation-linear-11	SKIP	NONE
+synthetic/equation-linear-12	SKIP	UNSURE
+synthetic/equation-linear-13	SKIP	NONE
+synthetic/equation-linear-14	SKIP	RIGHT
+synthetic/equation-linear-15	SKIP	WRONG
+synthetic/equation-linear-16	SKIP	RIGHT
+synthetic/equation-linear-17	SKIP	RIGHT
+synthetic/equation-linear-18	SKIP	RIGHT
+synthetic/equation-linear-19	SKIP	UNSURE
+synthetic/equation-linear-20	SKIP	RIGHT
+synthetic/equation-linear-21	SKIP	NONE
+synthetic/equation-linear-22	SKIP	RIGHT
+synthetic/equation-linear-23	SKIP	NONE
+synthetic/equation-linear-24	SKIP	UNSURE
+synthetic/equation-linear-25	SKIP	UNSURE
+synthetic/equation-linear-26	SKIP	RIGHT
+synthetic/equation-linear-27	SKIP	RIGHT
+synthetic/equation-linear-28	SKIP	RIGHT
+synthetic/equation-linear-30	SKIP	RIGHT
+synthetic/equation-linear-31	SKIP	RIGHT
+synthetic/equation-linear-33	SKIP	RIGHT
+synthetic/equation-linear-34	SKIP	WRONG
+synthetic/equation-linear-35	SKIP	WRONG
+synthetic/equation-linear-36	SKIP	UNSURE
+synthetic/equation-linear-37	SKIP	RIGHT
+synthetic/equation-linear-38	SKIP	UNSURE
+synthetic/equation-linear-39	SKIP	RIGHT
+synthetic/equation-fraction-0	SKIP	RIGHT
+synthetic/equation-fraction-1	SKIP	UNSURE
+synthetic/equation-fraction-2	SKIP	RIGHT
+synthetic/equation-fraction-3	SKIP	WRONG
+synthetic/equation-fraction-4	SKIP	UNSURE
+synthetic/equation-fraction-5	SKIP	WRONG
+synthetic/equation-fraction-7	SKIP	RIGHT
+synthetic/equation-fraction-8	SKIP	NONE
+synthetic/equation-fraction-9	SKIP	NONE
+synthetic/equation-fraction-10	SKIP	UNSURE
+synthetic/equation-fraction-11	SKIP	RIGHT
+synthetic/equation-fraction-12	SKIP	RIGHT
+synthetic/equation-fraction-14	SKIP	UNSURE
+synthetic/equation-fraction-15	SKIP	NONE
+synthetic/equation-fraction-16	SKIP	RIGHT
+synthetic/equation-fraction-17	SKIP	RIGHT
+synthetic/equation-fraction-18	SKIP	RIGHT
+synthetic/equation-fraction-19	SKIP	UNSURE
+synthetic/equation-fraction-20	SKIP	NONE
+synthetic/equation-fraction-21	SKIP	UNSURE
+synthetic/equation-fraction-22	SKIP	RIGHT
+synthetic/equation-fraction-24	SKIP	RIGHT
+synthetic/equation-fraction-25	SKIP	UNSURE
+synthetic/equation-fraction-26	SKIP	RIGHT
+synthetic/equation-fraction-27	SKIP	NONE
+synthetic/equation-fraction-28	SKIP	RIGHT
+synthetic/equation-fraction-29	SKIP	RIGHT
+synthetic/equation-fraction-30	SKIP	RIGHT
+synthetic/equation-fraction-31	SKIP	RIGHT
+synthetic/equation-fraction-32	SKIP	RIGHT
+synthetic/equation-fraction-33	SKIP	UNSURE
+synthetic/equation-fraction-34	SKIP	RIGHT
+synthetic/equation-fraction-35	SKIP	RIGHT
+synthetic/equation-fraction-36	SKIP	UNSURE
+synthetic/equation-fraction-38	SKIP	UNSURE
+synthetic/equation-fraction-39	SKIP	RIGHT
+synthetic/equation-quadratic-0	SKIP	NONE
+synthetic/equation-quadratic-1	SKIP	RIGHT
+synthetic/equation-quadratic-2	SKIP	NONE
+synthetic/equation-quadratic-4	SKIP	UNSURE
+synthetic/equation-quadratic-5	SKIP	NONE
+synthetic/equation-quadratic-6	SKIP	NONE
+synthetic/equation-quadratic-7	SKIP	UNSURE
+synthetic/equation-quadratic-8	SKIP	NONE
+synthetic/equation-quadratic-9	SKIP	WRONG
+synthetic/equation-quadratic-10	SKIP	NONE
+synthetic/equation-quadratic-11	SKIP	RIGHT
+synthetic/equation-quadratic-12	SKIP	RIGHT
+synthetic/equation-quadratic-14	SKIP	UNSURE
+synthetic/equation-quadratic-15	SKIP	UNSURE
+synthetic/equation-quadratic-16	SKIP	NONE
+synthetic/equation-quadratic-17	SKIP	RIGHT
+synthetic/equation-quadratic-18	SKIP	UNSURE
+synthetic/equation-quadratic-19	SKIP	NONE
+synthetic/equation-quadratic-20	SKIP	RIGHT
+synthetic/equation-quadratic-21	SKIP	WRONG
+synthetic/equation-quadratic-22	SKIP	RIGHT
+synthetic/equation-quadratic-23	SKIP	UNSURE
+synthetic/equation-quadratic-24	SKIP	UNSURE
+synthetic/equation-quadratic-25	SKIP	UNSURE
+synthetic/equation-quadratic-26	SKIP	UNSURE
+synthetic/equation-quadratic-27	SKIP	RIGHT
+synthetic/equation-quadratic-28	SKIP	RIGHT
+synthetic/equation-quadratic-29	SKIP	NONE
+synthetic/equation-quadratic-30	SKIP	RIGHT
+synthetic/equation-quadratic-31	SKIP	RIGHT
+synthetic/equation-quadratic-32	SKIP	UNSURE
+synthetic/equation-quadratic-33	SKIP	NONE
+synthetic/equation-quadratic-34	SKIP	UNSURE
+synthetic/equation-quadratic-35	SKIP	WRONG
+synthetic/equation-quadratic-37	SKIP	UNSURE
+synthetic/equation-quadratic-38	SKIP	NONE
+synthetic/equation-quadratic-39	SKIP	RIGHT

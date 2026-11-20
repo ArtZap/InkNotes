@@ -436,19 +436,41 @@ object MathPage {
             trace?.invoke("graph: y = ${d.right} at ($gx, $gy)")
             out += PageAnswer(gx, gy, size, graph, fix = fix)
         }
-        for (d in single) {
-            if (d in asked || unknownOf(d) == null) continue
+        for (d0 in single) {
+            if (d0 in asked) continue
+            // Two unknowns as read (ga + 6 = 2: g and a): the readings with one letter, as for a
+            // system (9a + 6 = 2), shown unsure with why.
+            var rescued: List<String> = emptyList()
+            fun again(noSolution: Boolean): Def? {
+                if (d0.again == null) return null
+                val (l, r, why) = rescue(d0.left, d0.right, d0.leftInk, d0.rightInk, ordered[d0.index], reader, envAt(d0.index), noSolution) ?: return null
+                rescued = listOf(why)
+                return Def(d0.index, l, r, null, d0.leftInk, d0.rightInk)
+            }
+            var d = if (unknownOf(d0) != null) d0 else again(noSolution = false) ?: continue
             val eq = ordered[d.index]
             val after = side(eq, 1, eqs, rest, limit = null).maxOfOrNull { it.right } ?: continue
             val at = after + 1.0f * eq.h
             trace?.invoke("equation: ${d.left} = ${d.right}")
             // An identity (a result written out by hand: (x³)' = 3x²) or an unreadable line says
             // nothing worth showing; errors are kept for a "{" only.
-            val answer = runCatching { Calc.solve(listOf(d.left to d.right), envAt(d.index)) }.getOrNull() ?: continue
+            var answer = runCatching { Calc.solve(listOf(d.left to d.right), envAt(d.index)) }.getOrNull() ?: continue
+            // No solutions as read (x² + 40 − 1 = 0 for x² + 4x − 1 = 0): an exercise has some,
+            // so the other readings are tried; shown unsure.
+            if (d === d0 && (answer as? Answer.Text)?.lines == listOf(tr("нет решений", "no solutions"))) {
+                val other = again(noSolution = true)
+                val otherAnswer = other?.let { o -> runCatching { Calc.solve(listOf(o.left to o.right), envAt(o.index)) }.getOrNull() }
+                if (other != null && otherAnswer != null) {
+                    d = other
+                    answer = otherAnswer
+                }
+            }
             if ((answer as? Answer.Text)?.lines == listOf(tr("∞ решений", "∞ solutions"))) continue
-            val others = d.again?.let { again ->
-                otherAnswers(answer) { shift -> again(shift)?.let { (l2, r2) -> Calc.solve(listOf(l2 to r2), envAt(d.index)) } }
-            }.orEmpty()
+            val others = rescued.ifEmpty {
+                d.again?.let { again ->
+                    otherAnswers(answer) { shift -> again(shift)?.let { (l2, r2) -> Calc.solve(listOf(l2 to r2), envAt(d.index)) } }
+                }.orEmpty()
+            }
             val fix = Fix(d.leftInk, d.rightInk, listOf(eq.top, eq.bottom) + eq.extra, eq.h, eq.cy, envAt(d.index), leftRead = d.left, rightRead = d.right)
             out += PageAnswer(at, eq.cy, eq.h, answer, steps = Steps.of(listOf(d.left to d.right), envAt(d.index)), others = others, fix = fix)
         }
@@ -738,6 +760,40 @@ object MathPage {
             if (prefer != Prefer.LETTERS && favored.isEmpty() && found.count { it.second <= 0 } >= MAX_READINGS && (!Parser.units || found.any { it.second < 0 })) break
         }
         return found.sortedBy { it.second }.map { it.first }.take(MAX_READINGS)
+    }
+
+    /**
+     * An equation read with two unknowns, or with one and no solutions ([noSolution]): the first readings of its sides with
+     * exactly one letter left unknown in [env] that solve to something, and the reason it was
+     * read again ("g, a: two unknowns"); null when there is none. Letters that look like digits
+     * become digits here (g 9, o 0, l 1), as in systems.
+     */
+    private fun rescue(left: Expr, right: Expr, leftInk: List<Ink>, rightInk: List<Ink>, eq: Equals, reader: RunReader, env: Env, noSolution: Boolean): Triple<Expr, Expr, String>? {
+        if (leftInk.isEmpty() || rightInk.isEmpty()) return null
+        // Two letters read where one was meant (ga + 6 = 2, 9x read gx): on the synthetic
+        // equations 2 of 3 come right. With none (811 + 9 = 1) or three and more, hardly any.
+        val names = Algebra.freeVars(Expr.sub(left, right)).filter { env.variable(it) == null }
+        if (names.size != (if (noSolution) 1 else 2)) return null
+        val known = { name: String -> env.variable(name) != null }
+        val lefts = readings(leftInk, eq.h, eq.cy, reader, Prefer.LETTERS, known, maxLetters = 1).take(RESCUE_READINGS)
+        val rights = (listOf(right) + readings(rightInk, eq.h, eq.cy, reader, Prefer.LETTERS, known, maxLetters = 1)).distinct().take(RESCUE_READINGS)
+        val pairs = lefts.indices.flatMap { i -> rights.indices.map { j -> i to j } }.sortedBy { (i, j) -> i + j }
+        for ((i, j) in pairs) {
+            val l = lefts[i]
+            val r = rights[j]
+            if (l == left && r == right) continue
+            val unknowns = Algebra.freeVars(Expr.sub(l, r)).filter { env.variable(it) == null }
+            if (unknowns.size != 1) continue
+            val answer = runCatching { Calc.solve(listOf(l to r), env) }.getOrNull() as? Answer.Text ?: continue
+            if (answer.lines.isEmpty() || answer.lines == listOf(tr("∞ решений", "∞ solutions")) || answer.lines.any { '=' !in it }) continue
+            val why = if (noSolution) {
+                tr("как написано — нет решений", "as written: no solutions")
+            } else {
+                tr("прочитано две неизвестные: ${names.joinToString(", ")}", "read as two unknowns: ${names.joinToString(", ")}")
+            }
+            return Triple(l, r, why)
+        }
+        return null
     }
 
     /** The texts a run is read as, best first, for [readings]; empty when the reader saw nothing. */
@@ -1450,6 +1506,7 @@ object MathPage {
     private const val MAX_READINGS = 6
     private const val MAX_TRIMS = 4
     private const val MAX_CHOICE_TRIES = 2000
+    private const val RESCUE_READINGS = 6
 
     /** Signs a formula does not start with: a part read from one is the tail of a formula. */
     private const val LEADING_SIGNS = "+-−·×÷*/"
