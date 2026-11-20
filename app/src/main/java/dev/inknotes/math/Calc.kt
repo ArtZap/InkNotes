@@ -107,7 +107,14 @@ object Calc {
         }
         if (containsMatrix(r)) throw MathError(tr("матрица с неизвестными", "matrix with unknowns"))
         val s = Algebra.simplify(r)
-        val text = Printer.expr(s) + if (flags.indefinite) " + C" else ""
+        // What is left cannot be written (an integral with a letter for a limit): which letters
+        // have no value, rather than a puzzle.
+        val printed = try {
+            Printer.expr(s)
+        } catch (e: MathError) {
+            throw MathError(tr("не считается: у ${free.joinToString(", ")} нет значения", "cannot compute: ${free.joinToString(", ")} has no value"))
+        }
+        val text = printed + if (flags.indefinite) " + C" else ""
         if (!flags.calculus && runCatching { Printer.expr(r) }.getOrNull() == text) return null
         return Answer.Text(listOf(text))
     }

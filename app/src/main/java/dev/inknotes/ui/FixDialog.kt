@@ -7,8 +7,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.lazy.LazyColumn
@@ -26,8 +24,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -66,6 +62,8 @@ import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onPlaced
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
@@ -163,8 +161,18 @@ private fun FixContent(c: EditorController, answer: PageAnswer, d: MathNotes.Dra
         }
     }
 
-    val list = rememberLazyListState()
-    LaunchedEffect(focus) { if (slots.isNotEmpty()) list.animateScrollToItem(max(0, focus - 2)) }
+    // The row of wheels: all of them laid out once and slid sideways (no wheel built while
+    // scrolling, so it moves smoothly); the focused wheel glides into view.
+    val row = rememberScrollState()
+    val wheelX = remember(d) { FloatArray(slots.size) }
+    // Only a tap on the writing moves the row: a wheel being turned stays where the finger is.
+    var reveal by remember(d) { mutableIntStateOf(0) }
+    LaunchedEffect(reveal) {
+        if (slots.isEmpty() || reveal == 0) return@LaunchedEffect
+        val x = wheelX.getOrElse(focus) { 0f }
+        val target = (x - row.viewportSize / 3f).toInt().coerceIn(0, row.maxValue)
+        row.animateScrollTo(target, androidx.compose.animation.core.tween(durationMillis = 380, easing = androidx.compose.animation.core.FastOutSlowInEasing))
+    }
 
     // The buttons stay at the bottom, always in sight; what is above them scrolls when the
     // screen is short.
@@ -198,7 +206,7 @@ private fun FixContent(c: EditorController, answer: PageAnswer, d: MathNotes.Dra
 
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             Panel(tr("Ваша запись", "As written"), Modifier.weight(1f)) {
-                Handwriting(fix, d, slots, focus, slots.map { picks(it)[it.index].level == Correct.OFF }, ::sym) { focus = it }
+                Handwriting(fix, d, slots, focus, slots.map { picks(it)[it.index].level == Correct.OFF }, ::sym) { focus = it; reveal++ }
                 Text(
                     tr("Нажмите на символ, чтобы перейти к его барабану. Жёлтым — в чём распознавание не уверено.", "Tap a symbol to go to its wheel. Amber: what recognition is not sure of."),
                     fontSize = 12.sp,
@@ -220,9 +228,9 @@ private fun FixContent(c: EditorController, answer: PageAnswer, d: MathNotes.Dra
             )
             // As many wheels as symbols: a long formula scrolls sideways. In a system the
             // equations follow one another, each after its number.
-            LazyRow(state = list, horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                itemsIndexed(slots) { i, s ->
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth().horizontalScroll(row), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                slots.forEachIndexed { i, s ->
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.onPlaced { wheelX[i] = it.positionInParent().x }) {
                         if (system && !s.right && s.index == 0) {
                             if (s.row > 0) Box(Modifier.padding(end = 10.dp).width(1.dp).height(200.dp).background(MaterialTheme.colorScheme.outlineVariant))
                             Text("${s.row + 1}.", fontSize = 20.sp, modifier = Modifier.padding(end = 8.dp), color = MaterialTheme.colorScheme.primary)
@@ -242,6 +250,9 @@ private fun FixContent(c: EditorController, answer: PageAnswer, d: MathNotes.Dra
                 fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        } else if (!system) {
+            // The formula keyboard, started from what was read.
+            Calculator(typed ?: "") { typed = it }
         } else {
             OutlinedTextField(
                 value = typed ?: "",
@@ -472,8 +483,9 @@ private fun Wheel(sym: Correct.Sym, pick: Correct.Pick, focused: Boolean, onFocu
             (state.firstVisibleItemIndex + if (state.firstVisibleItemScrollOffset > itemPx / 2) 1 else 0).coerceIn(0, max(0, n - 1))
         }
     }
-    // Settled after a swipe: that reading is chosen.
+    // Settled after a swipe: that reading is chosen (and the wheel is the focused one).
     LaunchedEffect(state.isScrollInProgress) {
+        if (state.isScrollInProgress) onFocus()
         if (!state.isScrollInProgress && centred != pick.choice) onPick(pick.copy(choice = centred))
     }
     // Chosen otherwise (an arrow, a tap): the column turns to it.
@@ -503,9 +515,7 @@ private fun Wheel(sym: Correct.Sym, pick: Correct.Pick, focused: Boolean, onFocu
                 flingBehavior = rememberSnapFlingBehavior(lazyListState = state),
                 contentPadding = PaddingValues(vertical = itemH),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.fillMaxWidth().height(itemH * 3).pointerInput(Unit) {
-                    awaitEachGesture { awaitFirstDown(requireUnconsumed = false); onFocus() }
-                },
+                modifier = Modifier.fillMaxWidth().height(itemH * 3),
             ) {
                 items(n) { k ->
                     val chosen = k == centred

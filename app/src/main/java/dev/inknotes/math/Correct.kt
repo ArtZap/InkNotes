@@ -194,13 +194,13 @@ object Correct {
      * page would: a value, the roots of an equation, a graph of y = … or a surface z = ….
      */
     fun outcome(left: String, right: String?, env: Env): Outcome {
-        val l = MathPage.parseText(left) ?: return Outcome(null, tr("Не читается — проверьте выделенные символы", "Does not read — check the highlighted symbols"), true)
+        val l = MathPage.parseText(left) ?: return unreadable(left)
         return try {
             if (right == null) {
                 val a = Calc.evaluate(l, env) ?: return Outcome(null, tr("Здесь нечего считать", "Nothing to compute here"))
                 return Outcome(a, null)
             }
-            val r = MathPage.parseText(right) ?: return Outcome(null, tr("Правая часть не читается", "The right side does not read"), true)
+            val r = MathPage.parseText(right) ?: return unreadable(right)
             val param = MathPage.graphParam(l)
             when {
                 param != null -> Calc.graph(r, env, param.ifEmpty { null })?.let { Outcome(it, null) }
@@ -216,12 +216,35 @@ object Correct {
         }
     }
 
+    /**
+     * Why [text] gives no answer: an empty place left; something the app does not compute
+     * (a limit, a sum, a set — kept as written all the same); or a misread symbol.
+     */
+    fun unreadable(text: String): Outcome = when {
+        Composer.EMPTY in text -> Outcome(null, tr("Заполните пустые места □", "Fill in the empty places □"))
+        cannotCompute(text) -> Outcome(null, tr("Такое пока не умею считать — формула сохранится как написана", "This cannot be computed yet — the formula is kept as written"))
+        else -> Outcome(null, tr("Не читается — проверьте выделенные символы", "Does not read — check the highlighted symbols"), true)
+    }
+
+    /** [text] has something the parser does not compute: a command other than its own. */
+    fun cannotCompute(text: String): Boolean =
+        Regex("\\\\([a-zA-Z]+)").findAll(text).any { it.groupValues[1] !in COMPUTED } || text.any { it in "≠∈∉⊂⊆∪∩∖∅∀∃¬∧∨⇒⇔≈≡∼≪∝∥⊥∠⟨⟩‖⌊⌈±∓" }
+
+    private val COMPUTED = setOf(
+        "frac", "sqrt", "int", "det", "mat", "dd", "pi", "cdot", "times", "div", "left", "right", "sin", "cos", "tan", "cot", "ln", "lg", "log", "exp",
+        "arcsin", "arccos", "arctan", "sinh", "cosh", "tanh", "max", "min", "infty", "circ",
+    )
+
     /** Solves a system written [equations] (left and right text of each), as the page does. */
     fun outcomeSystem(equations: List<Pair<String, String>>, env: Env): Outcome {
         val parsed = equations.mapIndexed { k, (l, r) ->
             val le = MathPage.parseText(l)
             val re = MathPage.parseText(r)
-            if (le == null || re == null) return Outcome(null, tr("Уравнение ${k + 1} не читается — проверьте выделенные символы", "Equation ${k + 1} does not read — check the highlighted symbols"), true)
+            if (le == null || re == null) {
+                val bad = if (le == null) l else r
+                if (Composer.EMPTY in bad || cannotCompute(bad)) return unreadable(bad)
+                return Outcome(null, tr("Уравнение ${k + 1} не читается — проверьте выделенные символы", "Equation ${k + 1} does not read — check the highlighted symbols"), true)
+            }
             le to re
         }
         return try {
