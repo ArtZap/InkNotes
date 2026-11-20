@@ -676,8 +676,16 @@ object MathPage {
         if (holes.size > MAX_HOLES) return emptyList()
         val cands = holes.map { hole ->
             val texts = reader.read(hole.strokes, hole.h).map(MathText::normalize).filter { it.isNotEmpty() }
-            // A lone upright is 1 as often as l or I.
-            val main = texts.flatMap { if (it.length == 1 && it[0] in ONE_LIKE) listOf(it, "1") else listOf(it) }
+            // A lone upright read as l or I is a 1 nine times in ten (CROHME, read by ML Kit on
+            // the emulator: l 47 of 51, I 33 of 38), so 1 is tried first; not when the page has
+            // that letter already (l = 2 м above: the length).
+            val main = texts.flatMap {
+                when {
+                    it.length != 1 || it[0] !in ONE_LIKE -> listOf(it)
+                    ReadOptions.oneFirst && !known(it) -> listOf("1", it)
+                    else -> listOf(it, "1")
+                }
+            }.distinct()
             // In a system a misread coefficient (oz for 9z) adds an unknown, which the choice
             // of readings then rules out; elsewhere it would only add wrong guesses.
             val lookalikes = if (prefer == Prefer.LETTERS) main.take(2).mapNotNull(::digitLookalike) else emptyList()

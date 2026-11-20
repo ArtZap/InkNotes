@@ -80,7 +80,7 @@ class FormulaReadTest {
             Printer.numbers = numbers
         }
         val report = buildString {
-            append("== переключатели чтения (ReadOptions: знаки, по глифам, от угла, паузы = ${shipped.joinToString("") { if (it) "1" else "0" }}): формула выделена | страница\n")
+            append("== переключатели чтения (ReadOptions: знаки, по глифам, 1 первой, по цене, с контекстом первым, от угла, паузы = $shipped): формула выделена | страница\n")
             for (c in compared) append(c).append('\n')
             append(full)
         }
@@ -104,7 +104,7 @@ class FormulaReadTest {
                 val f = FormulaJudge.parse(line) ?: continue
                 val (set, id, kind) = Triple(f.set, f.id, f.kind)
                 val strokes = f.strokes
-                recordingId = id
+                recordingId = "$set/$id"
                 val (o, got) = FormulaJudge.selected(f, math.reader)
                 for (k in listOf("all", kind, set)) layout.getOrPut(k) { Tally() }.add(o)
                 // Signals for "unsure", measured before one is chosen: the moved layouts disagree;

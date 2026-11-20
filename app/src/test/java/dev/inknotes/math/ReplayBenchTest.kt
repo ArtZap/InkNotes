@@ -1,5 +1,6 @@
 package dev.inknotes.math
 
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 import java.util.zip.GZIPInputStream
@@ -70,7 +71,7 @@ class ReplayBenchTest {
             var missing = 0
             try {
                 for (f in formulas) {
-                    val r = reads[f.id]
+                    val r = reads["${f.set}/${f.id}"] ?: reads[f.id]
                     if (r == null) {
                         missing++
                         continue
@@ -98,6 +99,11 @@ class ReplayBenchTest {
         }
     }
 
+    /**
+     * Fails when more formulas turned wrong than stopped being wrong against
+     * resources/replay-outcomes.tsv (selected or on a page), as FormulaBenchTest does for the
+     * layout. A change that is meant to trade some for more: copy build/replay-outcomes.tsv there.
+     */
     @Test
     fun replay() {
         val formulas = formulas() ?: return
@@ -108,5 +114,22 @@ class ReplayBenchTest {
         File("build").mkdirs()
         File("build/replay-report.txt").writeText(text)
         File("build/replay-outcomes.tsv").writeText(r.outcomes.entries.joinToString("\n", postfix = "\n") { (k, v) -> "$k\t${v.first}\t${v.second ?: ""}" })
+        val base = ReplayBenchTest::class.java.classLoader!!.getResourceAsStream("replay-outcomes.tsv")?.bufferedReader()?.readLines() ?: return
+        var worse = 0
+        var better = 0
+        val turned = ArrayList<String>()
+        for (line in base) {
+            val p = line.split('\t')
+            if (p.size < 2) continue
+            val now = r.outcomes[p[0]] ?: continue
+            for ((was, got) in listOf(p[1] to now.first, p.getOrElse(2) { "" } to (now.second ?: ""))) {
+                if (was != "WRONG" && got == "WRONG") {
+                    worse++
+                    turned += p[0]
+                }
+                if (was == "WRONG" && got != "WRONG") better++
+            }
+        }
+        assertTrue("неверными стали $worse (${turned.take(10)}), перестали быть неверными $better", worse <= better)
     }
 }

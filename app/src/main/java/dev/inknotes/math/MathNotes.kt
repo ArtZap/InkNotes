@@ -249,14 +249,14 @@ class MathNotes(
 
     internal val reader = object : RunReader {
         override fun read(strokes: List<Ink>, lineHeight: Float): List<String> {
-            val read = this@MathNotes.read(strokes, lineHeight)
+            val read = ReadOptions.rank(this@MathNotes.read(strokes, lineHeight))
             val learning = fixes.learn && !(fixes.learned.isEmpty() && fixes.samples.isEmpty())
             if (read.isEmpty() || !learning && !ReadOptions.glyphByGlyph) return read
             val glyphs = runCatching {
                 MathLayout.items(strokes, lineHeight).filterIsInstance<MathLayout.G>().sortedBy { it.box.left }.map { it.glyph.strokes }
             }.getOrDefault(emptyList())
             // Symbols run together or cut apart by the reader: the glyphs read one by one too.
-            val texts = if (ReadOptions.glyphByGlyph) GlyphReading.extend(read, glyphs) { this@MathNotes.read(it, lineHeight) } else read
+            val texts = if (ReadOptions.glyphByGlyph) GlyphReading.extend(read, glyphs) { ReadOptions.rank(this@MathNotes.read(it, lineHeight)) } else read
             // What the writer meant by a symbol, learned from their corrections: the choices
             // they made, then their own symbols' shapes as a second voice.
             if (!learning) return texts
@@ -271,7 +271,7 @@ class MathNotes(
 
     private fun read(run: List<Ink>, h: Float): List<String> {
         val key = signature(run)
-        val cacheKey = key + ReadOptions.key()
+        val cacheKey = key + ReadOptions.key() + (if (ReadOptions.mathFirst) "m" else "")
         cache[cacheKey]?.let { return it }
         val r = recognizer ?: DigitalInkRecognition.getClient(
             DigitalInkRecognizerOptions.builder(model).setMaxResultCount(CANDIDATES).build(),
@@ -302,11 +302,7 @@ class MathNotes(
         if (plain.isEmpty() && math.isEmpty()) return emptyList()
         doubts[key] = Doubt(plain.firstOrNull() == math.firstOrNull(), margins.minOrNull())
         onRecognized?.invoke(run, plain, math)
-        val texts = ArrayList<String>()
-        for (k in 0 until max(plain.size, math.size)) {
-            plain.getOrNull(k)?.let { if (it !in texts) texts += it }
-            math.getOrNull(k)?.let { if (it !in texts) texts += it }
-        }
+        val texts = ReadOptions.interleave(plain, math)
         cache[cacheKey] = texts
         return texts
     }

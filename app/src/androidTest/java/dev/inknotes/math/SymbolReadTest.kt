@@ -40,8 +40,7 @@ class SymbolReadTest {
         val compared = ArrayList<String>()
         lateinit var full: String
         try {
-            val ways = listOf("as shipped" to shipped) +
-                ReadOptions.BENCH.filter { (_, v) -> !v[0] && !v[1] } + ("origin + pauses" to booleanArrayOf(false, false, true, true))
+            val ways = listOf("as shipped" to shipped) + ReadOptions.BENCH
             for ((name, setting) in ways) {
                 ReadOptions.set(setting)
                 val (summary, report) = measure(lines, math)
@@ -52,7 +51,7 @@ class SymbolReadTest {
             ReadOptions.set(shipped)
         }
         val report = buildString {
-            append("== подача штрихов в ML Kit (от угла, паузы = ${if (shipped[2]) 1 else 0}${if (shipped[3]) 1 else 0}): верно первым, среди вариантов\n")
+            append("== чтение символа (ReadOptions = $shipped): верно первым, среди вариантов\n")
             for (c in compared) append(c).append('\n')
             append('\n').append(full)
         }

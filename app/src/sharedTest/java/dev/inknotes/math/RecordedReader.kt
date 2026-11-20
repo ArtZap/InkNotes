@@ -12,12 +12,7 @@ class RecordedReader(private val reads: Map<List<Int>, Pair<List<String>, List<S
 
     private fun raw(run: List<Ink>): List<String> {
         val (plain, math) = reads[key(run)] ?: return emptyList()
-        val texts = ArrayList<String>()
-        for (k in 0 until maxOf(plain.size, math.size)) {
-            plain.getOrNull(k)?.let { if (it !in texts) texts += it }
-            math.getOrNull(k)?.let { if (it !in texts) texts += it }
-        }
-        return texts
+        return ReadOptions.rank(ReadOptions.interleave(plain, math))
     }
 
     override fun read(strokes: List<Ink>, lineHeight: Float): List<String> {
