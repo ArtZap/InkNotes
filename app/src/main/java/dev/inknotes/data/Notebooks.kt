@@ -1123,6 +1123,33 @@ class NotebookRepository(filesDir: File) {
         }
     }
 
+    /**
+     * A graph's picture as a new PNG of the notebook, with [spec] (what the graph shows) kept
+     * inside the file, so a tap on the picture can open the graph again. [onDone] on the main
+     * thread with the name and pixel size, or null. The bitmap is recycled.
+     */
+    fun saveGraphAsync(nb: Notebook, bitmap: Bitmap, spec: String, onDone: (Triple<String, Int, Int>?) -> Unit) {
+        transferring {
+            val result = runCatching {
+                val bytes = java.io.ByteArrayOutputStream().also { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }.toByteArray()
+                val withSpec = dev.inknotes.math.PngText.write(bytes, dev.inknotes.math.PngText.GRAPH, spec)
+                val fileName = "img-${newId()}.png"
+                atomicWrite(File(dir(nb.id).apply { mkdirs() }, fileName)) { out -> out.write(withSpec) }
+                Triple(fileName, bitmap.width, bitmap.height)
+            }.getOrNull()
+            bitmap.recycle()
+            main.post { onDone(result) }
+        }
+    }
+
+    /** What the graph picture [name] of [nb] shows ([saveGraphAsync]); null for any other picture. Blocking. */
+    fun graphSpec(nb: Notebook, name: String): String? {
+        if (!name.endsWith(".png") || !PageImage.NAME.matches(name)) return null
+        val f = File(dir(nb.id), name)
+        if (!f.isFile || f.length() > MAX_GRAPH_FILE) return null
+        return runCatching { dev.inknotes.math.PngText.read(f.readBytes(), dev.inknotes.math.PngText.GRAPH) }.getOrNull()
+    }
+
     /** Decodes a picture from [uri] (camera or gallery), at most [MAX_IMAGE_SIDE] px, upright. Blocking. */
     fun decodePicture(uri: Uri, resolver: ContentResolver): Bitmap? = runCatching { decodeUri(resolver, uri, MAX_IMAGE_SIDE, mutable = true) }.getOrNull()
 
@@ -2239,6 +2266,9 @@ class NotebookRepository(filesDir: File) {
         const val BUNDLE_VERSION = 1
         val BUNDLE_ENTRY = Regex("notebooks/[0-9]{1,5}\\.inknote")
         const val MAX_BUNDLE_NOTEBOOKS = 1000
+
+        /** A graph's picture is a few hundred KB; anything much larger is some other PNG. */
+        const val MAX_GRAPH_FILE = 8L * 1024 * 1024
         const val EXTRAS_DIR = "handwriting/"
         val EXTRAS_ENTRY = Regex("handwriting/[a-z-]{1,40}\\.(tsv|txt)")
         const val MAX_EXTRAS = 16

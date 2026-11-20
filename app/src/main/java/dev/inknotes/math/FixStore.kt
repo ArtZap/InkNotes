@@ -36,35 +36,6 @@ class FixStore(private val dir: File?, private val background: Boolean = false) 
     /** Where the writer puts exponents and indexes. */
     val placements: Placements
 
-    /** Points the writer put on graphs, by the fingerprint of the graph's formula: x, y. */
-    private val graphPoints = LinkedHashMap<String, List<Pair<Double, Double>>>()
-
-    /** Graphs moved or sized on the page by hand, by the same key as [graphPoints]: dx, dy, size. */
-    private val graphPlaces = LinkedHashMap<String, FloatArray>()
-
-    @Synchronized
-    fun place(key: String): FloatArray? = graphPlaces[key]?.copyOf()
-
-    /** [p]: dx, dy, size; null puts the graph back where it was drawn. */
-    @Synchronized
-    fun setPlace(key: String, p: FloatArray?) {
-        if (p == null) graphPlaces.remove(key) else graphPlaces[key] = p.copyOf()
-        write(PLACED, printPlaces())
-    }
-
-    private fun printPlaces() = graphPlaces.entries.joinToString("") { (k, p) -> k + "\t" + p.joinToString(",") + "\n" }
-
-    private fun parsePlaces(text: String): Map<String, FloatArray> {
-        val out = LinkedHashMap<String, FloatArray>()
-        for (line in text.lines()) {
-            val tab = line.indexOf('\t')
-            if (tab <= 0) continue
-            val v = line.substring(tab + 1).split(',').mapNotNull { it.toFloatOrNull() }
-            if (v.size == 3 && v.all { it.isFinite() } && v[2] > 0f) out[line.substring(0, tab)] = v.toFloatArray()
-        }
-        return out
-    }
-
     /** The writer's digits and signs for answers in their hand. */
     val hand: HandGlyphs
 
@@ -110,8 +81,6 @@ class FixStore(private val dir: File?, private val background: Boolean = false) 
                 if (tab > 0) pins[line.substring(0, tab)] = line.substring(tab + 1)
             }
         }
-        read(POINTS)?.let { text -> graphPoints.putAll(parsePoints(text)) }
-        read(PLACED)?.let { text -> graphPlaces.putAll(parsePlaces(text)) }
         read(SCALES)?.let { text ->
             for (line in text.lines()) {
                 val tab = line.indexOf('\t')
@@ -136,34 +105,6 @@ class FixStore(private val dir: File?, private val background: Boolean = false) 
     /** The pinned texts, a copy safe to read on another thread. */
     @Synchronized
     fun pins(): Map<String, String> = HashMap(pins)
-
-    /** The points put on the graph of [key] (see [graphPoints]). */
-    @Synchronized
-    fun points(key: String): List<Pair<Double, Double>> = graphPoints[key].orEmpty()
-
-    @Synchronized
-    fun setPoints(key: String, points: List<Pair<Double, Double>>) {
-        if (points.isEmpty()) graphPoints.remove(key) else graphPoints[key] = points.take(MAX_POINTS)
-        write(POINTS, printPoints())
-    }
-
-    private fun printPoints() = graphPoints.entries.joinToString("") { (k, ps) -> k + "\t" + ps.joinToString(";") { (x, y) -> "$x,$y" } + "\n" }
-
-    private fun parsePoints(text: String): Map<String, List<Pair<Double, Double>>> {
-        val out = LinkedHashMap<String, List<Pair<Double, Double>>>()
-        for (line in text.lines()) {
-            val tab = line.indexOf('\t')
-            if (tab <= 0) continue
-            val ps = line.substring(tab + 1).split(';').mapNotNull { p ->
-                val xy = p.split(',')
-                val x = xy.getOrNull(0)?.toDoubleOrNull()
-                val y = xy.getOrNull(1)?.toDoubleOrNull()
-                if (x != null && y != null && x.isFinite() && y.isFinite()) x to y else null
-            }
-            if (ps.isNotEmpty()) out[line.substring(0, tab)] = ps
-        }
-        return out
-    }
 
     /** The numbers set on scales, a copy. */
     @Synchronized
@@ -287,20 +228,6 @@ class FixStore(private val dir: File?, private val background: Boolean = false) 
                     any = true
                 }
             }
-            files[PLACED]?.takeIf { graphPlaces.isEmpty() }?.let { text ->
-                graphPlaces.putAll(parsePlaces(text))
-                if (graphPlaces.isNotEmpty()) {
-                    write(PLACED, printPlaces())
-                    any = true
-                }
-            }
-            files[POINTS]?.takeIf { graphPoints.isEmpty() }?.let { text ->
-                graphPoints.putAll(parsePoints(text))
-                if (graphPoints.isNotEmpty()) {
-                    write(POINTS, printPoints())
-                    any = true
-                }
-            }
             files[SCALES]?.takeIf { scales.isEmpty() }?.let { text ->
                 for (line in text.lines()) {
                     val tab = line.indexOf('\t')
@@ -324,12 +251,9 @@ class FixStore(private val dir: File?, private val background: Boolean = false) 
         const val SETTINGS = "formula-settings.txt"
         const val SCALES = "formula-scales.tsv"
         const val HAND = "hand-glyphs.tsv"
-        const val POINTS = "graph-points.tsv"
-        const val PLACED = "graph-places.tsv"
-        const val MAX_POINTS = 50
 
         /** What a backup takes (the settings stay with the device). */
-        val FILES = listOf(PINS, LEARNED, SAMPLES, PLACES, SCALES, HAND, POINTS, PLACED)
+        val FILES = listOf(PINS, LEARNED, SAMPLES, PLACES, SCALES, HAND)
         const val MAX_PINS = 5000
     }
 }

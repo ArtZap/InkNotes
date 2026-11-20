@@ -36,9 +36,16 @@ sealed class Answer {
         /** What each curve is ("y = x²"), for the window's title; [names] is for the page's legend. */
         val titles: List<String> = names,
         val trig: Boolean = false,
+        /** The curves' formulas, to keep the graph as a picture that opens again ([GraphSpec]). */
+        val exprs: List<Expr> = emptyList(),
     ) : Answer() {
         /** The same graph with [titles] (a single curve has no legend on the page, but a title). */
-        fun titled(titles: List<String>) = Graph(variable, x0, x1, y0, y1, segments, more, names, fns, titles, trig)
+        fun titled(titles: List<String>) = Graph(variable, x0, x1, y0, y1, segments, more, names, fns, titles, trig, exprs)
+
+        fun withExprs(exprs: List<Expr>) = Graph(variable, x0, x1, y0, y1, segments, more, names, fns, titles, trig, exprs)
+
+        /** What a picture of this graph keeps, with the view it shows. */
+        fun spec(key: String?) = GraphSpec(variable, exprs, titles, trig, x0.toDouble(), x1.toDouble(), y0.toDouble(), y1.toDouble(), key = key)
 
         override fun toString() = "Graph($variable: ${Printer.number(x0.toDouble())}…${Printer.number(x1.toDouble())}, " +
             "${Printer.number(y0.toDouble())}…${Printer.number(y1.toDouble())}, ${segments.size} parts)"
@@ -146,11 +153,11 @@ object Calc {
      */
     fun graph(right: Expr, env: Env, param: String? = null): Answer.Graph? {
         val f = function(right, env, param) ?: return null
-        return Plot.of(f.f, f.variable, f.trig)
+        return Plot.of(f.f, f.variable, f.trig)?.withExprs(listOf(f.expr))
     }
 
     /** A function of one letter to plot: how to compute it, its letter, periodic or not. */
-    class Plotted(val f: (Double) -> Double, val variable: String, val trig: Boolean)
+    class Plotted(val f: (Double) -> Double, val variable: String, val trig: Boolean, val expr: Expr)
 
     /** `y = [right]` as a function to plot (see [graph]); null when it is not one of one letter. */
     fun function(right: Expr, env: Env, param: String? = null): Plotted? {
@@ -159,7 +166,7 @@ object Calc {
         if (containsMatrix(r)) return null
         val x = Algebra.freeVars(r).singleOrNull()?.takeIf { param == null || it == param } ?: return null
         val trig = TRIG.containsMatchIn(runCatching { Printer.expr(r) }.getOrDefault(""))
-        return Plotted({ v -> Numeric.scalar(r, mapOf(x to v)) }, x, trig)
+        return Plotted({ v -> Numeric.scalar(r, mapOf(x to v)) }, x, trig, r)
     }
 
     private val TRIG = Regex("sin|cos|tg|ctg")
