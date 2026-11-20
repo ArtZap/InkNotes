@@ -65,4 +65,50 @@ class ReadOptionsTest {
         val keys = listOf(false to false, true to false, false to true, true to true).map { (o, p) -> with(o, p) { ReadOptions.key() } }
         assertEquals(4, keys.toSet().size)
     }
+
+    @Test
+    fun usualSymbolsComeFirst() {
+        // 5π under 5T, x under æ: one step down the reader's list costs less than an unusual symbol;
+        // three steps cost more.
+        assertEquals(listOf("5π", "5T"), ReadOptions.rank(listOf("5T", "5π")))
+        assertEquals(listOf("5T", "5t", "5π"), ReadOptions.rank(listOf("5T", "5t", "5π")))
+        assertEquals(listOf("x", "æ"), ReadOptions.rank(listOf("æ", "x")))
+        // Functions cost nothing for their letters: cos x over cos æ only for the x.
+        assertEquals("cosx", ReadOptions.rank(listOf("cosæ", "cosx")).first())
+        // Equal symbols keep the reader's order; far down the list a guess does not jump up.
+        assertEquals(listOf("ab", "ba"), ReadOptions.rank(listOf("ab", "ba")))
+        assertEquals("s", ReadOptions.rank(listOf("s", "g", "y", "5")).first())
+        // Off: as read.
+        ReadOptions.byCost = false
+        try {
+            assertEquals(listOf("5T", "5π"), ReadOptions.rank(listOf("5T", "5π")))
+        } finally {
+            ReadOptions.byCost = true
+        }
+    }
+
+    @Test
+    fun guessListsByTurns() {
+        assertEquals(listOf("a", "b", "c", "d"), ReadOptions.interleave(listOf("a", "c"), listOf("b", "d", "c")))
+        ReadOptions.mathFirst = true
+        try {
+            assertEquals(listOf("b", "a", "d", "c"), ReadOptions.interleave(listOf("a", "c"), listOf("b", "d", "c")))
+        } finally {
+            ReadOptions.mathFirst = false
+        }
+    }
+
+    @Test
+    fun settingsRoundTrip() {
+        val shipped = ReadOptions.get()
+        try {
+            for ((_, v) in ReadOptions.BENCH) {
+                ReadOptions.set(v)
+                assertEquals(v, ReadOptions.get())
+            }
+        } finally {
+            ReadOptions.set(shipped)
+        }
+        assertEquals("1111000", shipped.toString())
+    }
 }

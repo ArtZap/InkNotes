@@ -17,30 +17,55 @@ object ReadOptions {
      */
     @JvmField var glyphByGlyph = true
 
+    /** A lone upright read as l or I is tried as 1 first. */
+    @JvmField var oneFirst = true
+
+    /** The reader's guesses after a bit of arithmetic come before its plain ones (first when the two disagree). */
+    @JvmField var mathFirst = false
+
+    /** The reader's guesses reordered by [cost]: its order, and how usual the symbols are in formulas. */
+    @JvmField var byCost = true
+
+    /** How much a step down the reader's list costs, against the symbols' costs ([symbolCost]). */
+    @JvmField var rankWeight = 0.7f
+
     /** Strokes handed to the reader from the corner of its writing area, not where they are on the page. */
     @JvmField var fromOrigin = false
 
     /** A short pause between strokes of one glyph and a long one between glyphs, not one pause for all. */
     @JvmField var glyphPauses = false
 
-    /** The switches in order: [signAlternatives], [glyphByGlyph], [fromOrigin], [glyphPauses]. */
-    fun get(): BooleanArray = booleanArrayOf(signAlternatives, glyphByGlyph, fromOrigin, glyphPauses)
-
-    fun set(v: BooleanArray) {
-        signAlternatives = v[0]
-        glyphByGlyph = v[1]
-        fromOrigin = v[2]
-        glyphPauses = v[3]
+    /** The switches as a whole, to set and restore them. */
+    data class Setting(
+        val signAlternatives: Boolean,
+        val glyphByGlyph: Boolean,
+        val oneFirst: Boolean,
+        val byCost: Boolean,
+        val mathFirst: Boolean = false,
+        val fromOrigin: Boolean = false,
+        val glyphPauses: Boolean = false,
+    ) {
+        override fun toString() = listOf(signAlternatives, glyphByGlyph, oneFirst, byCost, mathFirst, fromOrigin, glyphPauses).joinToString("") { if (it) "1" else "0" }
     }
 
-    /** What the device bench compares: as in 0.61, each switch alone, all on. */
-    val BENCH: List<Pair<String, BooleanArray>> = listOf(
-        "as in 0.61" to booleanArrayOf(false, false, false, false),
-        "prime, degree" to booleanArrayOf(true, false, false, false),
-        "glyph by glyph" to booleanArrayOf(false, true, false, false),
-        "from origin" to booleanArrayOf(false, false, true, false),
-        "pauses" to booleanArrayOf(false, false, false, true),
-        "all" to booleanArrayOf(true, true, true, true),
+    fun get() = Setting(signAlternatives, glyphByGlyph, oneFirst, byCost, mathFirst, fromOrigin, glyphPauses)
+
+    fun set(v: Setting) {
+        signAlternatives = v.signAlternatives
+        glyphByGlyph = v.glyphByGlyph
+        oneFirst = v.oneFirst
+        byCost = v.byCost
+        mathFirst = v.mathFirst
+        fromOrigin = v.fromOrigin
+        glyphPauses = v.glyphPauses
+    }
+
+    /** What the device bench compares with the shipped setting: as in 0.61 and 0.62, and each 0.63 change alone. */
+    val BENCH: List<Pair<String, Setting>> = listOf(
+        "as in 0.61" to Setting(signAlternatives = false, glyphByGlyph = false, oneFirst = false, byCost = false),
+        "as in 0.62" to Setting(signAlternatives = true, glyphByGlyph = true, oneFirst = false, byCost = false),
+        "1 first" to Setting(signAlternatives = true, glyphByGlyph = true, oneFirst = true, byCost = false),
+        "math first" to Setting(signAlternatives = true, glyphByGlyph = true, oneFirst = true, byCost = true, mathFirst = true),
     )
 
     /** One stroke as handed to the reader: points and their times (ms from the first stroke). */
@@ -93,6 +118,42 @@ object ReadOptions {
             prev = s
         }
         return Input(out, width, height)
+    }
+
+    /** The reader's two guess lists as one, by turns, without repeats: [mathFirst] says which goes first. */
+    fun interleave(plain: List<String>, math: List<String>): List<String> {
+        val (a, b) = if (mathFirst) math to plain else plain to math
+        val texts = ArrayList<String>()
+        for (k in 0 until maxOf(a.size, b.size)) {
+            a.getOrNull(k)?.let { if (it !in texts) texts += it }
+            b.getOrNull(k)?.let { if (it !in texts) texts += it }
+        }
+        return texts
+    }
+
+    /** Words read as one: a function, its letters cost nothing. */
+    private val WORDS = Regex("arcsin|arccos|arctg|sinh|cosh|sin|cos|tan|tg|ctg|cot|log|lg|ln|lim|exp|max|min|sqrt|mod")
+
+    /**
+     * How unusual a symbol is in a formula (0: digits and signs). The English reader takes a
+     * 4 for h or t, a 5 for s, π for T, x for æ: those letters are rarer in formulas than
+     * what they hide, letters outside a-z rarer still.
+     */
+    fun symbolCost(c: Char): Float = when {
+        c.isDigit() || c in "+-−=()[]{}.,/^_*·×÷√∫π'°<>≤≥!|" -> 0f
+        c in "xyzabcnkmtuvpqrsdfgijeh" -> 0.4f
+        c in "ABCDEFGHIJKLMNOPQRSTUVWXYZlwo" -> 1f
+        c.isLetter() && c.code < 128 -> 1f
+        else -> 2f
+    }
+
+    /** A guess at rank [rank] of the reader's list: lower is likelier. */
+    fun cost(text: String, rank: Int): Float = rankWeight * rank + WORDS.replace(text, "").sumOf { symbolCost(it).toDouble() }.toFloat()
+
+    /** The reader's guesses by [cost], stable for equal costs; as they are when [byCost] is off. */
+    fun rank(texts: List<String>): List<String> {
+        if (!byCost || texts.size < 2) return texts
+        return texts.withIndex().sortedBy { (i, t) -> cost(t, i) }.map { it.value }
     }
 
     /** The switches, as a key for cached readings. */

@@ -7,7 +7,6 @@ import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
-import kotlin.math.abs
 
 /**
  * The formula bench end to end: CROHME formulas read by the real handwriting reader (ML Kit,
@@ -63,7 +62,16 @@ class FormulaReadTest {
         try {
             for ((name, setting) in listOf("as shipped" to shipped) + ReadOptions.BENCH) {
                 ReadOptions.set(setting)
+                // The shipped pass records what ML Kit read, to replay on a computer (ReplayBenchTest).
+                val recorded = if (name == "as shipped") ArrayList<String>() else null
+                math.onRecognized = if (recorded == null) {
+                    null
+                } else {
+                    { run: List<Ink>, plain: List<String>, guesses: List<String> -> recorded.add(RecordedReader.line(recordingId, run, plain, guesses)); Unit }
+                }
                 val (summary, report) = measure(lines, math)
+                math.onRecognized = null
+                if (recorded != null) File(dir, "reads.tsv").writeText(recorded.joinToString("\n", postfix = "\n"))
                 compared += "  %-18s %s".format(name, summary)
                 if (name == "as shipped") full = report
             }
@@ -72,13 +80,16 @@ class FormulaReadTest {
             Printer.numbers = numbers
         }
         val report = buildString {
-            append("== переключатели чтения (ReadOptions: знаки, по глифам, от угла, паузы = ${shipped.joinToString("") { if (it) "1" else "0" }}): формула выделена | страница\n")
+            append("== переключатели чтения (ReadOptions: знаки, по глифам, 1 первой, по цене, с контекстом первым, от угла, паузы = $shipped): формула выделена | страница\n")
             for (c in compared) append(c).append('\n')
             append(full)
         }
         File(dir, "report.txt").writeText(report)
         Log.i("FormulaReadTest", report)
     }
+
+    /** The formula being read, for the recorded readings. */
+    private var recordingId = ""
 
     /** One pass over the formulas with the reader as now set: a one-line summary and the full report. */
     private fun measure(lines: List<String>, math: MathNotes): Pair<String, String> {
@@ -90,59 +101,27 @@ class FormulaReadTest {
         val started = System.currentTimeMillis()
         run {
             for (line in lines) {
-                val p = line.split('\t')
-                if (p.size < 9) continue
-                val (set, id, kind) = Triple(p[0], p[1], p[2])
-                val h = p[3].toFloat()
-                val ax = p[4].toFloat()
-                val want = p[5]
-                val pageWant = p[6]
-                val pageAx = p[7].toFloat()
-                val strokes = p[8].split(';').mapIndexed { i, s ->
-                    val pts = s.split(',').map { q -> q.trim().split(' ').map(String::toFloat) }
-                    Ink(FloatArray(pts.size) { pts[it][0] }, FloatArray(pts.size) { pts[it][1] }, i)
-                }
-                // Read as the app reads a selected formula, with the same check for "unsure".
-                val got = runCatching { MathPage.read(strokes, h, ax, math.reader, MathPage.Prefer.FIRST) }.getOrNull()
-                val o = when {
-                    got == null -> "NONE"
-                    MathLayout.Shift.CHECKS.any { shift ->
-                        val again = runCatching { MathPage.read(strokes, h, ax, math.reader, MathPage.Prefer.FIRST, shift = shift) }.getOrNull()
-                        again != null && again != got && !FormulaValues.same(again, got)
-                    } -> "UNSURE"
-                    FormulaValues.fingerprint(got)?.let { FormulaValues.sameFingerprint(it, want) } == true -> "RIGHT"
-                    else -> "WRONG"
-                }
+                val f = FormulaJudge.parse(line) ?: continue
+                val (set, id, kind) = Triple(f.set, f.id, f.kind)
+                val strokes = f.strokes
+                recordingId = "$set/$id"
+                val (o, got) = FormulaJudge.selected(f, math.reader)
                 for (k in listOf("all", kind, set)) layout.getOrPut(k) { Tally() }.add(o)
                 // Signals for "unsure", measured before one is chosen: the moved layouts disagree;
                 // the first readings (the reader's first guesses and the next ones) give other values.
                 if (got != null) {
-                    val right = FormulaValues.fingerprint(got)?.let { FormulaValues.sameFingerprint(it, want) } == true
-                    val readings = runCatching { MathPage.readings(strokes, h, ax, math.reader, MathPage.Prefer.FIRST) }.getOrDefault(emptyList())
+                    val right = FormulaJudge.right(got, f)
+                    val readings = runCatching { MathPage.readings(strokes, f.h, f.ax, math.reader, MathPage.Prefer.FIRST) }.getOrDefault(emptyList())
                     val values = readings.take(3).mapNotNull { FormulaValues.fingerprint(it) }
                     val top2 = values.size >= 2 && !FormulaValues.sameFingerprint(values[0], values[1])
                     val top3 = values.drop(1).any { !FormulaValues.sameFingerprint(values[0], it) }
                     // How sure the reader was of each run it read for this formula.
-                    val holes = runCatching { MathLayout.formula(strokes, h, ax).filterIsInstance<Piece.Hole>() }.getOrDefault(emptyList())
+                    val holes = runCatching { MathLayout.formula(strokes, f.h, f.ax).filterIsInstance<Piece.Hole>() }.getOrDefault(emptyList())
                     val ds = holes.mapNotNull { math.doubt(it.strokes) }
                     signals += Signal(right, o == "UNSURE", top2, top3, ds.all { it.agree }, ds.mapNotNull { it.margin }.minOrNull())
                 }
                 if (o == "WRONG" && wrongs.size < 60) wrongs += "$set/$id  →  ${runCatching { Printer.expr(got!!) }.getOrDefault("?")}"
-                if (pageWant.isEmpty()) continue
-                // As written on a page: "=" drawn after it, the whole page analysed.
-                val right = strokes.maxOf { it.right }
-                val x0 = right + 0.5f * h
-                val w = 0.7f * h
-                fun dash(y: Float, order: Int) = Ink(FloatArray(8) { x0 + w * it / 7 }, FloatArray(8) { y + (if (it % 3 == 0) 0.3f else 0f) }, order)
-                val all = strokes + dash(pageAx - 0.16f * h, strokes.size) + dash(pageAx + 0.16f * h, strokes.size + 1)
-                val a = runCatching { MathPage.analyze(all, math.reader, 4000f) }.getOrDefault(emptyList()).filter { !it.missing }.firstOrNull { it.x > x0 && abs(it.y - pageAx) < h }
-                val text = (a?.answer as? Answer.Text)?.lines?.joinToString(";")
-                val po = when {
-                    a == null || text == null || a.error -> "NONE"
-                    a.unsure -> "UNSURE"
-                    FormulaValues.close(text, pageWant) -> "RIGHT"
-                    else -> "WRONG"
-                }
+                val po = FormulaJudge.page(f, math.reader) ?: continue
                 for (k in listOf("all", kind, set)) page.getOrPut(k) { Tally() }.add(po)
             }
         }

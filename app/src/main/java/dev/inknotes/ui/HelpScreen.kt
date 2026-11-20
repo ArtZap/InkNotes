@@ -45,6 +45,12 @@ private class Topic(val title: String, val entries: List<Pair<String, String>>)
 
 private val TOPICS = listOf(
     Topic(
+        tr("Новое в 0.63", "What's new in 0.63"),
+        listOf(
+            tr("Меньше неверных ответов", "Fewer wrong answers") to tr("Одиночная палочка, которую программа читала как букву l или I, теперь сначала считается единицей — так бывает почти всегда. Если буква l уже есть на странице (например, длина l = 2 м), она остаётся буквой. Из вариантов прочтения реже выбираются странные буквы: 5π, а не 5T; x, а не æ.", "A lone upright the app read as the letter l or I is now taken as a 1 first — it almost always is. If the page already has the letter l (say, a length l = 2 m), it stays a letter. Of the ways to read a formula, odd letters are chosen less often: 5π, not 5T; x, not æ."),
+        ),
+    ),
+    Topic(
         tr("Новое в 0.62", "What's new in 0.62"),
         listOf(
             tr("Формулы читаются внимательнее", "Formulas are read more carefully") to tr("Если программа слепила два символа в один или разрезала один на два, она читает их ещё и по одному. Выученные из исправлений замены и ваши образцы почерка теперь работают и в таких местах. Штрих и градус наверху справа могут оказаться степенью 1 или 0, если иначе формула не считается.", "When the app runs two symbols together or cuts one in two, it also reads them one by one. Replacements learned from your corrections and your own handwriting samples now work there too. A prime or a degree sign at the top right may turn out to be an exponent 1 or 0 when the formula does not compute otherwise."),

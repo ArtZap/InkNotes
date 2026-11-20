@@ -500,6 +500,21 @@ class MathPageTest {
     }
 
     @Test
+    fun aLoneUprightIsOne() {
+        val s = Sheet()
+        // A lone upright read as l: a 1 (nine times in ten on CROHME), not the letter.
+        s.glyph("l", 100f, 100f)
+        val reader = s.reader()
+        assertEquals(Expr.Num(1.0), MathPage.read(s.strokes, 24f, 112f, reader, MathPage.Prefer.FIRST))
+        ReadOptions.oneFirst = false
+        try {
+            assertEquals(Expr.Sym("l"), MathPage.read(s.strokes, 24f, 112f, reader, MathPage.Prefer.FIRST))
+        } finally {
+            ReadOptions.oneFirst = true
+        }
+    }
+
+    @Test
     fun primeMayBeARaisedOne() {
         val s = Sheet()
         // 2 with a short straight upright at its top right: a prime first, then the exponent 1.
