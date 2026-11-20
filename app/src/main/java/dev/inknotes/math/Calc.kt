@@ -129,7 +129,9 @@ object Calc {
 
     /** The surface of `z = [right]` when, with the page's definitions, it is a formula in two letters. */
     fun surface(right: Expr, env: Env): Answer.Surface? {
-        val r = runCatching { Algebra.simplify(resolve(right, env, emptySet(), Flags())) }.getOrNull() ?: return null
+        // z = x + y under y = x² − 3: x and y here are the surface's axes, not the y defined above.
+        val axes = Algebra.freeVars(right).filter { it == "x" || it == "y" }.toSet()
+        val r = runCatching { Algebra.simplify(resolve(right, env, axes, Flags())) }.getOrNull() ?: return null
         if (containsMatrix(r)) return null
         val vars = Algebra.freeVars(r).filter { it !in Algebra.CONSTANTS }.sorted()
         if (vars.size != 2) return null

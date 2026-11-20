@@ -30,7 +30,12 @@ import com.google.mlkit.vision.digitalink.recognition.Ink as MlInk
  * downloaded once when the user switches the feature on. Work runs on one background thread;
  * readings are cached by the ink they came from, so editing a page re-reads only what changed.
  */
-class MathNotes(private val enabledPref: () -> Boolean, private val setEnabledPref: (Boolean) -> Unit) {
+class MathNotes(
+    private val enabledPref: () -> Boolean,
+    private val setEnabledPref: (Boolean) -> Unit,
+    /** Corrections by hand: formulas pinned to strokes, symbols learned. */
+    val fixes: FixStore = FixStore(null),
+) {
 
     sealed interface State {
         data object Off : State
@@ -117,7 +122,7 @@ class MathNotes(private val enabledPref: () -> Boolean, private val setEnabledPr
             exec.execute {
                 if (latest[key] != n) return@execute
                 // A failure must cost the answers of a page, never the app.
-                val answers = runCatching { MathPage.analyze(toInk(strokes), reader, pageWidth) }.getOrDefault(emptyList())
+                val answers = runCatching { MathPage.analyze(toInk(strokes), reader, pageWidth, fixes.pins()) }.getOrDefault(emptyList())
                 main.post { if (latest[key] == n) onResult(answers) }
             }
         }
@@ -191,8 +196,43 @@ class MathNotes(private val enabledPref: () -> Boolean, private val setEnabledPr
         return out
     }
 
+    /**
+     * A formula taken apart for the correction window, read on the math thread: its sides
+     * symbol by symbol; [onResult] on the main thread (null: nothing to correct).
+     */
+    fun prepare(fix: Fix, onResult: (Draft?) -> Unit) {
+        if (state != State.Ready) return onResult(null)
+        runCatching {
+            exec.execute {
+                val draft = runCatching {
+                    val learned = fixes.learned.takeIf { fixes.learn }
+                    val rows = fix.rows.map { row ->
+                        val left = Correct.side(row.left, row.h, row.axis, reader, row.leftRead, learned)
+                        val right = row.right?.let { Correct.side(it, row.h, row.axis, reader, row.rightRead, learned) }
+                        if (left == null || row.right != null && right == null) return@runCatching null
+                        Row(row, left, right)
+                    }
+                    Draft(fix, rows)
+                }.getOrNull()
+                main.post { onResult(draft) }
+            }
+        }.onFailure { onResult(null) }
+    }
+
+    /** A formula as read, symbol by symbol: its [rows] (the equations of a system, or one). */
+    class Draft(val fix: Fix, val rows: List<Row>)
+
+    /** Both sides of one formula; [right] null for `expr =`. */
+    class Row(val fix: Fix, val left: Correct.Side, val right: Correct.Side?)
+
     internal val reader = object : RunReader {
-        override fun read(strokes: List<Ink>, lineHeight: Float): List<String> = this@MathNotes.read(strokes, lineHeight)
+        override fun read(strokes: List<Ink>, lineHeight: Float): List<String> {
+            val texts = this@MathNotes.read(strokes, lineHeight)
+            // What the writer meant by a symbol, learned from their corrections.
+            if (!fixes.learn || fixes.learned.isEmpty() || texts.isEmpty()) return texts
+            val symbols = runCatching { MathLayout.items(strokes, lineHeight).size }.getOrDefault(0)
+            return fixes.learned.adjust(texts, symbols)
+        }
 
         // Both readings (plain and after arithmetic) put the same text first: measured on
         // CROHME with ML Kit, answers where they differ are wrong far more often.

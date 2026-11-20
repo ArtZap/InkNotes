@@ -40,7 +40,7 @@ class MathReportTest {
 
         fun answer(r: Report): String? {
             val reader = RunReader { run, _ -> r.reads[run.map { it.order }.sorted()].orEmpty() }
-            val answers = MathPage.analyze(r.strokes, reader, r.pageWidth)
+            val answers = MathPage.analyze(r.strokes, reader, r.pageWidth).filter { !it.missing }
             val a = answers.minByOrNull { hypot(it.x - r.x, it.y - r.y) } ?: return null
             return when (val v = a.answer) {
                 is Answer.Text -> v.lines.joinToString("\n")

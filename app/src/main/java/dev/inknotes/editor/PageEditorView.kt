@@ -3503,6 +3503,10 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         /** Answers after "=": blue text, or a matrix in round brackets, centred on the line. */
         private fun drawAnswers(canvas: Canvas, answers: List<PageAnswer>, pageWidth: Float) {
             for (a in answers) {
+                if (a.missing) {
+                    drawMissing(canvas, a)
+                    continue
+                }
                 val color = when {
                     a.error && dark -> 0xFFE57373.toInt()
                     a.error -> 0xFFC62828.toInt()
@@ -3593,6 +3597,32 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                     }
                 }
             }
+        }
+
+        private val missingFill = Paint(Paint.ANTI_ALIAS_FLAG)
+        private val missingEdge = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
+
+        /**
+         * Nothing came out after "=" (or no graph after y = …): a small dashed amber mark with
+         * "?" to tap, which opens the correction window.
+         */
+        private fun drawMissing(canvas: Canvas, a: PageAnswer) {
+            val amber = if (dark) 0xFFE0A040.toInt() else 0xFFB06F00.toInt()
+            val label = if (a.fix?.graph == true) tr("нет графика?", "no graph?") else "?"
+            answerPaint.textSize = a.size * if (label.length > 1) 0.55f else 0.8f
+            answerPaint.textAlign = Paint.Align.CENTER
+            answerPaint.color = amber
+            val h = a.size * 1.05f
+            val w = max(h, answerPaint.measureText(label) + a.size * 0.7f)
+            val r = RectF(a.x, a.y - h / 2, a.x + w, a.y + h / 2)
+            missingFill.color = (amber and 0x00FFFFFF) or 0x22000000
+            canvas.drawRoundRect(r, h / 2, h / 2, missingFill)
+            missingEdge.color = amber
+            missingEdge.strokeWidth = max(1f, a.size * 0.06f)
+            missingEdge.pathEffect = DashPathEffect(floatArrayOf(a.size * 0.18f, a.size * 0.12f), 0f)
+            canvas.drawRoundRect(r, h / 2, h / 2, missingEdge)
+            canvas.drawText(label, r.centerX(), a.y + answerPaint.textSize * 0.36f, answerPaint)
+            bounds(a).set(r)
         }
 
         /** What a graph needs every frame, made once per answer: the curve, grid and labels. */

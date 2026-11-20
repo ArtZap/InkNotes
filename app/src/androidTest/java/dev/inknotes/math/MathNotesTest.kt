@@ -123,7 +123,7 @@ class MathNotesTest {
         var result: List<PageAnswer> = emptyList()
         instrumentation.runOnMainSync {
             math.analyze("test", strokes, 1000f) {
-                result = it
+                result = it.filter { a -> !a.missing }
                 done.countDown()
             }
         }

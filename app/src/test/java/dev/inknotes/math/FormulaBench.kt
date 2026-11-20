@@ -148,7 +148,7 @@ object FormulaBench {
         val n = s.strokes.size
         val strokes = s.strokes + dash(ax - 0.16f * h, n) + dash(ax + 0.16f * h, n + 1)
         val reader = PerfectReader(InkSample(s.id, s.truth, strokes, s.symbols))
-        val answers = runCatching { MathPage.analyze(strokes, reader, 4000f) }.getOrDefault(emptyList())
+        val answers = runCatching { MathPage.analyze(strokes, reader, 4000f) }.getOrDefault(emptyList()).filter { !it.missing }
         val a = answers.firstOrNull { it.x > x0 && abs(it.y - ax) < h }
         val text = (a?.answer as? Answer.Text)?.lines?.joinToString(";")
         val correct = if (a == null || text == null || a.error) null else close(text, want)

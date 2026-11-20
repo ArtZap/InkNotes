@@ -107,7 +107,7 @@ class FormulaReadTest {
                 val w = 0.7f * h
                 fun dash(y: Float, order: Int) = Ink(FloatArray(8) { x0 + w * it / 7 }, FloatArray(8) { y + (if (it % 3 == 0) 0.3f else 0f) }, order)
                 val all = strokes + dash(pageAx - 0.16f * h, strokes.size) + dash(pageAx + 0.16f * h, strokes.size + 1)
-                val a = runCatching { MathPage.analyze(all, math.reader, 4000f) }.getOrDefault(emptyList()).firstOrNull { it.x > x0 && abs(it.y - pageAx) < h }
+                val a = runCatching { MathPage.analyze(all, math.reader, 4000f) }.getOrDefault(emptyList()).filter { !it.missing }.firstOrNull { it.x > x0 && abs(it.y - pageAx) < h }
                 val text = (a?.answer as? Answer.Text)?.lines?.joinToString(";")
                 val po = when {
                     a == null || text == null || a.error -> "NONE"

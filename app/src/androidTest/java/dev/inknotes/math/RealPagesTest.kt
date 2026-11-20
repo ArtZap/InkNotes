@@ -37,7 +37,7 @@ class RealPagesTest {
             assertTrue("model: ${math.state}", math.state !is MathNotes.State.Failed && System.currentTimeMillis() < deadline)
             Thread.sleep(200)
         }
-        return MathPage.analyze(math.toInk(content.strokes), math.reader)
+        return MathPage.analyze(math.toInk(content.strokes), math.reader).filter { !it.missing }
             .sortedWith(compareBy({ it.x > 500 }, { it.y }))
             .map { a ->
                 when (val v = a.answer) {

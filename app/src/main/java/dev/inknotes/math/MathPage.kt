@@ -24,8 +24,41 @@ class PageAnswer(
      * answer is not sure (shown grey with "?") and these are offered when it is tapped.
      */
     val others: List<String> = emptyList(),
+    /**
+     * Nothing came out where an answer was expected (an "=" with nothing after it, a y = … with
+     * no graph): a mark to tap instead of an empty place.
+     */
+    val missing: Boolean = false,
+    /** What was read, to correct it (null: this answer cannot be corrected). */
+    val fix: Fix? = null,
 ) {
     val unsure get() = others.isNotEmpty()
+}
+
+/**
+ * The formula of an answer, to correct how it was read: the strokes left of its "=", right
+ * of it (null for `expr =`), the "=" itself, the line's height and middle, and the page's
+ * definitions above it. [graph]: a y = … or z = … that should give a graph.
+ */
+class Fix(
+    val left: List<Ink>,
+    val right: List<Ink>?,
+    val equals: List<Ink>,
+    val h: Float,
+    val axis: Float,
+    val env: Env,
+    val graph: Boolean = false,
+    /** What the page read left and right of "=", to start from. */
+    val leftRead: Expr? = null,
+    val rightRead: Expr? = null,
+    /**
+     * A system: its equations, each a Fix of its own (left, "=", right); this Fix's own sides
+     * are the first equation's. Empty for one formula.
+     */
+    val system: List<Fix> = emptyList(),
+) {
+    /** The formulas to correct: the equations of a system, or this one. */
+    val rows: List<Fix> get() = system.ifEmpty { listOf(this) }
 }
 
 /**
@@ -49,7 +82,12 @@ object MathPage {
     @Volatile
     var trace: ((String) -> Unit)? = null
 
-    fun analyze(strokes: List<Ink>, reader: RunReader, pageWidth: Float = 1000f): List<PageAnswer> {
+    /**
+     * The answers on a page. [pinned]: formula text the writer set by hand for strokes, by
+     * their [Correct.fingerprint]; taken instead of reading them.
+     */
+    fun analyze(strokes: List<Ink>, reader: RunReader, pageWidth: Float = 1000f, pinned: Map<String, String> = emptyMap()): List<PageAnswer> {
+        fun pin(side: List<Ink>): Expr? = if (pinned.isEmpty() || side.isEmpty()) null else pinned[Correct.fingerprint(side)]?.let(::parseText)
         val ink = strokes.filter { it.height < MAX_STROKE && it.width < MAX_STROKE }
         val eqs = findEquals(ink).take(MAX_EQUALS)
         val eqStrokes0 = eqs.flatMap { listOf(it.top, it.bottom) + it.extra }.toSet()
@@ -82,11 +120,13 @@ object MathPage {
         // First the definitions (a = 5, f(x) = …): they hold for the whole page. A line uses
         // the nearest definition above it, or else the first one below (a = 2 written later).
         /** An equation read off the page; [again] reads it anew with moved thresholds (null: same layout). */
-        class Def(val index: Int, val left: Expr, val right: Expr, val again: ((MathLayout.Shift) -> Pair<Expr, Expr>?)? = null)
+        class Def(val index: Int, val left: Expr, val right: Expr, val again: ((MathLayout.Shift) -> Pair<Expr, Expr>?)? = null, val leftInk: List<Ink> = emptyList(), val rightInk: List<Ink> = emptyList())
         val defs = ArrayList<Def>()
         // Equations outside a "{" (x³ = 6x² − 12x + 11): solved when one unknown is left.
         val single = ArrayList<Def>()
         val trailing = ArrayList<Pair<Int, List<Ink>>>()
+        // Graphs expected (y = …, f(x) = …, z = …) whose right side did not read.
+        val noGraph = ArrayList<Triple<Int, List<Ink>, List<Ink>>>()
         for ((i, eq) in ordered.withIndex()) {
             if (systemOf[eq] != null) continue
             val left = side(eq, -1, eqs, rest, limit = null)
@@ -98,8 +138,10 @@ object MathPage {
                 trailing += i to left
                 continue
             }
+            val pl = pin(left)
+            val pr = pin(right)
             // f(x) among the readings ("flx" first) is a function being defined.
-            val l = readings(left, eq.h, eq.cy, reader, Prefer.FIRST).let { all ->
+            val l = pl ?: readings(left, eq.h, eq.cy, reader, Prefer.FIRST).let { all ->
                 all.firstOrNull { it is Expr.Apply && graphParam(it) != null }
                     // A lone number before "=" with a formula after it defines nothing: the
                     // reader took the z or y of z = x² + y² for a 2 or a 4.
@@ -109,10 +151,15 @@ object MathPage {
             // y = 2x + 1 is a formula in x: "2+1" (fewest letters) would lose it.
             // y = 5x − 1: a formula in x ("5x−1", not "bx−I" or "5−1").
             val surface = (l as? Expr.Sym)?.name?.equals("z", ignoreCase = true) == true
-            val r = graphParam(l)?.let { v -> readings(right, eq.h, eq.cy, reader, Prefer.GRAPH, variable = v.ifEmpty { "x" }).firstOrNull() }
+            val r = pr ?: graphParam(l)?.let { v -> readings(right, eq.h, eq.cy, reader, Prefer.GRAPH, variable = v.ifEmpty { "x" }).firstOrNull() }
                 // z = x² + y²: about letters, not the reading with fewest of them.
                 ?: (if (surface) read(right, eq.h, eq.cy, reader, Prefer.FIRST) else null)
-                ?: read(right, eq.h, eq.cy, reader, Prefer.NUMBERS) ?: continue
+                ?: read(right, eq.h, eq.cy, reader, Prefer.NUMBERS)
+            if (r == null) {
+                // y = … that does not read: a mark where its graph would be.
+                if (graphParam(l) != null || surface) noGraph += Triple(i, left, right)
+                continue
+            }
             // The same reading, the thresholds moved: for "unsure" (an equation is solved only
             // when read the same; a side laid out the same is taken as it was).
             val again = { shift: MathLayout.Shift ->
@@ -120,7 +167,9 @@ object MathPage {
                 val r2 = read(right, eq.h, eq.cy, reader, if (surface) Prefer.FIRST else Prefer.NUMBERS, shift = shift)
                 if (l2 == null && r2 == null) null else (l2 ?: l) to (r2 ?: r)
             }
-            if (Calc.isDefinition(l)) defs += Def(i, l, r) else single += Def(i, l, r, again)
+            // Set by hand: read as set, not otherwise.
+            val pinnedHere = pl != null || pr != null
+            if (Calc.isDefinition(l)) defs += Def(i, l, r, leftInk = left, rightInk = right) else single += Def(i, l, r, again.takeIf { !pinnedHere }, left, right)
         }
         val definedNames = defs.mapNotNull { Calc.definedName(it.left) }.toSet()
         fun envAt(index: Int): Env {
@@ -144,11 +193,39 @@ object MathPage {
         for ((i, left) in trailing) {
             val eq = ordered[i]
             val known = { name: String -> definedNames.any { it.equals(name, ignoreCase = true) } }
-            val l = readTrimmed(left, eq, reader, known) ?: continue
-            // "3 =" has nothing to compute.
-            if (l is Expr.Num) continue
             val after = side(eq, 1, eqs, rest, limit = null).maxOfOrNull { it.right } ?: eq.right
             val at = after + 0.4f * eq.h
+            val pl = pin(left)
+            var l = pl ?: readTrimmed(left, eq, reader, known)
+            fun fix(read: Expr?) = Fix(left, null, listOf(eq.top, eq.bottom) + eq.extra, eq.h, eq.cy, envAt(i), leftRead = read)
+            if (l == null) {
+                // Nothing after "=" though something is before it: a mark to tap, not a blank.
+                out += PageAnswer(at, eq.cy, eq.h, Answer.Text(listOf("?")), missing = true, fix = fix(null))
+                continue
+            }
+            // "3 =" has nothing to compute.
+            if (l is Expr.Num) continue
+            // A misread letter that is also a unit (g for 4, B for 8) makes "8,5 + g" an error:
+            // a reading that computes wins over it, shown unsure with the error as the other answer.
+            var fellBack: String? = null
+            if (pl == null) {
+                val error = try {
+                    Calc.evaluate(l, envAt(i))
+                    null
+                } catch (e: MathError) {
+                    e.message ?: "?"
+                }
+                if (error != null) {
+                    val first = l
+                    val better = readings(left, eq.h, eq.cy, reader, Prefer.NUMBERS, known).firstOrNull { e ->
+                        e != first && runCatching { Calc.evaluate(e, envAt(i)) != null }.getOrDefault(false)
+                    }
+                    if (better != null) {
+                        l = better
+                        fellBack = error
+                    }
+                }
+            }
             // "x =" under an equation in x: its roots.
             val asking = (l as? Expr.Sym)?.takeIf { envAt(i).variable(it.name) == null }?.let { sym ->
                 single.filter { it.index < i && ordered[it.index].cy < eq.cy && unknownOf(it)?.equals(sym.name, ignoreCase = true) == true }
@@ -160,13 +237,18 @@ object MathPage {
                     val equation = listOf(asking.left to asking.right)
                     PageAnswer(at, eq.cy, eq.h, valuesOnly(Calc.solve(equation, envAt(asking.index))), steps = Steps.of(equation, envAt(asking.index)))
                 } else {
-                    val answer = Calc.evaluate(l, envAt(i)) ?: continue
-                    val others = otherAnswers(answer) { shift -> readTrimmed(left, eq, reader, known, shift)?.let { Calc.evaluate(it, envAt(i)) } }
-                        .ifEmpty { if (readSure(left, eq, reader)) emptyList() else otherReadings(answer, left, eq, reader, known) { Calc.evaluate(it, envAt(i)) } }
-                    PageAnswer(at, eq.cy, eq.h, answer, others = others)
+                    val answer = Calc.evaluate(l, envAt(i))
+                    if (answer == null) {
+                        PageAnswer(at, eq.cy, eq.h, Answer.Text(listOf("?")), missing = true, fix = fix(l))
+                    } else {
+                        val others = if (pl != null) emptyList() else otherAnswers(answer) { shift -> readTrimmed(left, eq, reader, known, shift)?.let { Calc.evaluate(it, envAt(i)) } }
+                            .ifEmpty { if (readSure(left, eq, reader)) emptyList() else otherReadings(answer, left, eq, reader, known) { Calc.evaluate(it, envAt(i)) } }
+                            .ifEmpty { listOfNotNull(fellBack) }
+                        PageAnswer(at, eq.cy, eq.h, answer, others = others, fix = fix(l))
+                    }
                 }
             } catch (e: MathError) {
-                PageAnswer(at, eq.cy, eq.h, Answer.Text(listOf(e.message ?: "?")), error = true)
+                PageAnswer(at, eq.cy, eq.h, Answer.Text(listOf(e.message ?: "?")), error = true, fix = fix(l))
             }
         }
         // y = x² − 3 and f(x) = …: the graph, beside the line where that place is free, else
@@ -175,13 +257,22 @@ object MathPage {
         val graphs = ArrayList<Area>()
         for (d in defs) {
             val param = graphParam(d.left)
+            val isSurface = (d.left as? Expr.Sym)?.name?.equals("z", ignoreCase = true) == true
+            val eq = ordered[d.index]
+            val fix = Fix(d.leftInk, d.rightInk, listOf(eq.top, eq.bottom) + eq.extra, eq.h, eq.cy, envAt(d.index), graph = true, leftRead = d.left, rightRead = d.right)
             val graph: Answer = when {
                 param != null -> runCatching { Calc.graph(d.right, envAt(d.index), param.ifEmpty { null }) }.getOrNull()
                 // z = x² + y²: a surface.
-                (d.left as? Expr.Sym)?.name?.equals("z", ignoreCase = true) == true -> runCatching { Calc.surface(d.right, envAt(d.index)) }.getOrNull()
+                isSurface -> runCatching { Calc.surface(d.right, envAt(d.index)) }.getOrNull()
                 else -> null
+            } ?: run {
+                // A graph was meant but none came out: a mark beside the line.
+                if (param != null || isSurface) {
+                    val end = d.rightInk.maxOfOrNull { it.right } ?: eq.right
+                    out += PageAnswer(end + 0.6f * eq.h, eq.cy, eq.h, Answer.Text(listOf("?")), missing = true, fix = fix)
+                }
+                null
             } ?: continue
-            val eq = ordered[d.index]
             val lineInk = side(eq, -1, eqs, rest, limit = null) + side(eq, 1, eqs, rest, limit = null)
             val lineLeft = lineInk.minOfOrNull { it.left } ?: eq.left
             val lineRight = max(eq.right, lineInk.maxOfOrNull { it.right } ?: eq.right)
@@ -223,7 +314,7 @@ object MathPage {
             val gy = max(gy0, 0.3f * eq.h)
             graphs += Area(gx, gy, box.right, gy + (box.bottom - box.top))
             trace?.invoke("graph: y = ${d.right} at ($gx, $gy)")
-            out += PageAnswer(gx, gy, size, graph)
+            out += PageAnswer(gx, gy, size, graph, fix = fix)
         }
         for (d in single) {
             if (d in asked || unknownOf(d) == null) continue
@@ -238,14 +329,21 @@ object MathPage {
             val others = d.again?.let { again ->
                 otherAnswers(answer) { shift -> again(shift)?.let { (l2, r2) -> Calc.solve(listOf(l2 to r2), envAt(d.index)) } }
             }.orEmpty()
-            out += PageAnswer(at, eq.cy, eq.h, answer, steps = Steps.of(listOf(d.left to d.right), envAt(d.index)), others = others)
+            val fix = Fix(d.leftInk, d.rightInk, listOf(eq.top, eq.bottom) + eq.extra, eq.h, eq.cy, envAt(d.index), leftRead = d.left, rightRead = d.right)
+            out += PageAnswer(at, eq.cy, eq.h, answer, steps = Steps.of(listOf(d.left to d.right), envAt(d.index)), others = others, fix = fix)
+        }
+        for ((i, left, right) in noGraph) {
+            val eq = ordered[i]
+            val end = right.maxOfOrNull { it.right } ?: eq.right
+            out += PageAnswer(end + 0.6f * eq.h, eq.cy, eq.h, Answer.Text(listOf("?")), missing = true,
+                fix = Fix(left, right, listOf(eq.top, eq.bottom) + eq.extra, eq.h, eq.cy, envAt(i), graph = true))
         }
         val done = HashSet<Ink>()
         for ((i, eq) in ordered.withIndex()) {
             val brace = systemOf[eq] ?: continue
             if (!done.add(brace)) continue
             val members = ordered.filter { systemOf[it] === brace }
-            solveSystem(brace, members, eqs, rest, reader, envAt(i))?.let { out += it }
+            solveSystem(brace, members, eqs, rest, reader, envAt(i), ::pin)?.let { out += it }
         }
         val anchors = eqs + ineqs.map { it.first }
         for ((a, rel) in ineqs) {
@@ -323,7 +421,7 @@ object MathPage {
      * What makes a definition a graph: "" for `y = …` (any one letter), the argument for
      * `f(x) = …`; null for other definitions (a = 5).
      */
-    private fun graphParam(e: Expr): String? = when {
+    internal fun graphParam(e: Expr): String? = when {
         (e as? Expr.Sym)?.name?.equals("y", ignoreCase = true) == true -> ""
         e is Expr.Apply && e.primes == 0 && e.args.size == 1 && e.args[0] is Expr.Sym -> (e.args[0] as Expr.Sym).name
         else -> null
@@ -336,7 +434,7 @@ object MathPage {
         return Answer.Text(if (lines.size > 1 && lines.all { it.length < 24 }) listOf(lines.joinToString("; ")) else lines)
     }
 
-    private fun solveSystem(brace: Ink, members: List<Equals>, eqs: List<Equals>, rest: List<Ink>, reader: RunReader, env: Env): PageAnswer? {
+    private fun solveSystem(brace: Ink, members: List<Equals>, eqs: List<Equals>, rest: List<Ink>, reader: RunReader, env: Env, pin: (List<Ink>) -> Expr? = { null }): PageAnswer? {
         // Readings of every side; then the combination with as many unknowns as equations.
         val options = ArrayList<List<Expr>>()
         var bottom = brace.bottom
@@ -348,14 +446,15 @@ object MathPage {
             if (l.isEmpty() || r.isEmpty() || l.size > MAX_SIDE || r.size > MAX_SIDE) return null
             Triple(eq, l, r)
         }
-        val lefts = sides.map { (eq, l, _) -> readings(l, eq.h, eq.cy, reader, Prefer.LETTERS, maxLetters = members.size).ifEmpty { return null } }
+        // A side set by hand is read only so.
+        val lefts = sides.map { (eq, l, _) -> pin(l)?.let { listOf(it) } ?: readings(l, eq.h, eq.cy, reader, Prefer.LETTERS, maxLetters = members.size).ifEmpty { return null } }
         // The unknowns are the letters of the left sides (a = …, б = …): on the right a run that
         // reads as one of them or as digits is that letter (3б, not 36: б looks like a 6).
         val unknowns = lefts.flatMap { Algebra.freeVars(it[0]) }.filter { env.variable(it) == null }.toSet()
         for ((k, parts) in sides.withIndex()) {
             val (eq, l, r) = parts
             options += lefts[k]
-            options += readings(r, eq.h, eq.cy, reader, Prefer.NUMBERS, known = { env.variable(it) != null }, favored = unknowns).ifEmpty { return null }
+            options += pin(r)?.let { listOf(it) } ?: readings(r, eq.h, eq.cy, reader, Prefer.NUMBERS, known = { env.variable(it) != null }, favored = unknowns).ifEmpty { return null }
             bottom = max(bottom, max(l.maxOf { it.bottom }, r.maxOf { it.bottom }))
             right = max(right, r.maxOf { it.right })
             h = max(h, eq.h)
@@ -371,6 +470,11 @@ object MathPage {
             ?: options.map { it[0] }
         val equations = picked.chunked(2).map { it[0] to it[1] }
         trace?.invoke("system: $equations")
+        // To correct how it was read: every equation, from what was taken.
+        val rows = sides.mapIndexed { k, (eq, l, r) ->
+            Fix(l, r, listOf(eq.top, eq.bottom) + eq.extra, eq.h, eq.cy, env, leftRead = equations[k].first, rightRead = equations[k].second)
+        }
+        val fix = rows[0].let { f -> Fix(f.left, f.right, f.equals, f.h, f.axis, env, leftRead = f.leftRead, rightRead = f.rightRead, system = rows) }
         // Under the system, from the brace: to its right the answer runs into long equations.
         // Written smaller when the next line below leaves less room; in notes too dense for
         // that, to the right of the system if that place is free. The y is the middle of the
@@ -386,10 +490,10 @@ object MathPage {
                 val wide = lines.maxOf { it.length } * CHAR_W * h
                 val half = lines.size * perLine * h / 2
                 val taken = ink.any { it.right > at && it.left < at + wide && it.bottom > brace.cy - half && it.top < brace.cy + half }
-                if (!taken) return PageAnswer(at, brace.cy, h, answer, error, steps = if (error) null else Steps.of(equations, env))
+                if (!taken) return PageAnswer(at, brace.cy, h, answer, error, steps = if (error) null else Steps.of(equations, env), fix = fix)
             }
             val size = max(fit, MIN_UNDER * h)
-            return PageAnswer(brace.left, bottom + 0.25f * size + lines.size * perLine * size / 2, size, answer, error, steps = if (error) null else Steps.of(equations, env))
+            return PageAnswer(brace.left, bottom + 0.25f * size + lines.size * perLine * size / 2, size, answer, error, steps = if (error) null else Steps.of(equations, env), fix = fix)
         }
         return try {
             under(Calc.solve(equations, env), error = false)
@@ -611,6 +715,18 @@ object MathPage {
             if (other.lines != text) out += other.lines.joinToString("; ")
         }
         return out.take(MAX_OTHERS)
+    }
+
+    /**
+     * [text] (formula text, as runs read into, or as set by hand) as an expression: with an
+     * integral sign put back or a bracket mended when it parses only so; null when it does not.
+     */
+    fun parseText(text: String): Expr? {
+        if (text.isBlank()) return null
+        for (variant in integralVariants(text).flatMap { listOf(it) + bracketFixes(it) }) {
+            runCatching { Parser.parse(variant) }.getOrNull()?.let { return it }
+        }
+        return null
     }
 
     /** "2 + 3 = ?": a question mark after "=" asks for the answer like an empty place. */
@@ -971,7 +1087,7 @@ object MathPage {
         val otherLines = eqs.filter { it !== eq && abs(it.cy - eq.cy) > 0.8f * h && abs(it.left - eq.left) < 15 * h }
         val otherLine = cand.filter { c ->
             otherLines.any { o ->
-                abs(c.cy - o.cy) < 0.45f * o.h && abs(c.cy - o.cy) < abs(c.cy - eq.cy) - 0.3f * h &&
+                abs(c.cy - o.cy) < 0.9f * o.h && abs(c.cy - o.cy) < abs(c.cy - eq.cy) - 0.3f * h &&
                     // that line's own formula, not one in another column at the same height
                     c.cx in o.left - 10 * o.h..o.right + 10 * o.h
             }
