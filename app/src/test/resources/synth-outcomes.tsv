@@ -32,12 +32,12 @@ synthetic/arith-30	RIGHT	RIGHT
 synthetic/arith-31	RIGHT	RIGHT
 synthetic/arith-32	RIGHT	RIGHT
 synthetic/arith-33	RIGHT	RIGHT
-synthetic/arith-34	RIGHT	RIGHT
+synthetic/arith-34	WRONG	NONE
 synthetic/arith-35	RIGHT	RIGHT
-synthetic/arith-36	RIGHT	RIGHT
+synthetic/arith-36	WRONG	RIGHT
 synthetic/arith-37	RIGHT	RIGHT
 synthetic/arith-38	RIGHT	RIGHT
-synthetic/arith-39	RIGHT	RIGHT
+synthetic/arith-39	WRONG	WRONG
 synthetic/fraction-0	RIGHT	RIGHT
 synthetic/fraction-1	RIGHT	RIGHT
 synthetic/fraction-2	RIGHT	RIGHT
@@ -70,7 +70,7 @@ synthetic/fraction-28	RIGHT	WRONG
 synthetic/fraction-29	RIGHT	NONE
 synthetic/fraction-30	RIGHT	NONE
 synthetic/fraction-31	RIGHT	NONE
-synthetic/fraction-32	RIGHT	NONE
+synthetic/fraction-32	NONE	NONE
 synthetic/fraction-33	RIGHT	RIGHT
 synthetic/fraction-34	RIGHT	RIGHT
 synthetic/fraction-35	RIGHT	RIGHT
@@ -94,7 +94,7 @@ synthetic/power-12	RIGHT	RIGHT
 synthetic/power-13	RIGHT	RIGHT
 synthetic/power-14	UNSURE	UNSURE
 synthetic/power-15	RIGHT	RIGHT
-synthetic/power-16	RIGHT	RIGHT
+synthetic/power-16	NONE	NONE
 synthetic/power-17	NONE	NONE
 synthetic/power-18	RIGHT	RIGHT
 synthetic/power-19	RIGHT	RIGHT
@@ -106,7 +106,7 @@ synthetic/power-24	RIGHT	RIGHT
 synthetic/power-25	RIGHT	RIGHT
 synthetic/power-26	RIGHT	RIGHT
 synthetic/power-27	RIGHT	RIGHT
-synthetic/power-28	RIGHT	RIGHT
+synthetic/power-28	WRONG	WRONG
 synthetic/power-29	RIGHT	RIGHT
 synthetic/power-30	NONE	NONE
 synthetic/power-31	RIGHT	RIGHT
@@ -138,7 +138,7 @@ synthetic/root-16	RIGHT	RIGHT
 synthetic/root-17	RIGHT	RIGHT
 synthetic/root-18	RIGHT	RIGHT
 synthetic/root-19	RIGHT	RIGHT
-synthetic/root-20	RIGHT	RIGHT
+synthetic/root-20	NONE	NONE
 synthetic/root-21	RIGHT	RIGHT
 synthetic/root-22	RIGHT	RIGHT
 synthetic/root-23	RIGHT	RIGHT
@@ -178,7 +178,7 @@ synthetic/letters-16	RIGHT
 synthetic/letters-17	RIGHT	
 synthetic/letters-18	NONE	
 synthetic/letters-19	RIGHT	
-synthetic/letters-20	NONE	
+synthetic/letters-20	WRONG	
 synthetic/letters-21	RIGHT	
 synthetic/letters-22	RIGHT	
 synthetic/letters-23	RIGHT	
@@ -198,7 +198,7 @@ synthetic/letters-36	RIGHT
 synthetic/letters-37	RIGHT	
 synthetic/letters-38	RIGHT	
 synthetic/letters-39	RIGHT	
-synthetic/equation-linear-0	SKIP	RIGHT
+synthetic/equation-linear-0	SKIP	WRONG
 synthetic/equation-linear-1	SKIP	NONE
 synthetic/equation-linear-2	SKIP	RIGHT
 synthetic/equation-linear-3	SKIP	RIGHT
@@ -206,7 +206,7 @@ synthetic/equation-linear-4	SKIP	RIGHT
 synthetic/equation-linear-5	SKIP	RIGHT
 synthetic/equation-linear-6	SKIP	RIGHT
 synthetic/equation-linear-7	SKIP	NONE
-synthetic/equation-linear-8	SKIP	RIGHT
+synthetic/equation-linear-8	SKIP	WRONG
 synthetic/equation-linear-9	SKIP	NONE
 synthetic/equation-linear-10	SKIP	RIGHT
 synthetic/equation-linear-11	SKIP	NONE
@@ -217,7 +217,7 @@ synthetic/equation-linear-15	SKIP	RIGHT
 synthetic/equation-linear-16	SKIP	RIGHT
 synthetic/equation-linear-17	SKIP	RIGHT
 synthetic/equation-linear-18	SKIP	RIGHT
-synthetic/equation-linear-19	SKIP	RIGHT
+synthetic/equation-linear-19	SKIP	WRONG
 synthetic/equation-linear-20	SKIP	RIGHT
 synthetic/equation-linear-21	SKIP	RIGHT
 synthetic/equation-linear-22	SKIP	RIGHT
@@ -311,7 +311,7 @@ synthetic/equation-quadratic-29	SKIP	NONE
 synthetic/equation-quadratic-30	SKIP	RIGHT
 synthetic/equation-quadratic-31	SKIP	RIGHT
 synthetic/equation-quadratic-32	SKIP	RIGHT
-synthetic/equation-quadratic-33	SKIP	RIGHT
+synthetic/equation-quadratic-33	SKIP	NONE
 synthetic/equation-quadratic-34	SKIP	RIGHT
 synthetic/equation-quadratic-35	SKIP	RIGHT
 synthetic/equation-quadratic-36	SKIP	NONE

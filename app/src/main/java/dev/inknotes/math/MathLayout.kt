@@ -1120,7 +1120,7 @@ object Tune {
     @JvmField var longBarReach = 0.25f
 
     /** Above 0: a round bracket without its pair is read by the reader, not taken as a bracket. */
-    @JvmField var unpairedRead = 1f
+    @JvmField var unpairedRead = 0f
     @JvmField var fracStep = 0.557f
 
     @JvmField var integralMin = 1.15f
