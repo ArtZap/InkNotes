@@ -1289,7 +1289,7 @@ class EditorController(
     // ---------------------------------------------------------------- export
 
     /** What to export: PDF or PNG pictures, and which pages. */
-    enum class ExportFormat(val ext: String, val mime: String) { PDF("pdf", "application/pdf"), PNG("png", "image/png") }
+    enum class ExportFormat(val ext: String, val mime: String) { PDF("pdf", "application/pdf"), PNG("png", "image/png"), MD("md", "text/markdown") }
 
     sealed class ExportPages {
         data object All : ExportPages()
@@ -1331,7 +1331,11 @@ class EditorController(
         }
 
     var exportFormat: ExportFormat
-        get() = if (prefs.exportFormat == "png") ExportFormat.PNG else ExportFormat.PDF
+        get() = when (prefs.exportFormat) {
+            "png" -> ExportFormat.PNG
+            "md" -> ExportFormat.MD
+            else -> ExportFormat.PDF
+        }
         set(value) {
             prefs.exportFormat = value.ext
         }
@@ -1400,6 +1404,7 @@ class EditorController(
     /** [pages] in [format] as files in the cache, handed to [onReady] as content:// URIs to share. */
     fun exportForSharing(context: Context, pages: List<Int>, format: ExportFormat, onReady: (List<Uri>) -> Unit) {
         if (pages.isEmpty()) return
+        if (format == ExportFormat.MD) return markdownForSharing(context, pages, onReady)
         val dir = File(context.cacheDir, "shared").apply { mkdirs() }
         dir.listFiles()?.forEach { it.delete() } // only the latest shared files are kept
         val files = ArrayList<File>()
@@ -1407,6 +1412,104 @@ class EditorController(
             val f = File(dir, if (format == ExportFormat.PDF) exportName(pages, format) else exportName(pages, format, page))
             synchronized(files) { files += f }
             f.outputStream()
+        }) { ok ->
+            if (ok) onReady(files.map { FileProvider.getUriForFile(context, "${context.packageName}.files", it) })
+            else showStatus(tr("Не удалось подготовить файл", "Could not prepare the file"))
+        }
+    }
+
+    /** Where a Markdown export writes: the note, and the pictures' folder beside it. */
+    private interface MarkdownOut {
+        fun note(name: String): java.io.OutputStream?
+        fun image(folder: String, name: String): java.io.OutputStream?
+    }
+
+    /**
+     * [pages] as an Obsidian note: a picture of each page, its handwriting read as text (when
+     * search by handwriting is on) and its formulas in LaTeX with their answers. On a
+     * background thread; [done] gets whether it was written.
+     */
+    private fun runMarkdown(pages: List<Int>, out: MarkdownOut, done: (Boolean) -> Unit) {
+        flush()
+        val nb = notebook
+        status = tr("Экспорт Markdown…", "Exporting Markdown…")
+        Thread({
+            val missing = ArrayList<Int>()
+            var textMissing = handwriting.state != HandwritingIndex.State.Ready
+            val result = runCatching {
+                val folder = dev.inknotes.data.MarkdownNote.folderName(nb.title)
+                val list = pages.mapIndexed { k, i ->
+                    val pageId = nb.pageIds[i]
+                    val image = dev.inknotes.data.MarkdownNote.imageName(nb.title, i + 1)
+                    val wrote = out.image(folder, image)?.use { o -> PdfExporter.writePng(repo, nb, i, o).also { if (!it) missing += i + 1 } } != null
+                    // The handwriting as the search index read it.
+                    val lines = if (textMissing) emptyList() else waitFor<List<TextLine>> { cb -> handwriting.pageText(nb, pageId, cb) }.orEmpty().map { it.text }
+                    // Formulas and their answers, as on the page.
+                    val content = runCatching { repo.loadPage(nb, pageId) }.getOrNull()
+                    val answers = if (content == null || math.state != MathNotes.State.Ready) emptyList() else
+                        waitFor<List<PageAnswer>> { cb -> math.analyze("export/${nb.id}/$pageId", content.strokes, nb.pageWidthUnits(pageId), cb) }.orEmpty()
+                    val formulas = answers.mapNotNull { a ->
+                        val fix = a.fix ?: return@mapNotNull null
+                        val left = fix.leftRead ?: return@mapNotNull null
+                        val source = Printer.expr(left) + "=" + (fix.rightRead?.let { Printer.expr(it) } ?: "")
+                        val latex = runCatching { dev.inknotes.math.Typeset.latex(source) }.getOrNull() ?: return@mapNotNull null
+                        val answer = if (a.missing || fix.right != null && fix.graph) null else (a.answer as? dev.inknotes.math.Answer.Text)?.lines?.joinToString("; ")
+                        latex to answer
+                    }
+                    handler.post { status = tr("Экспорт Markdown: ${k + 1} / ${pages.size}", "Exporting Markdown: ${k + 1} / ${pages.size}") }
+                    dev.inknotes.data.MarkdownNote.Page(i + 1, image.takeIf { wrote }, lines, formulas)
+                }
+                if (!textMissing && list.all { it.lines.isEmpty() }) textMissing = true
+                val date = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.ROOT).format(java.util.Date())
+                val text = dev.inknotes.data.MarkdownNote.build(nb.title, date, list, textMissing)
+                (out.note(dev.inknotes.data.MarkdownNote.noteName(nb.title)) ?: error("cannot open output")).use { it.write(text.toByteArray()) }
+            }
+            handler.post {
+                status = null
+                done(result.isSuccess)
+                exportWarning(result.exceptionOrNull(), missing)?.let(::showStatus)
+            }
+        }, "export-md").start()
+    }
+
+    /** Waits (on a background thread) for an answer given on the main thread; null after 20 s. */
+    private fun <T> waitFor(start: ((T) -> Unit) -> Unit): T? {
+        val latch = java.util.concurrent.CountDownLatch(1)
+        var value: T? = null
+        handler.post {
+            runCatching {
+                start { v ->
+                    value = v
+                    latch.countDown()
+                }
+            }.onFailure { latch.countDown() }
+        }
+        latch.await(20, java.util.concurrent.TimeUnit.SECONDS)
+        return value
+    }
+
+    /** [pages] as an Obsidian note into the folder [tree] (picked in the system dialog): the note and a folder of pictures. */
+    fun exportMarkdownToFolder(tree: Uri, resolver: ContentResolver, pages: List<Int>) {
+        if (pages.isEmpty()) return
+        val root = android.provider.DocumentsContract.buildDocumentUriUsingTree(tree, android.provider.DocumentsContract.getTreeDocumentId(tree))
+        var dir: Uri? = null
+        runMarkdown(pages, object : MarkdownOut {
+            override fun note(name: String) = android.provider.DocumentsContract.createDocument(resolver, root, "text/markdown", name)?.let { resolver.openOutputStream(it, "wt") }
+            override fun image(folder: String, name: String): java.io.OutputStream? {
+                val d = dir ?: android.provider.DocumentsContract.createDocument(resolver, root, android.provider.DocumentsContract.Document.MIME_TYPE_DIR, folder).also { dir = it } ?: return null
+                return android.provider.DocumentsContract.createDocument(resolver, d, "image/png", name)?.let { resolver.openOutputStream(it, "wt") }
+            }
+        }) { ok -> showStatus(if (ok) tr("Заметка Markdown сохранена", "Markdown note saved") else tr("Не удалось сохранить заметку", "Could not save the note")) }
+    }
+
+    /** [pages] as an Obsidian note in the cache, handed to [onReady] (the note and its pictures) to share. */
+    private fun markdownForSharing(context: Context, pages: List<Int>, onReady: (List<Uri>) -> Unit) {
+        val dir = File(context.cacheDir, "shared").apply { mkdirs() }
+        dir.listFiles()?.forEach { it.deleteRecursively() }
+        val files = ArrayList<File>()
+        runMarkdown(pages, object : MarkdownOut {
+            override fun note(name: String) = File(dir, name).also { files += it }.outputStream()
+            override fun image(folder: String, name: String) = File(dir, name).also { files += it }.outputStream()
         }) { ok ->
             if (ok) onReady(files.map { FileProvider.getUriForFile(context, "${context.packageName}.files", it) })
             else showStatus(tr("Не удалось подготовить файл", "Could not prepare the file"))

@@ -230,6 +230,9 @@ fun EditorScreen(
     val pngLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("image/png")) { uri ->
         if (uri != null) controller.exportTo(uri, resolver, exportPending, EditorController.ExportFormat.PNG)
     }
+    val mdFolderLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) controller.exportMarkdownToFolder(uri, resolver, exportPending)
+    }
     val pngFolderLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri != null) controller.exportPngToFolder(uri, resolver, exportPending)
     }
@@ -242,7 +245,7 @@ fun EditorScreen(
         context.startActivity(Intent.createChooser(send, tr("Отправить", "Share")))
     }
     val shareExport = { format: EditorController.ExportFormat, pages: List<Int> ->
-        controller.exportForSharing(context, pages, format) { uris -> sendFiles(uris, format.mime) }
+        controller.exportForSharing(context, pages, format) { uris -> sendFiles(uris, if (format == EditorController.ExportFormat.MD) "*/*" else format.mime) }
     }
     // Scanner: the camera writes into a cache file, then the photo opens in the editor.
     val scanFile = remember { java.io.File(java.io.File(context.cacheDir, "camera").apply { mkdirs() }, "scan.jpg") }
@@ -448,6 +451,7 @@ fun EditorScreen(
                 val list = controller.exportIndices(pages)
                 exportPending = list
                 when {
+                    format == EditorController.ExportFormat.MD -> mdFolderLauncher.launch(null)
                     format == EditorController.ExportFormat.PDF -> exportLauncher.launch(controller.exportName(list, format))
                     list.size == 1 -> pngLauncher.launch(controller.exportName(list, format))
                     else -> pngFolderLauncher.launch(null)

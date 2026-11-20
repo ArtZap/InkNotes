@@ -45,6 +45,12 @@ private class Topic(val title: String, val entries: List<Pair<String, String>>)
 
 private val TOPICS = listOf(
     Topic(
+        tr("Новое в 0.47", "What's new in 0.47"),
+        listOf(
+            tr("Экспорт в Markdown для Obsidian", "Export to Markdown for Obsidian") to tr("Экспорт → «Markdown (Obsidian)» → «Сохранить…» и выберите папку хранилища Obsidian. Появится заметка .md с заголовком, датой и тегом inknotes и папка с картинками страниц. В заметке под каждой страницей — рукописный текст, распознанный поиском по почерку (если он включён), и формулы страницы в LaTeX с ответами.", "Export → “Markdown (Obsidian)” → “Save…” and pick your Obsidian vault folder. A .md note appears with a title, date and the inknotes tag, and a folder of page pictures. Under each page the note has the handwriting read by handwriting search (if it is on) and the page's formulas in LaTeX with their answers."),
+        ),
+    ),
+    Topic(
         tr("Новое в 0.46", "What's new in 0.46"),
         listOf(
             tr("Яндекс Диск, Nextcloud — WebDAV", "Yandex Disk, Nextcloud — WebDAV") to tr("«Ещё → Синхронизация…» в библиотеке: вверху выберите «Яндекс Диск, Nextcloud (WebDAV)», впишите адрес сервера, логин и пароль приложения и нажмите «Подключить». Для Яндекс Диска адрес https://webdav.yandex.ru, пароль приложения создаётся на id.yandex.ru → Безопасность → Пароли приложений. Дальше всё как с Google Диском: тетради лежат файлами в папке InkNotes, изменения идут в обе стороны, изменённая в двух местах тетрадь сохраняется дважды, удалённая уходит в корзину. Пароль хранится на планшете зашифрованным.", "“More → Sync…” in the library: at the top choose “Yandex Disk, Nextcloud (WebDAV)”, enter the server address, login and app password, and press “Connect”. For Yandex Disk the address is https://webdav.yandex.ru, and an app password is made at id.yandex.ru → Security → App passwords. From then on it is as with Google Drive: notebooks are files in the InkNotes folder, changes go both ways, a notebook changed in two places is kept twice, a deleted one goes to the trash. The password is kept encrypted on the tablet."),

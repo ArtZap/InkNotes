@@ -79,6 +79,7 @@ fun ExportDialog(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterChip(selected = format == ExportFormat.PDF, onClick = { format = ExportFormat.PDF }, label = { Text("PDF") })
                     FilterChip(selected = format == ExportFormat.PNG, onClick = { format = ExportFormat.PNG }, label = { Text(tr("PNG, картинки", "PNG, pictures")) })
+                    FilterChip(selected = format == ExportFormat.MD, onClick = { format = ExportFormat.MD }, label = { Text(tr("Markdown (Obsidian)", "Markdown (Obsidian)")) })
                 }
                 Text(tr("Страницы", "Pages"), style = MaterialTheme.typography.labelLarge)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -97,6 +98,7 @@ fun ExportDialog(
                     when {
                         pages == null -> ""
                         format == ExportFormat.PDF -> tr("Один PDF, страниц: $count.", "One PDF, pages: $count.")
+                        format == ExportFormat.MD -> tr("Заметка .md и папка с картинками страниц (страниц: $count): в заметке рукописный текст и формулы в LaTeX с ответами. «Сохранить…» — выберите папку хранилища Obsidian.", "A .md note and a folder of page pictures (pages: $count): the note has the handwriting as text and the formulas in LaTeX with their answers. “Save…” — pick your Obsidian vault folder.")
                         count == 1 -> tr("Одна картинка PNG.", "One PNG picture.")
                         else -> tr("Картинок PNG: $count, по одной на страницу. Сохраняются в выбранную папку.", "PNG pictures: $count, one per page. Saved to the chosen folder.")
                     },
@@ -104,7 +106,7 @@ fun ExportDialog(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(enabled = pages != null, onClick = { go(onPrint) }) {
+                    OutlinedButton(enabled = pages != null && format != ExportFormat.MD, onClick = { go(onPrint) }) {
                         Icon(InkIcons.Print, null)
                         Text(tr("  Печать", "  Print"))
                     }
