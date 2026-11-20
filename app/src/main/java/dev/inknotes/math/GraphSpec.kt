@@ -154,11 +154,29 @@ class GraphSpec(
     val y1: Double,
     val points: List<Pair<Double, Double>> = emptyList(),
     val key: String? = null,
+    /** A surface z = f([variable], [second]) when not null: [x0]…[x1] its half-width both ways. */
+    val second: String? = null,
+    /** How a surface is turned and tilted, degrees. */
+    val azimuth: Float = Plot3D.AZIMUTH,
+    val elevation: Float = Plot3D.ELEVATION,
 ) {
-    fun fns(): List<(Double) -> Double> = exprs.map { e -> { v: Double -> Numeric.scalar(e, mapOf(variable to v)) } }
+    val isSurface get() = second != null
+
+    fun fns(): List<(Double) -> Double> = if (isSurface) emptyList() else exprs.map { e -> { v: Double -> Numeric.scalar(e, mapOf(variable to v)) } }
+
+    /** The surface's heights over a square of half-width [range] (null when not a surface). */
+    fun surface(range: Double = x1): Answer.Surface? {
+        val yv = second ?: return null
+        val e = exprs.firstOrNull() ?: return null
+        return Plot3D.of({ x, y -> Numeric.scalar(e, mapOf(variable to x, yv to y)) }, variable, yv, trig, range)?.withExpr(e, trig, titles.firstOrNull().orEmpty())
+    }
 
     fun with(x0: Double, x1: Double, y0: Double, y1: Double, points: List<Pair<Double, Double>>) =
-        GraphSpec(variable, exprs, titles, trig, x0, x1, y0, y1, points, key)
+        GraphSpec(variable, exprs, titles, trig, x0, x1, y0, y1, points, key, second, azimuth, elevation)
+
+    /** The surface seen from ([azimuth], [elevation]) over half-width [range]. */
+    fun turned(azimuth: Float, elevation: Float, range: Double) =
+        GraphSpec(variable, exprs, titles, trig, -range, range, -range, range, emptyList(), key, second, azimuth, elevation)
 
     fun encode(): String = buildString {
         append("graph=1\n")
@@ -171,6 +189,10 @@ class GraphSpec(
         append("view=").append(x0).append(',').append(x1).append(',').append(y0).append(',').append(y1).append('\n')
         for ((x, y) in points) append("p=").append(x).append(',').append(y).append('\n')
         key?.let { append("key=").append(it).append('\n') }
+        second?.let {
+            append("second=").append(it).append('\n')
+            append("turn=").append(azimuth).append(',').append(elevation).append('\n')
+        }
     }
 
     companion object {
@@ -185,7 +207,11 @@ class GraphSpec(
             var trig = false
             var view: List<Double>? = null
             var key: String? = null
+            var second: String? = null
+            var turn = listOf(Plot3D.AZIMUTH, Plot3D.ELEVATION)
             for ((k, value) in lines) when (k) {
+                "second" -> second = value
+                "turn" -> turn = value.split(',').map { it.toFloat() }
                 "v" -> v = value
                 "trig" -> trig = value == "1"
                 "e" -> exprs += ExprCodec.decode(value) ?: return null
@@ -196,7 +222,7 @@ class GraphSpec(
             }
             val w = view ?: return null
             if (exprs.isEmpty() || w.size != 4 || !(w[1] > w[0]) || !(w[3] > w[2])) return null
-            GraphSpec(v, exprs, titles, trig, w[0], w[1], w[2], w[3], points, key)
+            GraphSpec(v, exprs, titles, trig, w[0], w[1], w[2], w[3], points, key, second, turn[0], turn[1])
         }.getOrNull()
     }
 }

@@ -62,7 +62,18 @@ sealed class Answer {
         val z0: Float,
         val z1: Float,
         val zs: FloatArray,
+        /** The formula, to open the surface in its window and keep it as a picture ([GraphSpec]). */
+        val expr: Expr? = null,
+        val trig: Boolean = false,
+        val title: String = "",
     ) : Answer() {
+        fun withExpr(expr: Expr, trig: Boolean, title: String = this.title) = Surface(xv, yv, x0, x1, y0, y1, z0, z1, zs, expr, trig, title)
+
+        /** What a picture of this surface keeps, seen from the usual side. */
+        fun spec(key: String?) = expr?.let {
+            GraphSpec(xv, listOf(it), listOf(title), trig, x0.toDouble(), x1.toDouble(), y0.toDouble(), y1.toDouble(), key = key, second = yv)
+        }
+
         override fun toString() = "Surface($xv, $yv: z ${Printer.number(z0.toDouble())}…${Printer.number(z1.toDouble())})"
     }
 }
@@ -182,7 +193,7 @@ object Calc {
         // x before y, whatever letters they are.
         val (xv, yv) = vars[0] to vars[1]
         val trig = TRIG.containsMatchIn(runCatching { Printer.expr(r) }.getOrDefault(""))
-        return Plot3D.of({ x, y -> Numeric.scalar(r, mapOf(xv to x, yv to y)) }, xv, yv, trig)
+        return Plot3D.of({ x, y -> Numeric.scalar(r, mapOf(xv to x, yv to y)) }, xv, yv, trig)?.withExpr(r, trig)
     }
 
     /** Solves equations `left = right` in their unknowns (names not defined above). */

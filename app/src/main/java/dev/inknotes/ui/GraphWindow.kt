@@ -75,6 +75,13 @@ fun GraphWindow(c: EditorController, win: EditorController.GraphWin, modifier: M
     var marks by remember(win) { mutableStateOf(emptyList<GraphMath.Mark>()) }
     var area by remember(win) { mutableStateOf(IntSize.Zero) }
     val painter = remember(screen) { GraphPainter(screen.density) }
+    // The writer's point a finger picked (to remove it), or -1.
+    var picked by remember(win) { mutableStateOf(-1) }
+    // A surface: how it is turned and tilted, and how wide a square it covers.
+    var azimuth by remember(win) { mutableStateOf(spec.azimuth) }
+    var elevation by remember(win) { mutableStateOf(spec.elevation) }
+    var range by remember(win) { mutableStateOf(spec.x1) }
+    val surface = remember(win, range) { if (spec.isSurface) runCatching { spec.surface(range) }.getOrNull() else null }
 
     // Crossings for what is in view, once the view stops moving.
     LaunchedEffect(win, view.x0, view.x1) {
@@ -89,7 +96,17 @@ fun GraphWindow(c: EditorController, win: EditorController.GraphWin, modifier: M
     fun pxY(y: Double) = ((view.y1 - y) / view.h * area.height).toFloat()
     val grab = with(screen) { 22.dp.toPx() }
 
+    fun pointAt(o: Offset) = points.indexOfFirst { (x, y) -> hypot(pxX(x) - o.x, pxY(y) - o.y) < grab }
+
+    fun removePoint(i: Int) {
+        points = points.filterIndexed { k, _ -> k != i }
+        picked = -1
+    }
+
     fun putPoint(o: Offset) {
+        // A point already there: a long press takes it away.
+        val at = pointAt(o)
+        if (at >= 0) return removePoint(at)
         // On a curve when one is near: the point is exactly on it.
         val x = toX(o.x)
         val y = toY(o.y)
@@ -102,11 +119,19 @@ fun GraphWindow(c: EditorController, win: EditorController.GraphWin, modifier: M
             active = true
             return
         }
-        val hit = points.indexOfFirst { (x, y) -> hypot(pxX(x) - o.x, pxY(y) - o.y) < grab }
+        if (spec.isSurface) return
+        val hit = pointAt(o)
         if (pointMode) {
-            if (hit >= 0) points = points.filterIndexed { i, _ -> i != hit } else putPoint(o)
+            if (hit >= 0) removePoint(hit) else putPoint(o)
             return
         }
+        // One's own point: picked, to remove it.
+        if (hit >= 0) {
+            picked = hit
+            probe = null
+            return
+        }
+        picked = -1
         // A crossing near the finger: its exact place.
         val mark = marks.minByOrNull { hypot(pxX(it.x) - o.x, pxY(it.y) - o.y) }?.takeIf { hypot(pxX(it.x) - o.x, pxY(it.y) - o.y) < grab }
         if (mark != null) {
@@ -122,7 +147,8 @@ fun GraphWindow(c: EditorController, win: EditorController.GraphWin, modifier: M
 
     fun save() {
         val v = view
-        c.saveGraph(win, spec.with(v.x0, v.x1, v.y0, v.y1, points), area.width.toFloat() / area.height.coerceAtLeast(1))
+        val kept = if (spec.isSurface) spec.turned(azimuth, elevation, range) else spec.with(v.x0, v.x1, v.y0, v.y1, points)
+        c.saveGraph(win, kept, area.width.toFloat() / area.height.coerceAtLeast(1))
     }
 
     Surface(
@@ -155,17 +181,18 @@ fun GraphWindow(c: EditorController, win: EditorController.GraphWin, modifier: M
                     modifier = Modifier.weight(1f),
                 )
                 if (active) {
-                    TextButton(onClick = { pointMode = !pointMode }) {
-                        Text(if (pointMode) tr("✓ Точка", "✓ Point") else tr("Точка", "Point"), fontSize = 13.sp)
-                    }
                     TextButton(onClick = {
                         active = false
                         pointMode = false
+                        picked = -1
                     }) { Text(tr("Готово", "Done"), fontSize = 13.sp) }
                 }
                 TextButton(onClick = {
                     view = start
                     probe = null
+                    azimuth = spec.azimuth
+                    elevation = spec.elevation
+                    range = spec.x1
                 }) { Text(tr("Вписать", "Fit"), fontSize = 13.sp) }
                 TextButton(onClick = { save() }) {
                     Text(if (win.image != null) tr("Сохранить", "Save") else tr("В тетрадь", "To the page"), fontSize = 13.sp)
@@ -188,6 +215,13 @@ fun GraphWindow(c: EditorController, win: EditorController.GraphWin, modifier: M
                             if (!active) return@pointerInput
                             detectTransformGestures { centroid, pan, zoom, _ ->
                                 if (area.width == 0 || area.height == 0) return@detectTransformGestures
+                                if (spec.isSurface) {
+                                    // A finger turns and tilts it, two fingers bring it nearer.
+                                    azimuth = (azimuth - pan.x * 0.4f) % 360f
+                                    elevation = (elevation + pan.y * 0.3f).coerceIn(5f, 85f)
+                                    range = (range / zoom.coerceIn(0.5f, 2f)).coerceIn(0.05, 1e4)
+                                    return@detectTransformGestures
+                                }
                                 val v = view
                                 val cx = v.x0 + centroid.x / area.width * v.w
                                 val cy = v.y1 - centroid.y / area.height * v.h
@@ -201,29 +235,45 @@ fun GraphWindow(c: EditorController, win: EditorController.GraphWin, modifier: M
                                 view = GraphPainter.View(nx0, nx0 + w, ny0, ny0 + h)
                             }
                         }
-                        .pointerInput(win, active, pointMode, points, marks, view) {
+                        .pointerInput(win, active, pointMode, points, marks, view, picked) {
                             detectTapGestures(
                                 onTap = { tap(it) },
                                 onLongPress = { if (active) putPoint(it) },
                             )
                         },
                 ) {
-                    drawIntoCanvas { painter.draw(it.nativeCanvas, size.width, size.height, view, fns, spec.titles, marks, points, probe, colors) }
+                    drawIntoCanvas {
+                        if (spec.isSurface) {
+                            surface?.let { s -> painter.drawSurface(it.nativeCanvas, size.width, size.height, s, azimuth, elevation, spec.titles.firstOrNull().orEmpty(), colors) }
+                        } else {
+                            painter.draw(it.nativeCanvas, size.width, size.height, view, fns, spec.titles, marks, points, probe, colors, picked)
+                        }
+                    }
                 }
                 if (!active) {
                     Text(
-                        tr("Коснитесь, чтобы управлять графиком", "Tap to work the graph"),
+                        if (spec.isSurface) tr("Коснитесь, чтобы вращать поверхность", "Tap to turn the surface") else tr("Коснитесь, чтобы управлять графиком", "Tap to work the graph"),
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.align(Alignment.BottomStart).padding(8.dp),
                     )
-                } else if (pointMode) {
-                    Text(
-                        tr("Касание ставит точку, касание точки — убирает", "A tap puts a point, a tap on a point takes it away"),
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.align(Alignment.BottomStart).padding(8.dp),
-                    )
+                } else if (!spec.isSurface) {
+                    // The points: put them, take one or all away.
+                    Row(Modifier.align(Alignment.BottomStart).padding(start = 4.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                        TextButton(onClick = {
+                            pointMode = !pointMode
+                            picked = -1
+                        }) { Text(if (pointMode) tr("✓ Ставить точки", "✓ Put points") else tr("Ставить точки", "Put points"), fontSize = 12.sp) }
+                        if (picked in points.indices) {
+                            TextButton(onClick = { removePoint(picked) }) { Text(tr("Удалить точку", "Remove point"), fontSize = 12.sp) }
+                        }
+                        if (points.isNotEmpty()) {
+                            TextButton(onClick = {
+                                points = emptyList()
+                                picked = -1
+                            }) { Text(tr("Убрать все", "Remove all"), fontSize = 12.sp) }
+                        }
+                    }
                 }
                 // The corner that sizes the window.
                 val grip = MaterialTheme.colorScheme.outline

@@ -66,4 +66,20 @@ class GraphSpecTest {
         // IEND stays last.
         assertEquals("IEND", String(withText, withText.size - 8, 4))
     }
+
+    @Test
+    fun aSurfaceKeepsItsTurn() {
+        val s = Calc.surface(Parser.parse("x^2 + y^2"), Env())!!
+        val spec = s.spec("k")!!.turned(60f, 40f, 5.0)
+        val back = GraphSpec.decode(spec.encode())!!
+        assertTrue(back.isSurface)
+        assertEquals("y", back.second)
+        assertEquals(60f, back.azimuth, 0f)
+        assertEquals(40f, back.elevation, 0f)
+        assertEquals(5.0, back.x1, 0.0)
+        val again = back.surface()!!
+        assertEquals(5f, again.x1, 0f)
+        assertTrue(again.z1 > 40f)
+        assertTrue(back.fns().isEmpty())
+    }
 }

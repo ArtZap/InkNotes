@@ -45,6 +45,13 @@ private class Topic(val title: String, val entries: List<Pair<String, String>>)
 
 private val TOPICS = listOf(
     Topic(
+        tr("Новое в 0.60", "What's new in 0.60"),
+        listOf(
+            tr("Поверхности тоже", "Surfaces too") to tr("Окно графика открывается и у поверхностей z = f(x, y): коснитесь окна, затем одним пальцем вращайте и наклоняйте поверхность, двумя — приближайте и отдаляйте. «В тетрадь» кладёт её на страницу картинкой в том повороте, как в окне; повторное касание выделенной картинки снова открывает окно.", "The graph's window opens for surfaces z = f(x, y) too: tap the window, then turn and tilt the surface with one finger, zoom with two. “To the page” puts it on the page as a picture turned as in the window; tapping the selected picture again opens the window."),
+            tr("Удаление точек", "Removing points") to tr("В режиме управления внизу окна: «Ставить точки», «Удалить точку» (сначала коснитесь точки — она обведётся) и «Убрать все». Долгое касание по точке тоже её убирает.", "While working the graph, at the bottom of the window: “Put points”, “Remove point” (tap a point first — it gets a ring) and “Remove all”. A long press on a point removes it too."),
+        ),
+    ),
+    Topic(
         tr("Новое в 0.59", "What's new in 0.59"),
         listOf(
             tr("Окно графика", "The graph's window") to tr("Коснитесь графика на странице — он откроется в отдельном окне поверх страницы. Окно двигается за заголовок, размер меняется за правый нижний угол. На графике отмечены и подписаны точки пересечения кривых и места, где кривые пересекают оси, слева вверху — какая кривая какая. «Вписать» возвращает исходный вид, «✕» закрывает без изменений.", "Tap a graph on the page — it opens in a window of its own over the page. Move the window by its title, size it by its bottom-right corner. Where the curves cross each other and the axes is marked and signed, with which curve is which at the top left. “Fit” goes back to the first view, “✕” closes without changes."),
