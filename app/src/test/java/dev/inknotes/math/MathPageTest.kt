@@ -2,6 +2,7 @@ package dev.inknotes.math
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -136,6 +137,35 @@ class MathPageTest {
         s.equals(202f, 112f)
         val a = s.answers().single().answer as Answer.Grid
         assertEquals(listOf(listOf("2", "4"), listOf("6", "8")), a.rows)
+    }
+
+    @Test
+    fun aLettersDigitsRightAfterItAreItsIndex() {
+        assertEquals("r_{1}+r_{2}", MathPage.digitIndex("r1+r2"))
+        assertEquals("2x_{12}", MathPage.digitIndex("2x12"))
+        assertEquals("a_{2}b", MathPage.digitIndex("a2b"))
+        // Function words, digits before the letter, exponents and decimals stay as they are.
+        for (t in listOf("log2", "sin2x", "ln2", "2x", "x^{2}", "x_{1}", "x1.5", "12")) assertEquals(t, MathPage.digitIndex(t))
+        ReadOptions.digitIndex = false
+        try {
+            assertEquals("r1", MathPage.digitIndex("r1"))
+        } finally {
+            ReadOptions.digitIndex = true
+        }
+    }
+
+    @Test
+    fun exponentsInBracketsAreNotAMatrixRow() {
+        val s = Sheet()
+        // (x² + x) in brackets as tall as the exponent makes them: a group, not a matrix (x; 2).
+        s.tall(null, 100f, 84f, 44f, 10f) { t -> (2 * t - 1) * (2 * t - 1) }
+        s.glyph("x", 114f, 100f, 14f, 16f)
+        s.glyph("2", 129f, 88f, 7f, 10f)
+        s.glyph("+", 142f, 102f, 12f, 12f)
+        s.glyph("x", 160f, 100f, 14f, 16f)
+        s.tall(null, 180f, 84f, 44f, 10f) { t -> 1 - (2 * t - 1) * (2 * t - 1) }
+        val text = MathLayout.formula(s.strokes, 24f, 108f).joinToString("") { if (it is Piece.Text) it.s else "#" }
+        assertTrue(text, "mat" !in text)
     }
 
     @Test
@@ -694,19 +724,22 @@ class MathPageTest {
 
     @Test
     fun equationOnTheEdgeOfAnExponentIsUnsure() {
-        // x2 = 4 with the 2 moved up step by step: low it is x·2 = 4 (x = 2), high x² = 4
-        // (x = ±2); in between, where the layout is in doubt, the answer is unsure.
-        fun answerAt(top: Float): PageAnswer {
+        // x2 = 4 with the 2 moved up step by step: low it is x₂ = 4, a value given, no answer
+        // (a letter's digits right after it are its index, 0.64); high x² = 4 (x = ±2); in
+        // between, where the layout is in doubt, the answer is unsure.
+        fun answerAt(top: Float): PageAnswer? {
             val s = Sheet()
             s.glyph("x", 100f, 100f)
             s.add("2", listOf(117f, 124.2f, 117f, 124.2f), listOf(top, top + 4f, top + 8f, top + 12f))
             s.equals(140f, 112f)
             s.glyph("4", 164f, 100f)
-            return s.answers().single()
+            return s.answers().singleOrNull()
         }
-        val answers = (0..40).map { answerAt(112f - it * 0.5f) }
-        assertTrue(answers.joinToString { text(it) + if (it.unsure) "?" else "" }, answers.any { it.unsure && it.others.isNotEmpty() })
-        assertTrue("low: plain", !answers.first().unsure)
+        val all = (0..40).map { answerAt(112f - it * 0.5f) }
+        val seen = all.joinToString(" | ") { it?.let { a -> text(a).replace("\n", ";") + if (a.unsure) "?" else "" } ?: "-" }
+        assertNull(seen, all.first())
+        assertTrue(seen, all.any { it != null && it.unsure })
+        assertTrue(seen, all.last()!!.let { !it.unsure && "−2" in text(it) && "2" in text(it) })
     }
 
     @Test

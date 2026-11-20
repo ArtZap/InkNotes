@@ -66,6 +66,12 @@ sealed class Piece {
  * and the integral sign with its limits. Everything else is left to the handwriting reader.
  */
 object MathLayout {
+    /** An exponent is smaller than this part of what it is raised over (a matrix's rows are alike). */
+    private const val EXPONENT_SIZE = 0.75f
+
+    /** The farthest a long bar's numerator or denominator stands from it, in line heights. */
+    private const val LONG_BAR_REACH_MAX = 2.5f
+
 
     /**
      * Thresholds moved a little, to read a formula again: when a reading with them gives
@@ -785,6 +791,9 @@ object MathLayout {
                 // fraction, not in it; brackets wholly under the bar, 1/(x + 1), are in it.
                 fun across(it: Item) = it is G && it.box.top < bb.cy && it.box.bottom > bb.cy &&
                     tallShape(it.glyph, h) in BRACKETS
+                // A long bar holds what stands farther from it: under a bar five lines wide
+                // nothing but its denominator stands.
+                val reach = max(Tune.fracReach * h, min(Tune.longBarReach * bb.width, LONG_BAR_REACH_MAX * h))
                 fun stack(up: Boolean): List<Item> {
                     val cand = pool.filter {
                         it !== bar && it.box.cx in bb.left - 0.15f * h..bb.right + 0.15f * h && !across(it) &&
@@ -796,7 +805,7 @@ object MathLayout {
                         grew = false
                         for (c in cand) {
                             if (c in got) continue
-                            if (vGap(c.box, bb) <= Tune.fracReach * h || got.any { vGap(c.box, it.box) <= Tune.fracStep * h }) {
+                            if (vGap(c.box, bb) <= reach || got.any { vGap(c.box, it.box) <= Tune.fracStep * h }) {
                                 got += c
                                 grew = true
                             }
@@ -973,13 +982,27 @@ object MathLayout {
                     other === row || min(r, other.maxOf { it.box.right }) - max(l, other.minOf { it.box.left }) > 0.5f * min(r - l, other.maxOf { it.box.right } - other.minOf { it.box.left })
                 }
             }
-            if (!aligned) return Group(box, open, close, content)
+            if (!aligned || rows.zipWithNext().any { (up, down) -> exponents(up, down) }) return Group(box, open, close, content)
             val cols = columns(content)
             val cells = rows.map { row ->
                 List(cols.size) { c -> row.filter { it.box.cx in cols[c].first..cols[c].second } }
             }
             if (cells.any { r -> r.any { it.isEmpty() } }) throw MathError(tr("пустая клетка матрицы", "empty matrix cell"))
             return Grid(box, cells, det)
+        }
+
+        /**
+         * Whether a row [up] is the exponents of the row [down] under it, not a row of a matrix:
+         * (x³ − x² − x), n(n² + 2). Every item of it is smaller than the items under it and
+         * stands raised at the right of one of them.
+         */
+        private fun exponents(up: List<Item>, down: List<Item>): Boolean {
+            val base = down.maxOf { it.box.height }
+            return up.all { e ->
+                e.box.height < EXPONENT_SIZE * base && down.any { o ->
+                    e.box.cy < o.box.cy && e.box.left > o.box.right - 0.4f * o.box.width && e.box.left < o.box.right + 0.6f * h
+                }
+            }
         }
 
         /** Groups items into rows by vertical overlap, top to bottom. */
@@ -1090,6 +1113,9 @@ object Tune {
     /** A fraction bar at least this wide; numerator and denominator within [fracReach] of it, their parts within [fracStep]. */
     @JvmField var barWidth = 0.45f
     @JvmField var fracReach = 1.237f
+
+    /** A long bar reaches this part of its width (0: as any bar, [fracReach]). */
+    @JvmField var longBarReach = 0.25f
     @JvmField var fracStep = 0.557f
 
     @JvmField var integralMin = 1.15f

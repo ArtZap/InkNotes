@@ -45,6 +45,14 @@ private class Topic(val title: String, val entries: List<Pair<String, String>>)
 
 private val TOPICS = listOf(
     Topic(
+        tr("Новое в 0.64", "What's new in 0.64"),
+        listOf(
+            tr("Индексы", "Indices") to tr("Цифра сразу после буквы — её индекс, даже если опущена не очень низко: x1 читается как x₁, а не x·1. Если нужно умножение, пишите 2x или x·2.", "Digits right after a letter are its index even when not written very low: x1 reads as x₁, not x·1. For a product, write 2x or x·2."),
+            tr("Скобки со степенями", "Brackets with exponents") to tr("Скобка, внутри которой есть степень, больше не принимается за матрицу: (x³ − x² − x) и n(n² + 2) читаются как скобки.", "A bracket with an exponent inside is no longer taken for a matrix: (x³ − x² − x) and n(n² + 2) read as brackets."),
+            tr("Длинная дробная черта", "A long fraction bar") to tr("Под длинной чертой знаменатель может стоять дальше от неё.", "Under a long bar the denominator may stand farther from it."),
+        ),
+    ),
+    Topic(
         tr("Новое в 0.63", "What's new in 0.63"),
         listOf(
             tr("Меньше неверных ответов", "Fewer wrong answers") to tr("Одиночная палочка, которую программа читала как букву l или I, теперь сначала считается единицей — так бывает почти всегда. Если буква l уже есть на странице (например, длина l = 2 м), она остаётся буквой. Из вариантов прочтения реже выбираются странные буквы: 5π, а не 5T; x, а не æ.", "A lone upright the app read as the letter l or I is now taken as a 1 first — it almost always is. If the page already has the letter l (say, a length l = 2 m), it stays a letter. Of the ways to read a formula, odd letters are chosen less often: 5π, not 5T; x, not æ."),

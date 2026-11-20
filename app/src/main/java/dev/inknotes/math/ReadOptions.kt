@@ -29,6 +29,9 @@ object ReadOptions {
     /** How much a step down the reader's list costs, against the symbols' costs ([symbolCost]). */
     @JvmField var rankWeight = 0.7f
 
+    /** A lone letter with digits right after it in one run is the letter with an index (x1 → x₁). */
+    @JvmField var digitIndex = true
+
     /** Strokes handed to the reader from the corner of its writing area, not where they are on the page. */
     @JvmField var fromOrigin = false
 
@@ -155,6 +158,9 @@ object ReadOptions {
         if (!byCost || texts.size < 2) return texts
         return texts.withIndex().sortedBy { (i, t) -> cost(t, i) }.map { it.value }
     }
+
+    /** Where function words stand in [text] (sin, cos, log…). */
+    fun wordRanges(text: String): List<IntRange> = WORDS.findAll(text).map { it.range }.toList()
 
     /** The switches, as a key for cached readings. */
     fun key(): String = "${if (fromOrigin) 'o' else '-'}${if (glyphPauses) 'p' else '-'}"
