@@ -163,6 +163,10 @@ class CorrectTest {
         assertEquals("z", l.meant("2"))
         assertEquals(listOf("z", "2"), l.adjust(listOf("2"), 1))
         assertEquals(listOf("x2", "xz", "x7"), l.adjust(listOf("x2", "x7"), 2))
+        // The reader ran two symbols into one ("x2" read as "%"): the first reading with as
+        // many symbols as the run still gets the writer's symbol.
+        assertEquals(listOf("%", "xz", "x2"), l.adjust(listOf("%", "x2"), 2))
+        assertEquals(listOf("%", "&"), l.adjust(listOf("%", "&"), 2))
         // Kept as often as corrected: not changed.
         repeat(3) { l.record("2", "2") }
         assertNull(l.meant("2"))

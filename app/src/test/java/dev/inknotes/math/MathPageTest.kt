@@ -487,6 +487,37 @@ class MathPageTest {
     }
 
     @Test
+    fun surfaceInBothAxesWhenYIsReadAsFour() {
+        val s = Sheet()
+        // z = x + y, the reader taking the y for a 4 first: a surface in x and y, not z = x + 4.
+        s.glyph("z", 100f, 100f)
+        s.equals(122f, 112f)
+        s.glyph("x", 150f, 106f, 14f, 16f)
+        s.glyph("+", 170f, 106f, 12f, 12f)
+        s.glyph("y", 188f, 106f, 14f, 16f)
+        val answers = s.answers(mapOf("x+y" to listOf("x+4", "x+y")))
+        assertTrue(answers.toString(), answers.any { it.answer is Answer.Surface })
+    }
+
+    @Test
+    fun primeMayBeARaisedOne() {
+        val s = Sheet()
+        // 2 with a short straight upright at its top right: a prime first, then the exponent 1.
+        s.glyph("2", 100f, 100f)
+        s.add("'", listOf(120f, 120.5f, 121f), listOf(92f, 98f, 104f))
+        val reader = s.reader()
+        val readings = MathPage.readings(s.strokes, 24f, 112f, reader)
+        assertEquals(readings.toString(), Parser.parse("2'"), readings.first())
+        assertTrue(readings.toString(), Parser.parse("2^{1}") in readings)
+        ReadOptions.signAlternatives = false
+        try {
+            assertTrue(Parser.parse("2^{1}") !in MathPage.readings(s.strokes, 24f, 112f, reader))
+        } finally {
+            ReadOptions.signAlternatives = true
+        }
+    }
+
+    @Test
     fun unitsBeatDigitsForLetters() {
         // 9,8 м/с² · 3 с with units on: the reader's first guess has digits for the letters.
         val s = Sheet()

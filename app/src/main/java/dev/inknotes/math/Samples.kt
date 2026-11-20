@@ -177,14 +177,15 @@ object Voices {
     /**
      * ML Kit's readings [texts] of a run of [glyphs] (each its strokes, left to right), with
      * what the writer's samples are sure of put in: for one symbol that reading first, for a
-     * longer run a reading with it right after ML Kit's first. Unchanged when the samples are
-     * not sure or the reading does not split into as many symbols as there are glyphs.
+     * longer run a reading with it right after ML Kit's first. The reading changed is the first
+     * that splits into as many symbols as there are glyphs; unchanged when the samples are not
+     * sure or no reading does.
      */
     fun adjust(texts: List<String>, glyphs: List<List<Ink>>, samples: Samples): List<String> {
         if (texts.isEmpty() || samples.isEmpty() || glyphs.isEmpty()) return texts
         val first = texts[0]
-        val toks = Correct.tokens(first)
-        if (toks.size != glyphs.size) return texts
+        val base = texts.firstOrNull { Correct.tokens(it).size == glyphs.size } ?: return texts
+        val toks = Correct.tokens(base)
         var changed = false
         var veryNear = true
         val fixed = toks.mapIndexed { i, t ->
@@ -206,4 +207,30 @@ object Voices {
 
     /** Of [Samples.NEAR]: a sample this near is the writer's symbol beyond doubt. */
     private const val VERY_NEAR = 0.6f
+}
+
+/**
+ * A run the reader split into another number of symbols than it has glyphs (two digits run
+ * together, a letter cut in two): read glyph by glyph as well, the way the correction window
+ * reads it (`Correct.side`).
+ */
+object GlyphReading {
+    /** Longer runs are words (sin, cos) or need too many reads. */
+    const val MAX_GLYPHS = 4
+
+    /**
+     * [texts] with the readings of each glyph alone joined, as the guess right after the first,
+     * when none of the first [LOOK] guesses has as many symbols as [glyphs] and every glyph
+     * reads as one symbol ([readOne], the reader's guesses for one glyph).
+     */
+    fun extend(texts: List<String>, glyphs: List<List<Ink>>, readOne: (List<Ink>) -> List<String>): List<String> {
+        if (texts.isEmpty() || glyphs.size !in 2..MAX_GLYPHS) return texts
+        if (texts.take(LOOK).any { Correct.tokens(it).size == glyphs.size }) return texts
+        val parts = glyphs.map { g -> readOne(g).firstOrNull { Correct.tokens(it).size == 1 } ?: return texts }
+        val joined = parts.joinToString("")
+        if (joined in texts) return texts
+        return listOf(texts[0], joined) + texts.drop(1)
+    }
+
+    private const val LOOK = 3
 }

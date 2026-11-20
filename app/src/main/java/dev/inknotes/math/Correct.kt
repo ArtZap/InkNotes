@@ -332,14 +332,16 @@ class Learned(private val counts: MutableMap<String, MutableMap<String, Int>> = 
 
     /**
      * The reader's readings of a run of [symbols], with what the writer means put in: for one
-     * symbol the meant one first, for longer runs a reading with it after the first.
+     * symbol the meant one first, for longer runs a reading with it after the first. The
+     * reading changed is the first with as many symbols as the run has: when the reader ran
+     * two symbols together, a later guess (or the run read glyph by glyph) still has them.
      */
     @Synchronized
     fun adjust(texts: List<String>, symbols: Int): List<String> {
         if (counts.isEmpty() || texts.isEmpty()) return texts
         val first = texts[0]
-        val toks = Correct.tokens(first)
-        if (toks.size != symbols) return texts
+        val base = texts.firstOrNull { Correct.tokens(it).size == symbols } ?: return texts
+        val toks = Correct.tokens(base)
         val fixed = toks.map { meant(it) ?: it }
         if (fixed == toks) return texts
         val alt = fixed.joinToString("")
