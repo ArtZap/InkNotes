@@ -159,6 +159,8 @@ class GraphSpec(
     /** How a surface is turned and tilted, degrees. */
     val azimuth: Float = Plot3D.AZIMUTH,
     val elevation: Float = Plot3D.ELEVATION,
+    /** One to one: a unit on x is as long as a unit on y, the grid's cells square. */
+    val square: Boolean = false,
 ) {
     val isSurface get() = second != null
 
@@ -171,8 +173,8 @@ class GraphSpec(
         return Plot3D.of({ x, y -> Numeric.scalar(e, mapOf(variable to x, yv to y)) }, variable, yv, trig, range)?.withExpr(e, trig, titles.firstOrNull().orEmpty())
     }
 
-    fun with(x0: Double, x1: Double, y0: Double, y1: Double, points: List<Pair<Double, Double>>) =
-        GraphSpec(variable, exprs, titles, trig, x0, x1, y0, y1, points, key, second, azimuth, elevation)
+    fun with(x0: Double, x1: Double, y0: Double, y1: Double, points: List<Pair<Double, Double>>, square: Boolean = this.square) =
+        GraphSpec(variable, exprs, titles, trig, x0, x1, y0, y1, points, key, second, azimuth, elevation, square)
 
     /** The surface seen from ([azimuth], [elevation]) over half-width [range]. */
     fun turned(azimuth: Float, elevation: Float, range: Double) =
@@ -189,6 +191,7 @@ class GraphSpec(
         append("view=").append(x0).append(',').append(x1).append(',').append(y0).append(',').append(y1).append('\n')
         for ((x, y) in points) append("p=").append(x).append(',').append(y).append('\n')
         key?.let { append("key=").append(it).append('\n') }
+        if (square) append("square=1\n")
         second?.let {
             append("second=").append(it).append('\n')
             append("turn=").append(azimuth).append(',').append(elevation).append('\n')
@@ -208,9 +211,11 @@ class GraphSpec(
             var view: List<Double>? = null
             var key: String? = null
             var second: String? = null
+            var square = false
             var turn = listOf(Plot3D.AZIMUTH, Plot3D.ELEVATION)
             for ((k, value) in lines) when (k) {
                 "second" -> second = value
+                "square" -> square = value == "1"
                 "turn" -> turn = value.split(',').map { it.toFloat() }
                 "v" -> v = value
                 "trig" -> trig = value == "1"
@@ -222,7 +227,7 @@ class GraphSpec(
             }
             val w = view ?: return null
             if (exprs.isEmpty() || w.size != 4 || !(w[1] > w[0]) || !(w[3] > w[2])) return null
-            GraphSpec(v, exprs, titles, trig, w[0], w[1], w[2], w[3], points, key, second, turn[0], turn[1])
+            GraphSpec(v, exprs, titles, trig, w[0], w[1], w[2], w[3], points, key, second, turn[0], turn[1], square)
         }.getOrNull()
     }
 }

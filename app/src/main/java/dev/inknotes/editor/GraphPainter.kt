@@ -55,6 +55,8 @@ class GraphPainter(private val unit: Float) {
         colors: Colors,
         /** The writer's point picked by a finger: ringed. */
         picked: Int = -1,
+        /** One to one: the same step on both axes, so the cells are square. */
+        square: Boolean = false,
     ) {
         if (w <= 1 || h <= 1 || !(v.w > 0) || !(v.h > 0)) return
         fun px(x: Double) = ((x - v.x0) / v.w * w).toFloat()
@@ -69,7 +71,7 @@ class GraphPainter(private val unit: Float) {
         text.isFakeBoldText = false
         text.color = (colors.ink and 0x00FFFFFF) or 0xB0000000.toInt()
         val sx = GraphMath.step(v.w, (w / (70 * unit)).roundToInt().coerceIn(3, 12))
-        val sy = GraphMath.step(v.h, (h / (50 * unit)).roundToInt().coerceIn(3, 10))
+        val sy = if (square) sx else GraphMath.step(v.h, (h / (50 * unit)).roundToInt().coerceIn(3, 10))
         val axisY = py(0.0).coerceIn(0f, h - text.textSize - 2)
         val axisX = px(0.0).coerceIn(0f, w - 4 * text.textSize)
         line.pathEffect = null
@@ -230,7 +232,7 @@ class GraphPainter(private val unit: Float) {
             val marks = runCatching { GraphMath.marks(fns, spec.x0, spec.x1) }.getOrDefault(emptyList())
             GraphPainter(unit).draw(
                 Canvas(bmp), width.toFloat(), height.toFloat(), View(spec.x0, spec.x1, spec.y0, spec.y1),
-                fns, spec.titles, marks, spec.points, null, colors,
+                fns, spec.titles, marks, spec.points, null, colors, square = spec.square,
             )
             return bmp
         }
