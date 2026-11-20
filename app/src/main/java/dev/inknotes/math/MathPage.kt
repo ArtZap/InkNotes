@@ -820,11 +820,19 @@ object MathPage {
         for (cut in cuts.take(MAX_TRIMS)) {
             val part = left.filter { it.cx >= cut }
             if (part.isEmpty()) break
+            // A part that starts with a sign is the tail of the formula, not the formula after
+            // some text: "7/9 + 4/3 =" with the 7 unread would answer 4/3.
+            if (startsWithSign(part, eq, shift)) continue
             val e = read(part, eq.h, eq.cy, reader, Prefer.NUMBERS, known, shift) ?: continue
             if (best == null || score(e) < score(best)) best = e
             if (score(e) == 0) break
         }
         return best
+    }
+
+    private fun startsWithSign(part: List<Ink>, eq: Equals, shift: MathLayout.Shift): Boolean {
+        val first = runCatching { MathLayout.formula(part, eq.h, eq.cy, shift) }.getOrNull()?.firstOrNull() as? Piece.Text ?: return false
+        return first.s.trimStart().firstOrNull()?.let { it in LEADING_SIGNS } == true
     }
 
     /** The reader was sure of every run of the formula left of [eq]. */
@@ -1338,6 +1346,9 @@ object MathPage {
     private const val MAX_COMBINATIONS = 40
     private const val MAX_READINGS = 6
     private const val MAX_TRIMS = 4
+
+    /** Signs a formula does not start with: a part read from one is the tail of a formula. */
+    private const val LEADING_SIGNS = "+-−·×÷*/"
 
     // A crafted page must not keep the reader busy for long.
     private const val MAX_EQUALS = 150

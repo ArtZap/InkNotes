@@ -24,9 +24,10 @@ if [ ! -d "$DATA" ]; then
   (cd build/crohme && unzip -q full.zip && rm full.zip)
 fi
 if [ "${1:-}" = "--fetch" ]; then exit 0; fi
-CROHME_DIR="$PWD/$DATA" ./gradlew :app:testDebugUnitTest --tests 'dev.inknotes.math.FormulaBenchTest' --tests 'dev.inknotes.math.MetamorphicTest' --rerun || [ "${1:-}" = "--update" ]
-cat app/build/formula-report.txt
+CROHME_DIR="$PWD/$DATA" ./gradlew :app:testDebugUnitTest --tests 'dev.inknotes.math.FormulaBenchTest' --tests 'dev.inknotes.math.MetamorphicTest' --tests 'dev.inknotes.math.SynthBenchTest' --rerun || [ "${1:-}" = "--update" ]
+cat app/build/formula-report.txt app/build/synth-report.txt
 if [ "${1:-}" = "--update" ]; then
   cp app/build/formula-outcomes.tsv app/src/test/resources/formula-outcomes.tsv
   cp app/build/metamorphic-baseline.tsv app/src/test/resources/metamorphic-baseline.tsv
+  cp app/build/synth-outcomes.tsv app/src/test/resources/synth-outcomes.tsv
 fi

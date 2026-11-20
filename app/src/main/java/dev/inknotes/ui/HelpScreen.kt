@@ -45,6 +45,13 @@ private class Topic(val title: String, val entries: List<Pair<String, String>>)
 
 private val TOPICS = listOf(
     Topic(
+        tr("Новое в 0.65", "What's new in 0.65"),
+        listOf(
+            tr("Тонкие 1 и 0", "Thin 1 and 0") to tr("Узкая единица или ноль без пары больше не принимается за скобку: «= 13» не читается как «= (3», а «−60» — как «−6)».", "A narrow 1 or 0 with no pair is no longer taken for a bracket: \"= 13\" is not read as \"= (3\", nor \"−60\" as \"−6)\"."),
+            tr("Меньше неверных ответов", "Fewer wrong answers") to tr("Если начало формулы перед «=» не прочиталось, программа больше не считает один её хвост (из 7/9 + 4/3 = не выйдет 4/3). Вместо неверного ответа — метка «?», нажмите, чтобы исправить.", "When the start of a formula before \"=\" does not read, the app no longer computes just its tail (7/9 + 4/3 = will not give 4/3). Instead of a wrong answer there is a \"?\" mark: tap it to correct."),
+        ),
+    ),
+    Topic(
         tr("Новое в 0.64", "What's new in 0.64"),
         listOf(
             tr("Индексы", "Indices") to tr("Цифра сразу после буквы — её индекс, даже если опущена не очень низко: x1 читается как x₁, а не x·1. Если нужно умножение, пишите 2x или x·2.", "Digits right after a letter are its index even when not written very low: x1 reads as x₁, not x·1. For a product, write 2x or x·2."),

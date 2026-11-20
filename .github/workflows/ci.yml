@@ -45,6 +45,9 @@ jobs:
       - name: Release APK size
         if: always()
         run: ls -la app/build/outputs/apk/release/ app/build/outputs/mapping/release/ 2>/dev/null || true
+      # Google Play wants native libraries ready for 16 KB memory pages (Android 15+ devices).
+      - name: 16 KB pages
+        run: for apk in app/build/outputs/apk/release/*.apk; do python3 tools/check-16kb.py "$apk"; done
       - name: Lint findings
         if: failure()
         run: cat app/build/reports/lint-results-debug.txt 2>/dev/null || true

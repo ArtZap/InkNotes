@@ -962,9 +962,11 @@ object MathLayout {
                 pool += IntSign(Box.ofBoxes(listOf(ib) + (hi + lo).map { it.box }), lo, hi)
                 used += s
             }
-            // Unpaired tall brackets are ordinary brackets.
+            // Unpaired tall brackets are ordinary brackets. A round one without its pair is left to
+            // the reader: it is as likely a thin 1 or 0 ("= 13" read "= (3", "−60" read "−6)").
             for ((s, c) in shapes) {
                 if (s in used || s !in pool) continue
+                if (Tune.unpairedRead > 0f && (c == '(' || c == ')')) continue
                 pool.remove(s)
                 pool += Lit(s.box, if (c == '|') "|" else c.toString())
             }
@@ -1116,6 +1118,9 @@ object Tune {
 
     /** A long bar reaches this part of its width (0: as any bar, [fracReach]). */
     @JvmField var longBarReach = 0.25f
+
+    /** Above 0: a round bracket without its pair is read by the reader, not taken as a bracket. */
+    @JvmField var unpairedRead = 1f
     @JvmField var fracStep = 0.557f
 
     @JvmField var integralMin = 1.15f
