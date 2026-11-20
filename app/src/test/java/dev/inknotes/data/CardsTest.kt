@@ -7,46 +7,93 @@ import org.junit.Test
 
 class CardsTest {
 
+    private fun days(s: Cards.State, today: Long) = s.due - today
+
     @Test
     fun newCardIsDue() = assertTrue(Cards.isDue(null, 100))
 
     @Test
-    fun rememberedCardsComeBackLater() {
-        var s = Cards.grade(null, Cards.Grade.GOOD, 100)
-        assertEquals(Cards.State(1, 101), s)
-        assertFalse(Cards.isDue(s, 100))
-        s = Cards.grade(s, Cards.Grade.GOOD, 101)
-        assertEquals(Cards.State(2, 104), s)
-        s = Cards.grade(s, Cards.Grade.EASY, 104)
-        assertEquals(4, s.box)
-        assertEquals(104L + 14, s.due)
+    fun firstAnswerSetsTheFirstInterval() {
+        // FSRS-6 initial stabilities: Hard 1.29, Good 2.31, Easy 8.30 days.
+        assertEquals(0L, days(Cards.grade(null, Cards.Grade.AGAIN, 100), 100))
+        assertEquals(1L, days(Cards.grade(null, Cards.Grade.HARD, 100), 100))
+        assertEquals(2L, days(Cards.grade(null, Cards.Grade.GOOD, 100), 100))
+        assertEquals(8L, days(Cards.grade(null, Cards.Grade.EASY, 100), 100))
+    }
+
+    @Test
+    fun rememberedCardsComeBackLaterAndLater() {
+        var today = 100L
+        var s = Cards.grade(null, Cards.Grade.GOOD, today)
+        assertFalse(Cards.isDue(s, today))
+        var last = days(s, today)
+        repeat(6) {
+            today = s.due
+            assertTrue(Cards.isDue(s, today))
+            s = Cards.grade(s, Cards.Grade.GOOD, today)
+            val next = days(s, today)
+            assertTrue("$next after $last", next > last)
+            last = next
+        }
+        assertEquals(7, s.box)
+        // 2, 12, 50, 174, 526, 1412, 3431 days: an easy card always remembered.
+        assertTrue("years after 7 answers: $last", last in 365..36500)
     }
 
     @Test
     fun forgottenCardStartsOverToday() {
-        val s = Cards.grade(Cards.State(5, 90), Cards.Grade.AGAIN, 100)
-        assertEquals(Cards.State(0, 100), s)
-        assertTrue(Cards.isDue(s, 100))
+        val learned = Cards.grade(Cards.grade(null, Cards.Grade.GOOD, 100), Cards.Grade.GOOD, 102)
+        val s = Cards.grade(learned, Cards.Grade.AGAIN, learned.due)
+        assertEquals(0, s.box)
+        assertTrue(Cards.isDue(s, learned.due))
+        assertTrue(s.stability < learned.stability)
+        assertTrue(s.difficulty > learned.difficulty)
     }
 
     @Test
-    fun hardStepsBack() {
-        val s = Cards.grade(Cards.State(3, 100), Cards.Grade.HARD, 100)
-        assertEquals(2, s.box)
-        assertEquals(103L, s.due)
+    fun harderGradesGiveShorterIntervals() {
+        val s = Cards.grade(Cards.grade(null, Cards.Grade.GOOD, 100), Cards.Grade.GOOD, 102)
+        val today = s.due
+        val hard = days(Cards.grade(s, Cards.Grade.HARD, today), today)
+        val good = days(Cards.grade(s, Cards.Grade.GOOD, today), today)
+        val easy = days(Cards.grade(s, Cards.Grade.EASY, today), today)
+        assertTrue("$hard $good $easy", hard < good && good < easy)
+    }
+
+    @Test
+    fun reviewedLateCountsTheTimeThatPassed() {
+        val s = Cards.grade(Cards.grade(null, Cards.Grade.GOOD, 100), Cards.Grade.GOOD, 102)
+        val onTime = Cards.grade(s, Cards.Grade.GOOD, s.due)
+        val late = Cards.grade(s, Cards.Grade.GOOD, s.due + 20)
+        // Remembered after a longer gap: the memory is stronger than thought.
+        assertTrue(late.stability > onTime.stability)
+    }
+
+    @Test
+    fun statesFromBeforeFsrsKeepTheirProgress() {
+        // Box 5 was a 60-day interval: the card is not learned anew.
+        val s = Cards.grade(Cards.State(5, 1000), Cards.Grade.GOOD, 1000)
+        assertTrue(days(s, 1000) > 60)
+        assertEquals(6, s.box)
     }
 
     @Test
     fun stateRoundTrip() {
-        val states = mapOf("a:1:2:3:4" to Cards.State(2, 20000), "b:0:0:1:1" to Cards.State(0, 19999))
-        assertEquals(states, Cards.decode(Cards.encode(states)))
-        assertEquals(emptyMap<String, Cards.State>(), Cards.decode("garbage\nx\t1"))
+        val fsrs = Cards.grade(null, Cards.Grade.GOOD, 20000)
+        val states = mapOf("a:1:2:3:4" to Cards.State(2, 20000), "b:0:0:1:1" to Cards.State(0, 19999), "c:1:1:1:1" to fsrs)
+        val back = Cards.decode(Cards.encode(states))
+        assertEquals(states.keys, back.keys)
+        assertEquals(states["a:1:2:3:4"], back["a:1:2:3:4"])
+        assertEquals(fsrs.due, back.getValue("c:1:1:1:1").due)
+        assertEquals(fsrs.stability, back.getValue("c:1:1:1:1").stability, 1e-3)
+        assertEquals(fsrs.difficulty, back.getValue("c:1:1:1:1").difficulty, 1e-3)
+        assertEquals(emptyMap<String, Cards.State>(), Cards.decode("garbage\nx\t1\ny\t1\t2\tNaN\t1\t1"))
     }
 
     @Test
     fun intervalsReadable() {
-        assertEquals("через 1 дн.", Cards.interval(null, Cards.Grade.GOOD, 0))
+        assertEquals("через 2 дн.", Cards.interval(null, Cards.Grade.GOOD, 0))
         assertEquals("сегодня", Cards.interval(null, Cards.Grade.AGAIN, 0))
-        assertEquals("через 2 мес.", Cards.interval(Cards.State(5, 0), Cards.Grade.GOOD, 0))
+        assertTrue(Cards.interval(Cards.State(5, 0), Cards.Grade.GOOD, 0).endsWith("мес."))
     }
 }

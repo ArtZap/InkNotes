@@ -311,6 +311,49 @@ class EditorController(
 
     fun addToTable(row: Boolean) = view?.addToTable(row)
 
+    /**
+     * Sums and averages of the selected table, written as text beside it: under each column
+     * and to the right of each row with at least two numbers. The text is the table's colour.
+     */
+    fun tableTotals() {
+        val v = view ?: return
+        val (grid, ink, page) = v.selectedTable() ?: return
+        when (math.state) {
+            MathNotes.State.Ready -> Unit
+            MathNotes.State.Downloading -> return showStatus(tr("Скачивается распознавание, подождите немного", "Recognition is downloading, wait a little"))
+            else -> {
+                math.enable()
+                return showStatus(tr("Скачиваю распознавание (один раз) — нажмите «Итоги» ещё раз через минуту", "Downloading recognition (once) — press “Totals” again in a minute"))
+            }
+        }
+        val color = v.selectedInk().groupingBy { it.stroke.brush.colorIntArgb }.eachCount().maxByOrNull { it.value }?.key ?: penColor
+        status = tr("Читаю таблицу…", "Reading the table…")
+        math.tableSums(grid.rows, grid.cols, ink) { result ->
+            status = null
+            if (result == null || (result.rows.all { it == null } && result.cols.all { it == null })) {
+                return@tableSums showStatus(tr("Не нашлось чисел: нужно хотя бы два в строке или столбце", "No numbers found: at least two in a row or column are needed"))
+            }
+            val rowH = grid.rows.zipWithNext { a, b -> b - a }.sorted().let { it[it.size / 2] }
+            val size = (rowH * 0.32f).coerceIn(10f, 60f)
+            val pad = size * 0.4f
+            fun text(t: dev.inknotes.math.TableSums.Total): String = runCatching {
+                "Σ " + dev.inknotes.math.Printer.number(t.sum) + "\n" + tr("ср. ", "avg ") + dev.inknotes.math.Printer.number(t.mean)
+            }.getOrDefault("?")
+            val boxes = ArrayList<PageImage>()
+            for ((c, t) in result.cols.withIndex()) {
+                if (t == null) continue
+                val w = (grid.cols[c + 1] - grid.cols[c] - pad).coerceAtLeast(size * 3)
+                boxes += dev.inknotes.editor.TextBoxes.box(dev.inknotes.data.PageText(text(t), size, color), grid.cols[c] + pad / 2, grid.bottom + pad, w)
+            }
+            for ((r, t) in result.rows.withIndex()) {
+                if (t == null) continue
+                boxes += dev.inknotes.editor.TextBoxes.box(dev.inknotes.data.PageText(text(t), size, color), grid.right + pad, grid.rows[r] + pad / 2, size * 8)
+            }
+            v.insert(page, images = boxes)
+            showStatus(tr("Итоги: чисел в таблице ${result.numbers}. Отменить — кнопкой «Отменить»", "Totals: ${result.numbers} numbers in the table. Undo removes them"))
+        }
+    }
+
     fun removeFromTable(row: Boolean) {
         if (view?.removeFromTable(row) == false) showStatus(if (row) tr("В таблице одна строка", "The table has one row") else tr("В таблице один столбец", "The table has one column"))
     }
