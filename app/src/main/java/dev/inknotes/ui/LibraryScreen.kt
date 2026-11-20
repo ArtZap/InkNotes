@@ -264,7 +264,7 @@ fun LibraryScreen(
                             moreMenu = false
                             export(folders.filter { it.parent == null }.map { it.id }.toSet(), notebooks.map { it.id }.toSet(), tr("Все тетради", "All notebooks"))
                         })
-                        DropdownMenuItem(text = { Text(tr("Google Диск…", "Google Drive…")) }, onClick = {
+                        DropdownMenuItem(text = { Text(tr("Синхронизация (Google Диск, Яндекс Диск)…", "Sync (Google Drive, Yandex Disk)…")) }, onClick = {
                             moreMenu = false
                             syncOpen = true
                         })

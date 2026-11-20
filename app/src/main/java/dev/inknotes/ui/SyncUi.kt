@@ -4,6 +4,7 @@ import dev.inknotes.data.tr
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -31,20 +32,62 @@ import androidx.compose.ui.unit.sp
 import java.text.DateFormat
 import java.util.Date
 
-/** Google Drive: sign in, sync now, by itself or not, sign out. */
+/** Google Drive or a WebDAV server: sign in, sync now, by itself or not, sign out. */
 @Composable
 fun SyncDialog(cloud: CloudSync, prefs: AppPrefs, busy: () -> Set<String>, onDismiss: () -> Unit) {
     val context = LocalContext.current
     var auto by remember { mutableStateOf(prefs.driveAuto) }
     var wifi by remember { mutableStateOf(prefs.driveWifiOnly) }
+    // The WebDAV form, started from what was set before.
+    var url by remember { mutableStateOf(prefs.webdavUrl ?: dev.inknotes.data.WebDavAccount.YANDEX) }
+    var user by remember { mutableStateOf(prefs.webdavUser.orEmpty()) }
+    var pass by remember { mutableStateOf("") }
+    var folder by remember { mutableStateOf(prefs.webdavFolder) }
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = { Icon(InkIcons.Cloud, null) },
-        title = { Text(tr("Google Диск", "Google Drive")) },
+        title = { Text(if (cloud.webdav) tr("Синхронизация: WebDAV", "Sync: WebDAV") else tr("Синхронизация: Google Диск", "Sync: Google Drive")) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                // Where to: Google Drive, or Yandex Disk / Nextcloud / one's own server.
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    androidx.compose.material3.FilterChip(
+                        selected = !cloud.webdav,
+                        enabled = !cloud.running,
+                        onClick = { cloud.choose(CloudSync.GOOGLE) },
+                        label = { Text(tr("Google Диск", "Google Drive")) },
+                    )
+                    androidx.compose.material3.FilterChip(
+                        selected = cloud.webdav,
+                        enabled = !cloud.running,
+                        onClick = { cloud.choose(CloudSync.WEBDAV) },
+                        label = { Text(tr("Яндекс Диск, Nextcloud (WebDAV)", "Yandex Disk, Nextcloud (WebDAV)")) },
+                    )
+                }
                 when {
+                    cloud.webdav && !cloud.signedIn -> {
+                        Text(
+                            tr("Тетради хранятся файлами в папке на вашем сервере WebDAV — так же, как на Google Диске. ", "Notebooks are kept as files in a folder on your WebDAV server — as on Google Drive. ") +
+                                tr("Для Яндекс Диска адрес https://webdav.yandex.ru, логин — ваш логин Яндекса, пароль — пароль приложения ", "For Yandex Disk the address is https://webdav.yandex.ru, the login is your Yandex login, the password is an app password ") +
+                                tr("(id.yandex.ru → Безопасность → Пароли приложений → Файлы). Для Nextcloud — адрес из «Настройки → WebDAV» и пароль приложения.", "(id.yandex.ru → Security → App passwords → Files). For Nextcloud, the address from “Settings → WebDAV” and an app password."),
+                            fontSize = 13.sp,
+                            color = muted,
+                        )
+                        androidx.compose.material3.OutlinedTextField(url, { url = it }, singleLine = true, label = { Text(tr("Адрес сервера", "Server address")) }, modifier = Modifier.fillMaxWidth())
+                        androidx.compose.material3.OutlinedTextField(user, { user = it }, singleLine = true, label = { Text(tr("Логин", "Login")) }, modifier = Modifier.fillMaxWidth())
+                        androidx.compose.material3.OutlinedTextField(
+                            pass,
+                            { pass = it },
+                            singleLine = true,
+                            label = { Text(tr("Пароль приложения", "App password")) },
+                            visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Password),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        androidx.compose.material3.OutlinedTextField(folder, { folder = it }, singleLine = true, label = { Text(tr("Папка", "Folder")) }, modifier = Modifier.fillMaxWidth())
+                        Text(tr("Пароль хранится на планшете зашифрованным и уходит только на этот сервер.", "The password is kept encrypted on the tablet and goes only to this server."), fontSize = 12.sp, color = muted)
+                    }
                     !cloud.configured -> {
                         Text(tr("Эта сборка сделана без ключа Google.", "This build was made without a Google key."), fontWeight = FontWeight.Medium)
                         Text(
@@ -65,7 +108,13 @@ fun SyncDialog(cloud: CloudSync, prefs: AppPrefs, busy: () -> Set<String>, onDis
                         Text(tr("Вход откроется в браузере; Google-сервисы на устройстве не нужны.", "Sign-in opens in the browser; Google services are not needed on the device."), fontSize = 13.sp, color = muted)
                     }
                     else -> {
-                        Text(tr("Аккаунт: ${cloud.email ?: "Google"}", "Account: ${cloud.email ?: "Google"}"), fontWeight = FontWeight.Medium)
+                        if (cloud.webdav) {
+                            val a = cloud.webdavAccount()
+                            Text(tr("Сервер: ${a?.url.orEmpty()}", "Server: ${a?.url.orEmpty()}"), fontWeight = FontWeight.Medium)
+                            Text(tr("Логин: ${a?.user.orEmpty()}, папка: ${a?.folder.orEmpty()}", "Login: ${a?.user.orEmpty()}, folder: ${a?.folder.orEmpty()}"), fontSize = 13.sp, color = muted)
+                        } else {
+                            Text(tr("Аккаунт: ${cloud.email ?: "Google"}", "Account: ${cloud.email ?: "Google"}"), fontWeight = FontWeight.Medium)
+                        }
                         if (cloud.lastSync > 0) {
                             Text(
                                 tr("Последняя синхронизация: ", "Last sync: ") + DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(cloud.lastSync)),
@@ -122,13 +171,17 @@ fun SyncDialog(cloud: CloudSync, prefs: AppPrefs, busy: () -> Set<String>, onDis
         confirmButton = {
             when {
                 !cloud.configured -> TextButton(onClick = onDismiss) { Text(tr("Понятно", "Got it")) }
+                cloud.webdav && !cloud.signedIn -> Button(
+                    enabled = !cloud.signingIn && url.isNotBlank() && user.isNotBlank() && pass.isNotEmpty(),
+                    onClick = { cloud.connectWebDav(dev.inknotes.data.WebDavAccount(url.trim(), user.trim(), pass, folder.trim().ifEmpty { "InkNotes" })) },
+                ) { Text(tr("Подключить", "Connect")) }
                 !cloud.signedIn -> Button(enabled = !cloud.signingIn, onClick = { cloud.signIn(context) }) { Text(tr("Войти через Google", "Sign in with Google")) }
                 else -> Button(enabled = !cloud.running, onClick = { cloud.sync(busy()) }) { Text(tr("Синхронизировать", "Sync now")) }
             }
         },
         dismissButton = {
             Row {
-                if (cloud.signedIn) OutlinedButton(onClick = cloud::signOut) { Text(tr("Выйти", "Sign out")) }
+                if (cloud.signedIn) OutlinedButton(onClick = cloud::signOut) { Text(if (cloud.webdav) tr("Отключить", "Disconnect") else tr("Выйти", "Sign out")) }
                 if (cloud.configured) TextButton(onClick = onDismiss) { Text(tr("Закрыть", "Close")) }
             }
         },

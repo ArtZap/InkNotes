@@ -30,8 +30,8 @@ android {
         applicationId = "dev.inknotes"
         minSdk = 29
         targetSdk = 36
-        versionCode = 24
-        versionName = "0.45"
+        versionCode = 25
+        versionName = "0.46"
         // The device tests in a set language (dev.inknotes.InkTestRunner).
         testInstrumentationRunner = "dev.inknotes.InkTestRunner"
         buildConfigField("String", "GOOGLE_CLIENT_ID", "\"${googleProp("clientId")}\"")
@@ -130,6 +130,8 @@ dependencies {
     implementation(libs.pdfbox.android)
 
     implementation(libs.kotlinx.coroutines.android)
+    // WebDAV sync (Yandex Disk, Nextcloud): PROPFIND and MKCOL, which HttpURLConnection lacks.
+    implementation(libs.okhttp)
 
     testImplementation(libs.junit)
     // Android's org.json is only a stub in unit tests: the real one.

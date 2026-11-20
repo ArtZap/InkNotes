@@ -45,6 +45,12 @@ private class Topic(val title: String, val entries: List<Pair<String, String>>)
 
 private val TOPICS = listOf(
     Topic(
+        tr("Новое в 0.46", "What's new in 0.46"),
+        listOf(
+            tr("Яндекс Диск, Nextcloud — WebDAV", "Yandex Disk, Nextcloud — WebDAV") to tr("«Ещё → Синхронизация…» в библиотеке: вверху выберите «Яндекс Диск, Nextcloud (WebDAV)», впишите адрес сервера, логин и пароль приложения и нажмите «Подключить». Для Яндекс Диска адрес https://webdav.yandex.ru, пароль приложения создаётся на id.yandex.ru → Безопасность → Пароли приложений. Дальше всё как с Google Диском: тетради лежат файлами в папке InkNotes, изменения идут в обе стороны, изменённая в двух местах тетрадь сохраняется дважды, удалённая уходит в корзину. Пароль хранится на планшете зашифрованным.", "“More → Sync…” in the library: at the top choose “Yandex Disk, Nextcloud (WebDAV)”, enter the server address, login and app password, and press “Connect”. For Yandex Disk the address is https://webdav.yandex.ru, and an app password is made at id.yandex.ru → Security → App passwords. From then on it is as with Google Drive: notebooks are files in the InkNotes folder, changes go both ways, a notebook changed in two places is kept twice, a deleted one goes to the trash. The password is kept encrypted on the tablet."),
+        ),
+    ),
+    Topic(
         tr("Новое в 0.45", "What's new in 0.45"),
         listOf(
             tr("Как высоко вы пишете степени", "How high you write exponents") to tr("Окно «Как прочитано» запоминает и то, где стоит каждый символ: индекс, на строке или степень. Когда таких примеров накопится достаточно (от восьми, и не только одного вида), а новый символ стоит так же, как пять ваших ближайших примеров одного вида, раскладка следует вашей привычке. Например, двойка, написанная чуть выше строки, станет степенью, если вы так её поправляли.", "The “How it was read” window also keeps where each symbol stands: an index, on the line or an exponent. Once there are enough such examples (eight or more, of more than one kind) and a new symbol stands like your five nearest examples of one kind, the layout follows your habit. A 2 written a little above the line, for instance, becomes an exponent if that is how you corrected it."),

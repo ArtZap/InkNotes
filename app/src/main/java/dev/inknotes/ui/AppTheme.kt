@@ -201,6 +201,25 @@ class AppPrefs(context: Context) {
 
     private fun langMark() = if (dev.inknotes.data.Lang.english) "en" else "ru"
 
+    // ---- WebDAV (0.46): Yandex Disk, Nextcloud, one's own server
+    /** Where the library syncs: "google" or "webdav". */
+    var syncProvider: String
+        get() = prefs.getString("syncProvider", "google") ?: "google"
+        set(value) = prefs.edit().putString("syncProvider", value).apply()
+    var webdavUrl: String?
+        get() = prefs.getString("webdavUrl", null)
+        set(value) = prefs.edit().putString("webdavUrl", value).apply()
+    var webdavUser: String?
+        get() = prefs.getString("webdavUser", null)
+        set(value) = prefs.edit().putString("webdavUser", value).apply()
+    /** The app password, encrypted like the Google key. */
+    var webdavPassword: String?
+        get() = prefs.getString("webdavPassword", null)?.let(dev.inknotes.data.Secrets::open)
+        set(value) = prefs.edit().putString("webdavPassword", value?.let(dev.inknotes.data.Secrets::seal)).apply()
+    var webdavFolder: String
+        get() = prefs.getString("webdavFolder", "InkNotes") ?: "InkNotes"
+        set(value) = prefs.edit().putString("webdavFolder", value).apply()
+
     /** The quick notes notebook (lock screen, tile, widget). */
     var quickNoteId: String?
         get() = prefs.getString("quickNoteId", null)
