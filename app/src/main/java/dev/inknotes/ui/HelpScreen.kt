@@ -45,6 +45,12 @@ private class Topic(val title: String, val entries: List<Pair<String, String>>)
 
 private val TOPICS = listOf(
     Topic(
+        tr("Новое в 0.50", "What's new in 0.50"),
+        listOf(
+            tr("Шкала у числа", "A scale for a number") to tr("Напишите, например, «a = 3», а ниже формулы и графики с a. Коснитесь пальцем числа 3 — под страницей появится линейка. Тяните её или нажимайте − и +: ответы и графики, где есть a, пересчитываются сразу. Шаг — последняя написанная цифра (у 2,5 — 0,1), кнопки ×10 и ÷10 его меняют. «Готово» оставляет новое значение: поверх написанного числа будет плашка с ним. Чтобы вернуть написанное, коснитесь плашки и нажмите «Как написано».", "Write, say, “a = 3”, with formulas and graphs using a below it. Tap the 3 with a finger: a ruler appears under the page. Drag it or tap − and +: the answers and graphs with a change at once. The step is the last written digit (0.1 for 2.5); ×10 and ÷10 change it. “Done” keeps the new value: a chip with it covers the written number. To go back, tap the chip and press “As written”."),
+        ),
+    ),
+    Topic(
         tr("Новое в 0.49", "What's new in 0.49"),
         listOf(
             tr("Выровнять почерк", "Straighten handwriting") to tr("Обведите строки лассо и нажмите «Выровнять» на панели выделения. Наклонная строка становится ровной, слова встают на одну линию, слово намного мельче или крупнее остальных подтягивается к ним, промежутки между словами становятся ровнее. Сами буквы не меняются — это ваш почерк. Черты дробей, подчёркивания и рисунки остаются на месте. «Отменить» возвращает как было.", "Circle lines with the lasso and tap “Straighten” on the selection bar. A sloping line is made level, words are set on one line, a word much smaller or larger than the others is brought closer to their size, and the gaps between words become more even. The letters themselves do not change — it is your handwriting. Fraction bars, underlines and drawings stay where they are. “Undo” brings everything back."),

@@ -114,7 +114,14 @@ class MathNotes(
      * Computes the answers on page [key] from its [strokes] (immutable, safe to read on another
      * thread); [onResult] runs on the main thread unless a newer request for the page came.
      */
-    fun analyze(key: String, strokes: List<PageStroke>, pageWidth: Float, onResult: (List<PageAnswer>) -> Unit) {
+    /**
+     * A number being turned on its scale right now: its value, by the key of its strokes;
+     * taken before the saved ones ([FixStore.scales]). Set on the main thread.
+     */
+    @Volatile
+    var turning: Pair<String, Double>? = null
+
+    fun analyze(key: String, strokes: List<PageStroke>, pageWidth: Float, onKnobs: ((List<Knob>) -> Unit)? = null, onResult: (List<PageAnswer>) -> Unit) {
         if (state != State.Ready) return
         val n = (latest[key] ?: 0) + 1
         latest[key] = n
@@ -123,8 +130,15 @@ class MathNotes(
                 if (latest[key] != n) return@execute
                 // A failure must cost the answers of a page, never the app.
                 usePersonal()
-                val answers = runCatching { MathPage.analyze(toInk(strokes), reader, pageWidth, fixes.pins()) }.getOrDefault(emptyList())
-                main.post { if (latest[key] == n) onResult(answers) }
+                val knobs = ArrayList<Knob>()
+                val scaled = fixes.scales().let { saved -> turning?.let { saved + it } ?: saved }
+                val answers = runCatching { MathPage.analyze(toInk(strokes), reader, pageWidth, fixes.pins(), scaled, knobs) }.getOrDefault(emptyList())
+                main.post {
+                    if (latest[key] == n) {
+                        onKnobs?.invoke(knobs)
+                        onResult(answers)
+                    }
+                }
             }
         }
     }

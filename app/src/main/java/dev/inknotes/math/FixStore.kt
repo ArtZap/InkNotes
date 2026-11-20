@@ -16,6 +16,11 @@ class FixStore(private val dir: File?) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String>?) = size > MAX_PINS
     }
 
+    /** Numbers set on a scale ([Knob]), by the fingerprint of the strokes they replace. */
+    private val scales = object : LinkedHashMap<String, Double>(16, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Double>?) = size > MAX_PINS
+    }
+
     val learned: Learned
 
     /** The writer's own symbols (shape and what it is), a second voice beside ML Kit. */
@@ -49,6 +54,13 @@ class FixStore(private val dir: File?) {
             }
         }
         runCatching {
+            for (line in file(SCALES)!!.readLines()) {
+                val tab = line.indexOf('\t')
+                val v = line.substring(tab + 1).toDoubleOrNull()
+                if (tab > 0 && v != null && v.isFinite()) scales[line.substring(0, tab)] = v
+            }
+        }
+        runCatching {
             for (line in file(SETTINGS)!!.readLines()) {
                 val (k, v) = line.split('=', limit = 2).takeIf { it.size == 2 } ?: continue
                 when (k) {
@@ -64,6 +76,17 @@ class FixStore(private val dir: File?) {
     /** The pinned texts, a copy safe to read on another thread. */
     @Synchronized
     fun pins(): Map<String, String> = HashMap(pins)
+
+    /** The numbers set on scales, a copy. */
+    @Synchronized
+    fun scales(): Map<String, Double> = HashMap(scales)
+
+    /** The number written as the strokes of [key] is taken as [value]; null: as written again. */
+    @Synchronized
+    fun scale(key: String, value: Double?) {
+        if (value == null) scales.remove(key) else scales[key] = value
+        runCatching { file(SCALES)?.writeText(scales.entries.joinToString("") { (k, v) -> k + "\t" + v + "\n" }) }
+    }
 
     @Synchronized
     fun pin(fingerprint: String, text: String) {
@@ -115,6 +138,7 @@ class FixStore(private val dir: File?) {
         const val SAMPLES = "formula-samples.tsv"
         const val PLACES = "formula-places.tsv"
         const val SETTINGS = "formula-settings.txt"
+        const val SCALES = "formula-scales.tsv"
         const val MAX_PINS = 5000
     }
 }
