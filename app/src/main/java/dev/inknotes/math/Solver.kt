@@ -1,5 +1,6 @@
 package dev.inknotes.math
 
+import dev.inknotes.data.tr
 import kotlin.math.abs
 import kotlin.math.asinh
 import kotlin.math.max
@@ -17,7 +18,7 @@ object Solver {
     }
 
     fun solve(residuals: List<Expr>, unknowns: List<String>): Result {
-        if (unknowns.isEmpty()) throw MathError("нет неизвестных")
+        if (unknowns.isEmpty()) throw MathError(tr("нет неизвестных", "no unknowns"))
         val f = { x: DoubleArray ->
             val vars = HashMap<String, Double>()
             unknowns.forEachIndexed { i, n -> vars[n] = x[i] }

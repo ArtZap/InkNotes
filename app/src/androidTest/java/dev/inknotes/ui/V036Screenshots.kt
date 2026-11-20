@@ -1,5 +1,6 @@
 package dev.inknotes.ui
 
+import dev.inknotes.data.tr
 import android.content.Intent
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -41,15 +42,15 @@ class V036Screenshots {
     }
 
     private fun menu(title: String, index: Int = 0) {
-        device.findObjects(By.desc("Ещё")).getOrNull(index)?.click()
-        device.wait(Until.hasObject(By.text("Настроить панели…")), 5_000)
+        device.findObjects(By.desc(tr("Ещё", "More"))).getOrNull(index)?.click()
+        device.wait(Until.hasObject(By.text(tr("Настроить панели…", "Customise bars…"))), 5_000)
         device.findObject(By.scrollable(true))?.let { list -> repeat(4) { list.scroll(Direction.UP, 1f) } }
         repeat(16) {
             if (device.hasObject(By.text(title))) return@repeat
             device.findObject(By.scrollable(true))?.scroll(Direction.DOWN, 0.4f)
         }
         click(title)
-        device.wait(Until.gone(By.text("Настроить панели…")), 5_000)
+        device.wait(Until.gone(By.text(tr("Настроить панели…", "Customise bars…"))), 5_000)
         Thread.sleep(1000)
     }
 
@@ -64,18 +65,19 @@ class V036Screenshots {
     @Test
     fun sideBySideAndQuickNote() {
         ctx.getSharedPreferences("app", 0).edit().putBoolean("toolbarIntroShown", true).remove("toolbarLayout").remove("openTabs").commit()
+        Language.init(ctx)
         val repo = NotebookRepository(ctx.filesDir)
         if (repo.list().none { it.title == "Скриншоты 0.36" }) repo.create("Скриншоты 0.36", PaperKind.GRID)
         if (repo.list().none { it.title == "Конспект рядом" }) repo.create("Конспект рядом", PaperKind.LINED)
         device.setOrientationLandscape()
         ctx.startActivity(ctx.packageManager.getLaunchIntentForPackage(ctx.packageName)!!.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_NEW_TASK))
         click("Скриншоты 0.36", 60_000)
-        device.wait(Until.hasObject(By.desc(Pattern.compile("Добавить страницу.*"))), 15_000)
+        device.wait(Until.hasObject(By.desc(Pattern.compile(tr("Добавить страницу", "Add (a )?page") + ".*"))), 15_000)
         Thread.sleep(1500)
         val w = device.displayWidth
         val h = device.displayHeight
 
-        menu("Открыть рядом…")
+        menu(tr("Открыть рядом…", "Open side by side…"))
         shot("51-side-picker")
         click("Конспект рядом")
         Thread.sleep(2000)
@@ -83,7 +85,7 @@ class V036Screenshots {
         // The line between them dragged to the right.
         shell("input swipe ${w / 2} ${(h * 0.7).toInt()} ${(w * 0.65).toInt()} ${(h * 0.7).toInt()} 600", 1200)
         shot("53-side-resized")
-        menu("Поменять местами", index = 1)
+        menu(tr("Поменять местами", "Swap"), index = 1)
         shot("54-side-swapped")
         // Writing in each pane, after they changed places.
         shell("input stylus swipe ${(w * 0.15).toInt()} ${(h * 0.5).toInt()} ${(w * 0.4).toInt()} ${(h * 0.55).toInt()} 400", 1500)

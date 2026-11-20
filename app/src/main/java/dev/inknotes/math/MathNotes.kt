@@ -1,5 +1,6 @@
 package dev.inknotes.math
 
+import dev.inknotes.data.tr
 import android.os.Handler
 import android.os.Looper
 import androidx.compose.runtime.getValue
@@ -82,7 +83,7 @@ class MathNotes(private val enabledPref: () -> Boolean, private val setEnabledPr
             }
         }
         val failed = {
-            if (mine == attempt && state == State.Downloading) state = State.Failed("Не удалось загрузить модель распознавания формул. Нужен интернет.")
+            if (mine == attempt && state == State.Downloading) state = State.Failed(tr("Не удалось загрузить модель распознавания формул. Нужен интернет.", "Could not download the formula recognition model. An internet connection is needed."))
         }
         timeout = Runnable { failed() }.also { main.postDelayed(it, DOWNLOAD_TIMEOUT_MS) }
         // A repeated download request of a present model may never complete; ask first.

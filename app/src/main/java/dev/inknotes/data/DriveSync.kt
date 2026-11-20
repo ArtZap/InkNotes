@@ -39,15 +39,15 @@ class DriveSync(
         val nothing get() = uploaded + downloaded + conflicts + trashedHere + trashedThere == 0
 
         override fun toString() = buildList {
-            if (folderLost) add("папки InkNotes на Диске больше нет — тетради отправлены в новую")
-            if (uploaded > 0) add("отправлено $uploaded")
-            if (downloaded > 0) add("получено $downloaded")
-            if (conflicts > 0) add("изменены в двух местах $conflicts (сохранены обе версии)")
-            if (trashedHere > 0) add("в корзину здесь $trashedHere")
-            if (trashedThere > 0) add("в корзину на Диске $trashedThere")
-            if (held.isNotEmpty()) add("пропало сразу ${held.size} тетрадей — ничего не удалено, решите ниже")
-            if (unread > 0) add("не удалось прочитать файлов с Диска: $unread")
-        }.joinToString(", ").ifEmpty { "всё уже совпадает" }
+            if (folderLost) add(tr("папки InkNotes на Диске больше нет — тетради отправлены в новую", "the InkNotes folder is gone from the Drive — notebooks were sent to a new one"))
+            if (uploaded > 0) add(tr("отправлено $uploaded", "sent $uploaded"))
+            if (downloaded > 0) add(tr("получено $downloaded", "received $downloaded"))
+            if (conflicts > 0) add(tr("изменены в двух местах $conflicts (сохранены обе версии)", "changed in two places $conflicts (both versions kept)"))
+            if (trashedHere > 0) add(tr("в корзину здесь $trashedHere", "to the trash here $trashedHere"))
+            if (trashedThere > 0) add(tr("в корзину на Диске $trashedThere", "to the trash on the Drive $trashedThere"))
+            if (held.isNotEmpty()) add(tr("пропало сразу ${held.size} тетрадей — ничего не удалено, решите ниже", "${held.size} notebooks vanished at once — nothing was deleted, decide below"))
+            if (unread > 0) add(tr("не удалось прочитать файлов с Диска: $unread", "files on the Drive that could not be read: $unread"))
+        }.joinToString(", ").ifEmpty { tr("всё уже совпадает", "everything is already in sync") }
     }
 
     /** What is remembered between syncs: the folder used, and both sides of every notebook. */
@@ -191,7 +191,7 @@ class DriveSync(
         val tmp = File(cacheDir, "sync-up-${nb.id}.inknote")
         try {
             val ok = suspendCancellableCoroutine { c -> repo.exportArchiveAsync(nb, { tmp.outputStream() }) { c.resume(it) } }
-            if (!ok) throw DriveError("Не удалось упаковать «${nb.title}»")
+            if (!ok) throw DriveError(tr("Не удалось упаковать «${nb.title}»", "Could not pack “${nb.title}”"))
             val name = nb.title.replace(Regex("[\\\\/:*?\"<>|]"), "_").take(80) + ".inknote"
             val f = api.upload(folder, fileId, name, mapOf(PROP_ID to nb.id, PROP_TIME to nb.updatedAt.toString()), tmp)
             return SyncPlan.Synced(f.id, nb.updatedAt, f.version)

@@ -2,10 +2,10 @@ package dev.inknotes.data
 
 /** Where a button of the editor is: the tool bar, the bar above it, the "⋮" menu, or nowhere. */
 enum class Zone(val title: String) {
-    TOOLS("Панель инструментов"),
-    TOP("Верхняя панель"),
-    MENU("Меню ⋮"),
-    HIDDEN("Скрыто"),
+    TOOLS(tr("Панель инструментов", "Tool bar")),
+    TOP(tr("Верхняя панель", "Top bar")),
+    MENU(tr("Меню ⋮", "Menu ⋮")),
+    HIDDEN(tr("Скрыто", "Hidden")),
 }
 
 /**
@@ -129,8 +129,8 @@ object Toolbars {
 
     enum class Preset(val title: String, val note: String, val layout: ToolbarLayout) {
         MINIMUM(
-            "Минимум",
-            "Ручка, маркер, ластик, лассо и страницы; остальное — в «Все функции…»",
+            tr("Минимум", "Minimal"),
+            tr("Ручка, маркер, ластик, лассо и страницы; остальное — в «Все функции…»", "Pen, highlighter, eraser, lasso and pages; the rest is in “All functions…”"),
             ToolbarLayout(
                 tools = listOf("pen", "highlighter", "eraser", "lasso"),
                 top = listOf("undo", "redo", "pages", "page-nav", "add-page"),
@@ -138,8 +138,8 @@ object Toolbars {
             ),
         ),
         NOTES(
-            "Конспекты",
-            "Лекции: маркер подсказок и карточки, звук, оглавление, поиск",
+            tr("Конспекты", "Lecture notes"),
+            tr("Лекции: маркер подсказок и карточки, звук, оглавление, поиск", "Lectures: hint highlighter and cards, sound, contents, search"),
             ToolbarLayout(
                 tools = listOf("pen", "highlighter", "spoiler", "eraser", "lasso"),
                 top = listOf("picture", "record", "zoom-window", "undo", "redo", "pages", "search", "page-nav", "add-page"),
@@ -150,8 +150,8 @@ object Toolbars {
             ),
         ),
         MATH(
-            "Математика и физика",
-            "Ответы после «=», линейка, штампы, таблицы, единицы измерения",
+            tr("Математика и физика", "Maths and physics"),
+            tr("Ответы после «=», линейка, штампы, таблицы, единицы измерения", "Answers after “=”, ruler, stamps, tables, units"),
             ToolbarLayout(
                 tools = listOf("pen", "highlighter", "eraser", "lasso", "area"),
                 top = listOf("math", "formula", "ruler", "protractor", "compass", "stamps", "table", "picture", "undo", "redo", "pages", "page-nav", "add-page"),
@@ -161,6 +161,6 @@ object Toolbars {
                 ),
             ),
         ),
-        FULL("Всё", "Все инструменты на виду, как раньше", Toolbars.FULL),
+        FULL(tr("Всё", "Everything"), tr("Все инструменты на виду, как раньше", "All tools in view, as before"), Toolbars.FULL),
     }
 }

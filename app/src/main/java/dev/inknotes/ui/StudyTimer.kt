@@ -1,5 +1,6 @@
 package dev.inknotes.ui
 
+import dev.inknotes.data.tr
 import android.content.Context
 import android.media.AudioManager
 import android.media.ToneGenerator
@@ -37,7 +38,7 @@ import androidx.compose.ui.unit.sp
  * the whole app, whatever notebook is open; at the end of each part it beeps and buzzes.
  */
 object StudyTimer {
-    enum class Phase(val title: String) { FOCUS("Учёба"), BREAK("Перерыв") }
+    enum class Phase(val title: String) { FOCUS(tr("Учёба", "Study")), BREAK(tr("Перерыв", "Break")) }
 
     var phase by mutableStateOf<Phase?>(null)
         private set
@@ -81,7 +82,7 @@ object StudyTimer {
         breakMinutes = rest
         round = 1
         begin(Phase.FOCUS, focus * 60)
-        say("Учёба: $focus мин")
+        say(tr("Учёба: $focus мин", "Study: $focus min"))
     }
 
     private fun begin(p: Phase, seconds: Int) {
@@ -101,11 +102,11 @@ object StudyTimer {
             val long = round % 4 == 0
             val minutes = if (long) breakMinutes * 3 else breakMinutes
             begin(Phase.BREAK, minutes * 60)
-            say(if (long) "Длинный перерыв: $minutes мин" else "Перерыв: $minutes мин")
+            say(if (long) tr("Длинный перерыв: $minutes мин", "Long break: $minutes min") else tr("Перерыв: $minutes мин", "Break: $minutes min"))
         } else {
             round++
             begin(Phase.FOCUS, focusMinutes * 60)
-            say("Снова учёба, круг $round")
+            say(tr("Снова учёба, круг $round", "Back to study, round $round"))
         }
     }
 
@@ -184,18 +185,18 @@ fun StudyTimerDialog(onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = { Icon(InkIcons.Timer, null) },
-        title = { Text(if (p == null) "Таймер учёбы" else "${p.title}, круг ${StudyTimer.round}") },
+        title = { Text(if (p == null) tr("Таймер учёбы", "Study timer") else tr("${p.title}, круг ${StudyTimer.round}", "${p.title}, round ${StudyTimer.round}")) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (p == null) {
-                    Text("Учитесь без отвлечений, потом короткий перерыв; каждый четвёртый перерыв длиннее. В конце каждой части — сигнал.", fontSize = 13.sp)
+                    Text(tr("Учитесь без отвлечений, потом короткий перерыв; каждый четвёртый перерыв длиннее. В конце каждой части — сигнал.", "Study without distractions, then take a short break; every fourth break is longer. Each part ends with a signal."), fontSize = 13.sp)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         for ((f, r) in listOf(25 to 5, 50 to 10, 90 to 15)) {
                             FilledTonalButton(onClick = { focus = f; rest = r }) { Text("$f / $r") }
                         }
                     }
-                    Stepper("Учёба, мин", focus, 5..180) { focus = it }
-                    Stepper("Перерыв, мин", rest, 1..60) { rest = it }
+                    Stepper(tr("Учёба, мин", "Study, min"), focus, 5..180) { focus = it }
+                    Stepper(tr("Перерыв, мин", "Break, min"), rest, 1..60) { rest = it }
                 } else {
                     Text(
                         StudyTimer.format(StudyTimer.left),
@@ -205,8 +206,8 @@ fun StudyTimerDialog(onDismiss: () -> Unit) {
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                     )
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally)) {
-                        if (StudyTimer.paused) Button(onClick = StudyTimer::resume) { Text("Продолжить") } else OutlinedButton(onClick = StudyTimer::pause) { Text("Пауза") }
-                        OutlinedButton(onClick = StudyTimer::skip) { Text(if (p == StudyTimer.Phase.FOCUS) "К перерыву" else "К учёбе") }
+                        if (StudyTimer.paused) Button(onClick = StudyTimer::resume) { Text(tr("Продолжить", "Continue")) } else OutlinedButton(onClick = StudyTimer::pause) { Text(tr("Пауза", "Pause")) }
+                        OutlinedButton(onClick = StudyTimer::skip) { Text(if (p == StudyTimer.Phase.FOCUS) tr("К перерыву", "To break") else tr("К учёбе", "To study")) }
                     }
                 }
             }
@@ -216,19 +217,19 @@ fun StudyTimerDialog(onDismiss: () -> Unit) {
                 Button(onClick = {
                     StudyTimer.start(context, focus, rest)
                     onDismiss()
-                }) { Text("Начать") }
+                }) { Text(tr("Начать", "Start")) }
             } else {
-                TextButton(onClick = onDismiss) { Text("Готово") }
+                TextButton(onClick = onDismiss) { Text(tr("Готово", "Done")) }
             }
         },
         dismissButton = {
             if (p == null) {
-                TextButton(onClick = onDismiss) { Text("Отмена") }
+                TextButton(onClick = onDismiss) { Text(tr("Отмена", "Cancel")) }
             } else {
                 TextButton(onClick = {
                     StudyTimer.stop()
                     onDismiss()
-                }) { Text("Остановить", color = MaterialTheme.colorScheme.error) }
+                }) { Text(tr("Остановить", "Stop"), color = MaterialTheme.colorScheme.error) }
             }
         },
     )

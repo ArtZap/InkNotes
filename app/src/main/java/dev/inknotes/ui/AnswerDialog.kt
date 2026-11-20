@@ -1,5 +1,6 @@
 package dev.inknotes.ui
 
+import dev.inknotes.data.tr
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -43,16 +44,16 @@ fun AnswerDialog(c: EditorController, a: PageAnswer, onDismiss: () -> Unit) {
     val text = when (val ans = a.answer) {
         is Answer.Text -> ans.lines.joinToString("\n")
         is Answer.Grid -> ans.rows.joinToString("\n") { it.joinToString("   ") }
-        is Answer.Graph -> "График: ${ans.variable} от ${Printer.number(ans.x0.toDouble())} до ${Printer.number(ans.x1.toDouble())}, " +
-            "y от ${Printer.number(ans.y0.toDouble())} до ${Printer.number(ans.y1.toDouble())}"
-        is Answer.Surface -> "Поверхность z(${ans.xv}, ${ans.yv}): ${ans.xv}, ${ans.yv} от ${Printer.number(ans.x0.toDouble())} до ${Printer.number(ans.x1.toDouble())}, " +
-            "z от ${Printer.number(ans.z0.toDouble())} до ${Printer.number(ans.z1.toDouble())}"
+        is Answer.Graph -> tr("График: ${ans.variable} от ${Printer.number(ans.x0.toDouble())} до ${Printer.number(ans.x1.toDouble())}, ", "Graph: ${ans.variable} from ${Printer.number(ans.x0.toDouble())} to ${Printer.number(ans.x1.toDouble())}, ") +
+            tr("y от ${Printer.number(ans.y0.toDouble())} до ${Printer.number(ans.y1.toDouble())}", "y from ${Printer.number(ans.y0.toDouble())} to ${Printer.number(ans.y1.toDouble())}")
+        is Answer.Surface -> tr("Поверхность z(${ans.xv}, ${ans.yv}): ${ans.xv}, ${ans.yv} от ${Printer.number(ans.x0.toDouble())} до ${Printer.number(ans.x1.toDouble())}, ", "Surface z(${ans.xv}, ${ans.yv}): ${ans.xv}, ${ans.yv} from ${Printer.number(ans.x0.toDouble())} to ${Printer.number(ans.x1.toDouble())}, ") +
+            tr("z от ${Printer.number(ans.z0.toDouble())} до ${Printer.number(ans.z1.toDouble())}", "z from ${Printer.number(ans.z0.toDouble())} to ${Printer.number(ans.z1.toDouble())}")
     }
     var reporting by remember { mutableStateOf(false) }
     var expected by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (a.error) "Не получилось" else "Ответ") },
+        title = { Text(if (a.error) tr("Не получилось", "Did not work") else tr("Ответ", "Answer")) },
         text = {
             Column(Modifier.heightIn(max = 460.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 (a.answer as? Answer.Surface)?.let { SurfaceView(it) }
@@ -61,11 +62,11 @@ fun AnswerDialog(c: EditorController, a: PageAnswer, onDismiss: () -> Unit) {
                         expected,
                         { expected = it },
                         singleLine = true,
-                        label = { Text("Каким должен быть ответ") },
+                        label = { Text(tr("Каким должен быть ответ", "What the answer should be")) },
                         modifier = Modifier.fillMaxWidth(),
                     )
                     Text(
-                        "Страница сохранится как пример для проверки распознавания: штрихи, прочтения и верный ответ. Файл можно отправить разработчику.",
+                        tr("Страница сохранится как пример для проверки распознавания: штрихи, прочтения и верный ответ. Файл можно отправить разработчику.", "The page is saved as an example for testing recognition: strokes, readings and the right answer. The file can be sent to the developer."),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -75,44 +76,44 @@ fun AnswerDialog(c: EditorController, a: PageAnswer, onDismiss: () -> Unit) {
                                 .setType("application/json")
                                 .putExtra(android.content.Intent.EXTRA_STREAM, uri)
                                 .addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                            context.startActivity(android.content.Intent.createChooser(send, "Отправить пример"))
+                            context.startActivity(android.content.Intent.createChooser(send, tr("Отправить пример", "Send example")))
                         }
                         onDismiss()
-                    }) { Text("Сохранить пример") }
+                    }) { Text(tr("Сохранить пример", "Save example")) }
                 }
                 Text(text, style = MaterialTheme.typography.titleMedium)
                 val steps = a.steps
                 if (!steps.isNullOrEmpty()) {
                     HorizontalDivider()
-                    Text("Решение", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                    Text(tr("Решение", "Solution"), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                     steps.forEachIndexed { i, s -> Text("${i + 1}. $s") }
                 } else if (a.answer !is Answer.Graph && a.answer !is Answer.Surface && !a.error) {
                     Text(
-                        "Ход решения показывается для линейных и квадратных уравнений и линейных систем; " +
-                            "остальное считается численно.",
+                        tr("Ход решения показывается для линейных и квадратных уравнений и линейных систем; ", "Steps are shown for linear and quadratic equations and linear systems; ") +
+                            tr("остальное считается численно.", "everything else is computed numerically."),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
             }
         },
-        confirmButton = { Button(onClick = onDismiss) { Text("Закрыть") } },
+        confirmButton = { Button(onClick = onDismiss) { Text(tr("Закрыть", "Close")) } },
         dismissButton = {
             Column {
                 if (!reporting && a.answer !is Answer.Graph && a.answer !is Answer.Surface) {
-                    TextButton(onClick = { reporting = true }) { Text("Неверно…") }
+                    TextButton(onClick = { reporting = true }) { Text(tr("Неверно…", "Wrong…")) }
                 }
                 TextButton(onClick = {
                     val clip = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                    clip.setPrimaryClip(ClipData.newPlainText("Ответ", (listOf(text) + a.steps.orEmpty()).joinToString("\n")))
-                    c.showStatus("Ответ скопирован")
+                    clip.setPrimaryClip(ClipData.newPlainText(tr("Ответ", "Answer"), (listOf(text) + a.steps.orEmpty()).joinToString("\n")))
+                    c.showStatus(tr("Ответ скопирован", "Answer copied"))
                     onDismiss()
-                }) { Text("Копировать") }
+                }) { Text(tr("Копировать", "Copy")) }
                 if (a.answer !is Answer.Graph && a.answer !is Answer.Surface) {
                     TextButton(onClick = {
                         c.toggleFractionAnswers()
                         onDismiss()
-                    }) { Text(if (c.fractionAnswers) "Показывать десятичными" else "Показывать дробями") }
+                    }) { Text(if (c.fractionAnswers) tr("Показывать десятичными", "Show as decimals") else tr("Показывать дробями", "Show as fractions")) }
                 }
             }
         },
@@ -126,27 +127,27 @@ fun RecognizedTextDialog(initial: String, c: EditorController, onDismiss: () -> 
     var text by remember(initial) { mutableStateOf(initial) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Распознанный текст") },
+        title = { Text(tr("Распознанный текст", "Recognised text")) },
         text = {
             OutlinedTextField(
                 value = text,
                 onValueChange = { text = it },
                 modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp, max = 400.dp),
-                placeholder = { Text("Ничего не распознано") },
+                placeholder = { Text(tr("Ничего не распознано", "Nothing recognised")) },
             )
         },
         confirmButton = {
             Button(enabled = text.isNotBlank(), onClick = {
                 val clip = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                clip.setPrimaryClip(ClipData.newPlainText("Текст", text))
-                c.showStatus("Текст скопирован")
+                clip.setPrimaryClip(ClipData.newPlainText(tr("Текст", "Text"), text))
+                c.showStatus(tr("Текст скопирован", "Text copied"))
                 onDismiss()
-            }) { Text("Копировать") }
+            }) { Text(tr("Копировать", "Copy")) }
         },
         dismissButton = {
             Row {
-                TextButton(onClick = onDismiss) { Text("Закрыть") }
-                TextButton(enabled = text.isNotBlank() && c.selectionCount > 0, onClick = { c.replaceSelectionWithText(text) }) { Text("Заменить почерк текстом") }
+                TextButton(onClick = onDismiss) { Text(tr("Закрыть", "Close")) }
+                TextButton(enabled = text.isNotBlank() && c.selectionCount > 0, onClick = { c.replaceSelectionWithText(text) }) { Text(tr("Заменить почерк текстом", "Replace handwriting with text")) }
             }
         },
     )
@@ -173,5 +174,5 @@ private fun SurfaceView(s: Answer.Surface) {
             dev.inknotes.editor.SurfaceArt.draw(canvas.nativeCanvas, s, size.width, color, dark, azimuth, elevation)
         }
     }
-    Text("Поверните пальцем", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Text(tr("Поверните пальцем", "Turn with a finger"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }

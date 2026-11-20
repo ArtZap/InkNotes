@@ -16,10 +16,10 @@ object Cards {
     val INTERVALS = intArrayOf(1, 3, 7, 14, 30, 60, 120, 240)
 
     enum class Grade(val title: String) {
-        AGAIN("Не помню"),
-        HARD("Трудно"),
-        GOOD("Помню"),
-        EASY("Легко"),
+        AGAIN(tr("Не помню", "Forgot")),
+        HARD(tr("Трудно", "Hard")),
+        GOOD(tr("Помню", "Good")),
+        EASY(tr("Легко", "Easy")),
     }
 
     /** Review state: [box] answers remembered in a row, due on [due] (days since 1970). */
@@ -46,9 +46,9 @@ object Cards {
     fun interval(state: State?, grade: Grade, today: Long): String {
         val days = grade(state, grade, today).due - today
         return when {
-            days <= 0 -> "сегодня"
-            days < 30 -> "через $days дн."
-            else -> "через ${(days + 15) / 30} мес."
+            days <= 0 -> tr("сегодня", "today")
+            days < 30 -> tr("через $days дн.", "in $days d")
+            else -> tr("через ${(days + 15) / 30} мес.", "in ${(days + 15) / 30} mo")
         }
     }
 

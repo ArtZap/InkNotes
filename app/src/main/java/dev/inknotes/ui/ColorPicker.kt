@@ -1,5 +1,6 @@
 package dev.inknotes.ui
 
+import dev.inknotes.data.tr
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
@@ -75,10 +76,10 @@ fun ColorPickerDialog(initial: Int, onPick: (Int) -> Unit, onDismiss: () -> Unit
         // Narrower and scrolling on small screens, so «Выбрать» is always reachable.
         Surface(shape = RoundedCornerShape(20.dp), tonalElevation = 6.dp, modifier = Modifier.widthIn(max = 560.dp).fillMaxWidth(0.94f)) {
             Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                Text("Цвет", style = MaterialTheme.typography.titleLarge)
+                Text(tr("Цвет", "Colour"), style = MaterialTheme.typography.titleLarge)
                 PrimaryTabRow(selectedTabIndex = tab) {
-                    Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("Спектр") })
-                    Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("Палитра") })
+                    Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text(tr("Спектр", "Spectrum")) })
+                    Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text(tr("Палитра", "Palette")) })
                 }
                 if (tab == 0) {
                     SaturationValueSquare(hue, sat, value) { s, v ->
@@ -104,9 +105,9 @@ fun ColorPickerDialog(initial: Int, onPick: (Int) -> Unit, onDismiss: () -> Unit
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Spacer(Modifier.weight(1f))
-                    TextButton(onClick = onDismiss) { Text("Отмена") }
+                    TextButton(onClick = onDismiss) { Text(tr("Отмена", "Cancel")) }
                     Spacer(Modifier.width(8.dp))
-                    Button(onClick = { onPick(color.toArgb()) }) { Text("Выбрать") }
+                    Button(onClick = { onPick(color.toArgb()) }) { Text(tr("Выбрать", "Choose")) }
                 }
             }
         }

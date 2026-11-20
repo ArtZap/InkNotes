@@ -18,13 +18,15 @@ object AppServices {
 
     fun get(context: Context): Services = instance ?: run {
         val app = context.applicationContext
+        // Before any text is made: the interface language of this run.
+        Language.init(app)
         InkTextures.store = androidx.ink.brush.StockTextureBitmapStore(app.resources)
         val repo = NotebookRepository(app.filesDir)
         val prefs = AppPrefs(app)
         Services(
             repo,
             prefs,
-            HandwritingIndex(repo, { prefs.handwritingEnabled }, { prefs.handwritingEnabled = it }),
+            HandwritingIndex(repo, { prefs.handwritingEnabled }, { prefs.handwritingEnabled = it }, Language.handwritingEnglish(app)),
             MathNotes({ prefs.mathEnabled }, { prefs.mathEnabled = it }),
             Backup(app, repo, prefs),
             CoverPreviews(repo),

@@ -1,5 +1,6 @@
 package dev.inknotes.ui
 
+import dev.inknotes.data.tr
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -46,15 +47,15 @@ fun TrashDialog(repo: NotebookRepository, onRestored: (Notebook) -> Unit, onDism
     val dayMs = 24L * 3600 * 1000
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (confirmEmpty) "Очистить корзину?" else "Корзина") },
+        title = { Text(if (confirmEmpty) tr("Очистить корзину?", "Empty the trash?") else tr("Корзина", "Trash")) },
         text = {
             when {
-                loaded == null -> Text("Открываю корзину…")
-                confirmEmpty -> Text("Тетради в корзине (${items.size}) будут удалены без возможности восстановления.")
-                items.isEmpty() -> Text("Корзина пуста. Удалённые тетради хранятся здесь ${repo.trashDays} дней.")
+                loaded == null -> Text(tr("Открываю корзину…", "Opening the trash…"))
+                confirmEmpty -> Text(tr("Тетради в корзине (${items.size}) будут удалены без возможности восстановления.", "The notebooks in the trash (${items.size}) will be deleted for good."))
+                items.isEmpty() -> Text(tr("Корзина пуста. Удалённые тетради хранятся здесь ${repo.trashDays} дней.", "The trash is empty. Deleted notebooks are kept here for ${repo.trashDays} days."))
                 else -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        "Через ${repo.trashDays} дней после удаления тетрадь удаляется насовсем.",
+                        tr("Через ${repo.trashDays} дней после удаления тетрадь удаляется насовсем.", "${repo.trashDays} days after deletion a notebook is deleted for good."),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     LazyColumn(Modifier.heightIn(max = 420.dp)) {
@@ -64,7 +65,7 @@ fun TrashDialog(repo: NotebookRepository, onRestored: (Notebook) -> Unit, onDism
                                 Column(Modifier.weight(1f)) {
                                     Text(t.notebook.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                     Text(
-                                        "${t.notebook.pageIds.size} стр. · удалена ${date.format(Date(t.deletedAt))} · осталось дней: $left",
+                                        tr("${t.notebook.pageIds.size} стр. · удалена ${date.format(Date(t.deletedAt))} · осталось дней: $left", "${t.notebook.pageIds.size} p. · deleted ${date.format(Date(t.deletedAt))} · days left: $left"),
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
@@ -74,11 +75,11 @@ fun TrashDialog(repo: NotebookRepository, onRestored: (Notebook) -> Unit, onDism
                                         repo.io { restore(t.notebook) }?.let(onRestored)
                                         loaded = repo.io { trash() }
                                     }
-                                }) { Text("Восстановить") }
+                                }) { Text(tr("Восстановить", "Restore")) }
                                 TextButton(onClick = {
                                     repo.purge(t.notebook)
                                     loaded = items - t
-                                }) { Text("Удалить", color = MaterialTheme.colorScheme.error) }
+                                }) { Text(tr("Удалить", "Delete"), color = MaterialTheme.colorScheme.error) }
                             }
                         }
                     }
@@ -91,16 +92,16 @@ fun TrashDialog(repo: NotebookRepository, onRestored: (Notebook) -> Unit, onDism
                     repo.emptyTrash()
                     loaded = emptyList()
                     confirmEmpty = false
-                }) { Text("Очистить") }
+                }) { Text(tr("Очистить", "Empty")) }
             } else {
-                Button(onClick = onDismiss) { Text("Готово") }
+                Button(onClick = onDismiss) { Text(tr("Готово", "Done")) }
             }
         },
         dismissButton = {
             if (confirmEmpty) {
-                TextButton(onClick = { confirmEmpty = false }) { Text("Отмена") }
+                TextButton(onClick = { confirmEmpty = false }) { Text(tr("Отмена", "Cancel")) }
             } else if (items.isNotEmpty()) {
-                TextButton(onClick = { confirmEmpty = true }) { Text("Очистить корзину…", color = MaterialTheme.colorScheme.error) }
+                TextButton(onClick = { confirmEmpty = true }) { Text(tr("Очистить корзину…", "Empty the trash…"), color = MaterialTheme.colorScheme.error) }
             }
         },
     )
@@ -116,7 +117,7 @@ fun BackupDialog(backup: Backup, prefs: AppPrefs, onDismiss: () -> Unit) {
     val date = remember { DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT) }
     val report = { r: Backup.Result ->
         status = when (r) {
-            Backup.Result.Done -> "Копия сохранена"
+            Backup.Result.Done -> tr("Копия сохранена", "Copy saved")
             Backup.Result.Skipped -> null
             is Backup.Result.Failed -> r.reason
         }
@@ -125,7 +126,7 @@ fun BackupDialog(backup: Backup, prefs: AppPrefs, onDismiss: () -> Unit) {
     }
     val pick = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { tree ->
         if (tree == null) return@rememberLauncherForActivityResult
-        status = "Сохраняю копию…"
+        status = tr("Сохраняю копию…", "Saving a copy…")
         backup.setFolder(tree, report)
         // On only if the folder was really taken (a failure has already said why).
         on = backup.folder != null
@@ -133,42 +134,42 @@ fun BackupDialog(backup: Backup, prefs: AppPrefs, onDismiss: () -> Unit) {
     }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Автокопия") },
+        title = { Text(tr("Автокопия", "Auto backup")) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    "Раз в день, когда вы выходите из приложения, все тетради и папки сохраняются одним файлом " +
-                        ".inknotes в выбранную папку (можно Google Диск). Хранятся ${Backup.KEEP} последних копий " +
-                        "(для каждого устройства выберите свою папку). " +
-                        "Восстановить: «Импорт» → файл копии.",
+                    tr("Раз в день, когда вы выходите из приложения, все тетради и папки сохраняются одним файлом ", "Once a day, when you leave the app, all notebooks and folders are saved as one ") +
+                        tr(".inknotes в выбранную папку (можно Google Диск). Хранятся ${Backup.KEEP} последних копий ", ".inknotes file in the chosen folder (Google Drive works too). The last ${Backup.KEEP} copies are kept ") +
+                        tr("(для каждого устройства выберите свою папку). ", "(choose a separate folder for each device). ") +
+                        tr("Восстановить: «Импорт» → файл копии.", "To restore: “Import” → the backup file."),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 if (on) {
-                    Text("Папка: ${folderName ?: "выбрана"}")
-                    Text(if (last > 0) "Последняя копия: ${date.format(Date(last))}" else "Копий ещё не было")
+                    Text(tr("Папка: ${folderName ?: "выбрана"}", "Folder: ${folderName ?: "chosen"}"))
+                    Text(if (last > 0) tr("Последняя копия: ${date.format(Date(last))}", "Last copy: ${date.format(Date(last))}") else tr("Копий ещё не было", "No copies yet"))
                 } else {
-                    Text("Выключена")
+                    Text(tr("Выключена", "Off"))
                 }
                 status?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { pick.launch(null) }) { Text(if (on) "Другая папка…" else "Выбрать папку…") }
+                    OutlinedButton(onClick = { pick.launch(null) }) { Text(if (on) tr("Другая папка…", "Another folder…") else tr("Выбрать папку…", "Choose a folder…")) }
                     if (on) {
                         OutlinedButton(onClick = {
-                            status = "Сохраняю копию…"
+                            status = tr("Сохраняю копию…", "Saving a copy…")
                             backup.run(force = true, onDone = report)
-                        }) { Text("Копия сейчас") }
+                        }) { Text(tr("Копия сейчас", "Back up now")) }
                     }
                 }
             }
         },
-        confirmButton = { Button(onClick = onDismiss) { Text("Готово") } },
+        confirmButton = { Button(onClick = onDismiss) { Text(tr("Готово", "Done")) } },
         dismissButton = {
             if (on) {
                 TextButton(onClick = {
                     backup.turnOff()
                     on = false
                     status = null
-                }) { Text("Выключить") }
+                }) { Text(tr("Выключить", "Turn off")) }
             }
         },
     )

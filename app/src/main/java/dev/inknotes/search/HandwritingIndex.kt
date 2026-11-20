@@ -1,5 +1,6 @@
 package dev.inknotes.search
 
+import dev.inknotes.data.tr
 import android.graphics.RectF
 import android.os.Handler
 import android.os.Looper
@@ -37,12 +38,18 @@ class TextLine(val text: String, val alternatives: List<String>, val box: RectF)
 class SearchHit(val notebook: Notebook, val pageIndex: Int, val line: TextLine?)
 
 /**
- * Handwriting recognition (ML Kit Digital Ink, on device, Russian model downloaded once) and
+ * Handwriting recognition (ML Kit Digital Ink, on device, Russian or English model downloaded once) and
  * the text index used for search. Recognized text is stored per notebook in `text.json`;
  * each page entry keeps a signature of the ink it was made from, so only changed pages are
  * recognized again. All index work runs on one background thread.
  */
-class HandwritingIndex(private val repo: NotebookRepository, private val enabledPref: () -> Boolean, private val setEnabledPref: (Boolean) -> Unit) {
+class HandwritingIndex(
+    private val repo: NotebookRepository,
+    private val enabledPref: () -> Boolean,
+    private val setEnabledPref: (Boolean) -> Unit,
+    /** Read with the English model, else the Russian one: the handwriting language of the settings. */
+    private val english: Boolean = dev.inknotes.data.Lang.english,
+) {
 
     sealed interface State {
         data object Off : State
@@ -64,7 +71,17 @@ class HandwritingIndex(private val repo: NotebookRepository, private val enabled
 
     private val exec = Executors.newSingleThreadExecutor { r -> Thread(r, "handwriting") }
     private val main = Handler(Looper.getMainLooper())
-    private val model = DigitalInkRecognitionModel.builder(DigitalInkRecognitionModelIdentifier.RU).build()
+    /** Handwriting is read in the handwriting language of the settings (by default the interface's). */
+    private val model = DigitalInkRecognitionModel.builder(
+        if (english) DigitalInkRecognitionModelIdentifier.EN_US else DigitalInkRecognitionModelIdentifier.RU,
+    ).build()
+
+    /**
+     * Added to the file stamp of each page whose text was read in English: after the
+     * handwriting language changes, every page is read again with the other model (Russian
+     * keeps the old stamps). The interface language alone changes nothing here.
+     */
+    private val langMark = if (english) "#en" else ""
     private val scheduled = HashMap<String, Runnable>() // main thread
 
     // Index thread only.
@@ -100,7 +117,7 @@ class HandwritingIndex(private val repo: NotebookRepository, private val enabled
         }
         val failed = {
             if (mine == attempt && state == State.Downloading) {
-                state = State.Failed("Не удалось загрузить модель распознавания. Нужен интернет; без сервисов Google загрузка может не работать.")
+                state = State.Failed(tr("Не удалось загрузить модель распознавания. Нужен интернет; без сервисов Google загрузка может не работать.", "Could not download the recognition model. An internet connection is needed; without Google services the download may not work."))
             }
         }
         // A repeated download request of a present model may never complete: ask first,
@@ -153,7 +170,7 @@ class HandwritingIndex(private val repo: NotebookRepository, private val enabled
             // A page whose file is as it was when its text was read is not opened at all.
             val todo = notebooks.associateWith { nb ->
                 val text = load(nb.id)
-                nb.pageIds.map { it to repo.pageStamp(nb, it) }.filter { (id, stamp) -> text[id]?.stamp != stamp }
+                nb.pageIds.map { it to repo.pageStamp(nb, it) + langMark }.filter { (id, stamp) -> text[id]?.stamp != stamp }
             }.filterValues { it.isNotEmpty() }
             main.post { pendingPages = todo.values.sumOf { it.size } }
             for ((nb, pages) in todo) {

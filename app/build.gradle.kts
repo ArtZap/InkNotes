@@ -23,8 +23,8 @@ android {
         applicationId = "dev.inknotes"
         minSdk = 29
         targetSdk = 36
-        versionCode = 18
-        versionName = "0.39"
+        versionCode = 19
+        versionName = "0.40"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "GOOGLE_CLIENT_ID", "\"${googleProp("clientId")}\"")
         buildConfigField("String", "GOOGLE_CLIENT_SECRET", "\"${googleProp("clientSecret")}\"")

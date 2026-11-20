@@ -1,5 +1,6 @@
 package dev.inknotes.math
 
+import dev.inknotes.data.tr
 import dev.inknotes.math.Expr.Add
 import dev.inknotes.math.Expr.Fn
 import dev.inknotes.math.Expr.Mul
@@ -27,7 +28,7 @@ object Printer {
     private const val SIGNIFICANT = 6
 
     fun number(v: Double): String {
-        if (v.isNaN()) throw MathError("не определено")
+        if (v.isNaN()) throw MathError(tr("не определено", "undefined"))
         if (v.isInfinite()) return if (v > 0) "∞" else "$MINUS∞"
         val x = Solver.clean(v)
         if (x == 0.0) return "0"
@@ -115,7 +116,7 @@ object Printer {
         is Mul -> product(e, prec)
         is Pow -> power(e, prec)
         is Fn -> function(e)
-        is Expr.Mat, is Expr.Integral, is Expr.Apply, is Expr.Deriv -> throw MathError("не записать")
+        is Expr.Mat, is Expr.Integral, is Expr.Apply, is Expr.Deriv -> throw MathError(tr("не записать", "cannot be written"))
     }
 
     private fun numberOrFraction(v: Double): String {

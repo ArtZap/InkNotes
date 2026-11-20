@@ -1,5 +1,6 @@
 package dev.inknotes.math
 
+import dev.inknotes.data.tr
 import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.math.max
@@ -431,7 +432,7 @@ object MathLayout {
         }
 
         fun flow(items0: List<Item>, axis: Float?) {
-            if (items0.isEmpty()) throw MathError("пусто")
+            if (items0.isEmpty()) throw MathError(tr("пусто", "empty"))
             val items = talls(radicals(fractions(items0.toMutableList()))).sortedBy { it.box.left }
             val ax0 = axis ?: median(items.filter { it.box.height > 0.4f * h }.map { it.box.cy }) ?: items.first().box.cy
             // A long line written downhill (or uphill): the middle line follows the full-size
@@ -621,9 +622,9 @@ object MathLayout {
                     text("\\int")
                     if (item.lo.isNotEmpty() || item.hi.isNotEmpty()) {
                         text("_{")
-                        if (item.lo.isEmpty()) throw MathError("нет нижнего предела") else flow(item.lo, null)
+                        if (item.lo.isEmpty()) throw MathError(tr("нет нижнего предела", "no lower limit")) else flow(item.lo, null)
                         text("}^{")
-                        if (item.hi.isEmpty()) throw MathError("нет верхнего предела") else flow(item.hi, null)
+                        if (item.hi.isEmpty()) throw MathError(tr("нет верхнего предела", "no upper limit")) else flow(item.hi, null)
                         text("}")
                     }
                     text(" ")
@@ -745,7 +746,7 @@ object MathLayout {
             // g, read as a letter.
             for (it in pool) if (it is G) tallShape(it.glyph, h)?.takeIf { c -> c != '}' }?.let { c -> shapes[it] = c }
             MathPage.trace?.invoke("    talls h=$h: " + pool.filterIsInstance<G>().filter { it.box.height > 0.9f * h }.joinToString { "${it.box.left.toInt()},${it.box.top.toInt()} ${it.box.width.toInt()}x${it.box.height.toInt()} n=${it.glyph.strokes.size} -> ${shapes[it]}" })
-            if (shapes.values.any { it == '{' }) throw MathError("фигурная скобка")
+            if (shapes.values.any { it == '{' }) throw MathError(tr("фигурная скобка", "curly brace"))
             fun overlap(a: Box, b: Box) = min(a.bottom, b.bottom) - max(a.top, b.top) >= 0.6f * min(a.height, b.height)
             // Between the middles of the brackets: a curved bracket reaches under its first column.
             fun inside(l: Box, r: Box) = pool.filter {
@@ -809,7 +810,7 @@ object MathLayout {
         }
 
         private fun bracketed(box: Box, content: List<Item>, open: String, close: String, det: Boolean): Item {
-            if (content.isEmpty()) throw MathError("пустые скобки")
+            if (content.isEmpty()) throw MathError(tr("пустые скобки", "empty brackets"))
             val rows = rows(content)
             // Rows of a matrix stand under one another; x and its raised exponent do not.
             val aligned = rows.size >= 2 && rows.all { row ->
@@ -824,7 +825,7 @@ object MathLayout {
             val cells = rows.map { row ->
                 List(cols.size) { c -> row.filter { it.box.cx in cols[c].first..cols[c].second } }
             }
-            if (cells.any { r -> r.any { it.isEmpty() } }) throw MathError("пустая клетка матрицы")
+            if (cells.any { r -> r.any { it.isEmpty() } }) throw MathError(tr("пустая клетка матрицы", "empty matrix cell"))
             return Grid(box, cells, det)
         }
 

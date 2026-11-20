@@ -1,5 +1,6 @@
 package dev.inknotes.editor
 
+import dev.inknotes.data.tr
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
@@ -62,10 +63,10 @@ enum class EraserMode { WHOLE, PARTIAL }
 
 /** What the eraser takes: everything, or only one kind (the marker without the text under it). */
 enum class EraserTarget(val title: String) {
-    ALL("Всё"),
-    INK("Только ручка"),
-    MARKER("Только маркер"),
-    FILLS("Только штриховка"),
+    ALL(tr("Всё", "Everything")),
+    INK(tr("Только ручка", "Pen only")),
+    MARKER(tr("Только маркер", "Highlighter only")),
+    FILLS(tr("Только штриховка", "Hatching only")),
     ;
 
     fun strokes(kind: InkKind) = when (this) {
@@ -2145,7 +2146,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                 // The page may have gone (deleted, the notebook closed) while the shape was looked for.
                 if (doc(page) !== doc || source == null) return@post
                 if (outline == null) {
-                    listener?.onHint("Контур не замкнут: коснитесь внутри замкнутой фигуры или обведите область")
+                    listener?.onHint(tr("Контур не замкнут: коснитесь внутри замкнутой фигуры или обведите область", "The outline is not closed: tap inside a closed shape or circle the area"))
                     return@post
                 }
                 clearPendingArea()
@@ -3870,7 +3871,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                 for (p in pts.drop(1)) tracePath.lineTo(p.x, p.y)
                 canvas.drawPath(tracePath, previewPaint)
                 compassText.textSize = 15f * density / scale
-                canvas.drawText("r = ${"%.1f".format(r * dev.inknotes.data.Notebook.MM_PER_UNIT).replace('.', ',')} мм", last[0] + 10f / scale, last[1] - 10f / scale, compassText)
+                canvas.drawText(tr("r = ${"%.1f".format(r * dev.inknotes.data.Notebook.MM_PER_UNIT).replace('.', ',')} мм", "r = ${"%.1f".format(r * dev.inknotes.data.Notebook.MM_PER_UNIT)} mm"), last[0] + 10f / scale, last[1] - 10f / scale, compassText)
             }
             canvas.restore()
         }

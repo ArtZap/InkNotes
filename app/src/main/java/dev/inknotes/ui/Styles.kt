@@ -1,5 +1,6 @@
 package dev.inknotes.ui
 
+import dev.inknotes.data.tr
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
@@ -29,6 +30,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.Switch
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -177,7 +179,7 @@ fun PortfolioFolder(count: Int, modifier: Modifier = Modifier) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text("$count", style = TextStyle(brush = Gold.Foil), fontFamily = FontFamily.Serif, fontSize = 44.sp)
             Text(
-                "ТЕТРАДЕЙ",
+                tr("ТЕТРАДЕЙ", "NOTEBOOKS"),
                 fontSize = 10.sp,
                 letterSpacing = 3.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -196,9 +198,9 @@ fun Monogram() {
     Text(
         when (style) {
             UiStyle.MINIMAL -> "INKNOTES"
-            UiStyle.NOTEBOOK -> "✿ INKNOTES · МОИ ТЕТРАДКИ"
-            UiStyle.MYSTIC -> "✦ INKNOTES · КНИЖНАЯ ЛАВКА ТАЙН ✦"
-            else -> "INKNOTES · ЛИЧНАЯ БИБЛИОТЕКА"
+            UiStyle.NOTEBOOK -> tr("✿ INKNOTES · МОИ ТЕТРАДКИ", "✿ INKNOTES · MY NOTEBOOKS")
+            UiStyle.MYSTIC -> tr("✦ INKNOTES · КНИЖНАЯ ЛАВКА ТАЙН ✦", "✦ INKNOTES · BOOKSHOP OF SECRETS ✦")
+            else -> tr("INKNOTES · ЛИЧНАЯ БИБЛИОТЕКА", "INKNOTES · PRIVATE LIBRARY")
         },
         fontSize = 10.sp,
         letterSpacing = if (minimal) 5.sp else 3.5.sp,
@@ -260,7 +262,7 @@ fun LineFolder(count: Int, modifier: Modifier = Modifier) {
         Box(Modifier.align(Alignment.TopStart).padding(start = 16.dp, top = 16.dp).width(36.dp).height(0.8.dp).background(line))
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text("$count", fontSize = 56.sp, fontWeight = FontWeight.ExtraLight, color = MaterialTheme.colorScheme.onSurface)
-            Text("ТЕТРАДЕЙ", fontSize = 10.sp, letterSpacing = 3.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(tr("ТЕТРАДЕЙ", "NOTEBOOKS"), fontSize = 10.sp, letterSpacing = 3.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -288,9 +290,9 @@ fun SettingsDialog(
                 Modifier.verticalScroll(rememberScrollState()).padding(28.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Text("Настройки", style = MaterialTheme.typography.headlineSmall)
+                Text(tr("Настройки", "Settings"), style = MaterialTheme.typography.headlineSmall)
                 Spacer(Modifier.height(4.dp))
-                Text("Стиль интерфейса", style = MaterialTheme.typography.titleMedium)
+                Text(tr("Стиль интерфейса", "Interface style"), style = MaterialTheme.typography.titleMedium)
                 androidx.compose.foundation.layout.FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(14.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -305,9 +307,9 @@ fun SettingsDialog(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Column(Modifier.weight(1f)) {
-                        Text("Полупрозрачные обложки", style = MaterialTheme.typography.titleMedium)
+                        Text(tr("Полупрозрачные обложки", "See-through covers"), style = MaterialTheme.typography.titleMedium)
                         Text(
-                            "Обложка остаётся своего цвета, но сквозь неё видно первую страницу тетради",
+                            tr("Обложка остаётся своего цвета, но сквозь неё видно первую страницу тетради", "The cover keeps its colour, but the first page of the notebook shows through it"),
                             fontSize = 12.sp,
                             lineHeight = 16.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -317,14 +319,16 @@ fun SettingsDialog(
                     Switch(checked = glass, onCheckedChange = onGlass)
                 }
                 Spacer(Modifier.height(4.dp))
-                Text("Тема", style = MaterialTheme.typography.titleMedium)
+                Text(tr("Тема", "Theme"), style = MaterialTheme.typography.titleMedium)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     for (m in ThemeMode.entries) {
                         FilterChip(selected = m == themeMode, onClick = { onTheme(m) }, label = { Text(m.title) })
                     }
                 }
+                Spacer(Modifier.height(4.dp))
+                LanguageChoice()
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    Button(onClick = onDismiss) { Text("Готово") }
+                    Button(onClick = onDismiss) { Text(tr("Готово", "Done")) }
                 }
             }
         }
@@ -370,7 +374,7 @@ private fun StylePreview(style: UiStyle, dark: Boolean, modifier: Modifier) {
             Text(if (style == UiStyle.MYSTIC) "✦ INKNOTES ✦" else "INKNOTES", fontSize = 6.sp, letterSpacing = 2.sp, color = if (style.gilded) colors.primary else colors.onSurfaceVariant)
         }
         Text(
-            "Тетради",
+            tr("Тетради", "Notebooks"),
             color = colors.onBackground,
             fontFamily = displayFont(style),
             fontWeight = titleWeight(style),
@@ -405,4 +409,50 @@ private fun StylePreview(style: UiStyle, dark: Boolean, modifier: Modifier) {
             }
         }
     }
+}
+
+/**
+ * The interface language: as the system's, Russian or English. Shown in both languages, so it
+ * can be found whatever the app is in now. A change restarts the app in the new language.
+ */
+@Composable
+private fun LanguageChoice() {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    // In a dialog the context is a wrapper around the screen, not the screen itself.
+    val activity = Language.activityOf(context)
+    val chosen = remember { Language.chosen(context) }
+    Text("Язык · Language", style = MaterialTheme.typography.titleMedium)
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        for ((tag, label) in listOf(Language.SYSTEM to dev.inknotes.data.tr("Как в системе", "System"), Language.RU to "Русский", Language.EN to "English")) {
+            FilterChip(
+                selected = tag == chosen,
+                onClick = { if (activity != null && tag != chosen) Language.set(activity, tag) },
+                label = { Text(label) },
+            )
+        }
+    }
+    Text(
+        dev.inknotes.data.tr("Приложение перезапустится в выбранном языке.", "The app restarts in the chosen language."),
+        fontSize = 12.sp,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    val handwriting = remember { Language.handwriting(context) }
+    Text(dev.inknotes.data.tr("Язык рукописи для поиска", "Handwriting language for search"), style = MaterialTheme.typography.titleSmall)
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        for ((tag, label) in listOf(Language.SYSTEM to dev.inknotes.data.tr("Как интерфейс", "As interface"), Language.RU to "Русский", Language.EN to "English")) {
+            FilterChip(
+                selected = tag == handwriting,
+                onClick = { if (activity != null && tag != handwriting) Language.setHandwriting(activity, tag) },
+                label = { Text(label) },
+            )
+        }
+    }
+    Text(
+        dev.inknotes.data.tr(
+            "На каком языке вы пишете от руки: по нему ищется текст в тетрадях. При смене модель скачивается заново, а страницы перечитываются.",
+            "The language you write by hand: search finds text in notebooks by it. When it changes, the model is downloaded again and pages are read anew.",
+        ),
+        fontSize = 12.sp,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }

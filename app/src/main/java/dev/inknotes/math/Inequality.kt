@@ -1,5 +1,6 @@
 package dev.inknotes.math
 
+import dev.inknotes.data.tr
 import kotlin.math.abs
 import kotlin.math.asinh
 import kotlin.math.max
@@ -38,7 +39,7 @@ object Inequality {
         val umax = asinh(RANGE)
         val xs = DoubleArray(GRID + 1) { sinh(-umax + 2 * umax * it / GRID) }
         val ys = DoubleArray(xs.size) { f(xs[it]) }
-        if (ys.none { it.isFinite() }) throw MathError("не определено")
+        if (ys.none { it.isFinite() }) throw MathError(tr("не определено", "undefined"))
         // A wave (sin x > 0) changes sign thousands of times: say so before looking at each.
         var changes = 0
         for (k in 0 until GRID) {
@@ -46,7 +47,7 @@ object Inequality {
             val b = ys[k + 1]
             if (a.isFinite() != b.isFinite() || (a.isFinite() && b.isFinite() && (a < 0) != (b < 0))) changes++
         }
-        if (changes > MAX_POINTS) throw MathError("слишком много интервалов")
+        if (changes > MAX_POINTS) throw MathError(tr("слишком много интервалов", "too many intervals"))
         val roots = Solver.roots(::f, xs).map(Solver::clean)
         // Breaks: the edge of the domain (√x at 0) and poles (1/x), where the sign may change.
         val breaks = ArrayList<Double>()
@@ -70,7 +71,7 @@ object Inequality {
             if (acc.isEmpty() || abs(acc.last() - p) > 1e-9 * max(1.0, abs(p))) acc += p
             acc
         }
-        if (points.size > MAX_POINTS) throw MathError("слишком много интервалов")
+        if (points.size > MAX_POINTS) throw MathError(tr("слишком много интервалов", "too many intervals"))
         val exact = Exact.roots(::f)
         fun text(v: Double) = exact?.firstOrNull { abs(it.value - v) < 1e-9 * max(1.0, abs(v)) }?.text ?: Printer.value(v)
 
@@ -106,8 +107,8 @@ object Inequality {
             i++
         }
         return when {
-            parts.isEmpty() -> "нет решений"
-            parts == listOf("(${Printer.MINUS}∞; +∞)") -> "$name — любое число"
+            parts.isEmpty() -> tr("нет решений", "no solutions")
+            parts == listOf("(${Printer.MINUS}∞; +∞)") -> tr("$name — любое число", "$name is any number")
             parts.size == 1 && parts[0].startsWith("{") -> "$name = ${parts[0].removeSurrounding("{", "}")}"
             else -> "$name ∈ " + parts.joinToString(" ∪ ")
         }

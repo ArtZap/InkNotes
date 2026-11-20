@@ -1,5 +1,6 @@
 package dev.inknotes.ui
 
+import dev.inknotes.data.tr
 import android.app.KeyguardManager
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
@@ -28,7 +29,7 @@ import kotlinx.coroutines.launch
 
 /** The notebook of quick notes: made the first time, an empty page at its end to write on. */
 object QuickNotes {
-    const val TITLE = "Быстрые заметки"
+    val TITLE: String get() = tr("Быстрые заметки", "Quick notes")
 
     /** Asked to open a notebook (from the widget): its id. */
     const val EXTRA_NOTEBOOK = "dev.inknotes.NOTEBOOK"
@@ -73,6 +74,11 @@ object QuickNotes {
  * (back closes it); everything opens after unlocking, in the app.
  */
 class QuickNoteActivity : ComponentActivity() {
+    // Before Android 13 the chosen interface language is put on the screen here.
+    override fun attachBaseContext(newBase: android.content.Context) {
+        super.attachBaseContext(Language.wrap(newBase))
+    }
+
     private var controller by mutableStateOf<EditorController?>(null)
     private lateinit var penButton: PenButtonBinding
 
@@ -81,6 +87,9 @@ class QuickNoteActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // The language was changed in the system settings of the app while it ran: start anew in it.
+        AppServices.get(this)
+        if (Language.restartIfChanged(this)) return
         // Shown over the lock screen and waking it (the manifest says the same for Android 8.1+).
         setShowWhenLocked(true)
         setTurnScreenOn(true)
@@ -93,7 +102,7 @@ class QuickNoteActivity : ComponentActivity() {
             val dark = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
             controller = EditorController(services.repo, nb, penButton, prefs, dark, services.handwriting, services.math).also {
                 it.openAtPage = nb.pageIds.lastIndex
-                it.showStatus(if (locked) "Быстрая заметка поверх экрана блокировки: видна только эта страница. Она допишется в «Быстрые заметки», остальное — после разблокировки" else "Быстрая заметка: пишите, она сохранится сама")
+                it.showStatus(if (locked) tr("Быстрая заметка поверх экрана блокировки: видна только эта страница. Она допишется в «Быстрые заметки», остальное — после разблокировки", "Quick note over the lock screen: only this page is visible. It will be added to “Quick notes”; everything else after unlocking") else tr("Быстрая заметка: пишите, она сохранится сама", "Quick note: just write, it saves itself"))
             }
         }
         setContent {
@@ -138,6 +147,14 @@ class QuickNoteActivity : ComponentActivity() {
 
 /** A tile in the quick settings: a quick note, over the lock screen too. */
 class QuickNoteTile : TileService() {
+    // The label in the app's language (the manifest's follows the system's before Android 13).
+    override fun onStartListening() {
+        super.onStartListening()
+        val tile = qsTile ?: return
+        tile.label = tr("Заметка", "Note")
+        tile.updateTile()
+    }
+
     override fun onClick() {
         val intent = QuickNotes.intent(this)
         if (Build.VERSION.SDK_INT >= 34) {
@@ -188,6 +205,10 @@ class QuickWidget : AppWidgetProvider() {
                 .take(ROWS.size)
             val flags = PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
             val views = RemoteViews(context.packageName, R.layout.widget_quick)
+            // Set here, not only by resources: the launcher draws them in the system's language,
+            // which before Android 13 can differ from the app's.
+            views.setTextViewText(R.id.widget_quick_note, tr("✎ Быстрая заметка", "✎ Quick note"))
+            views.setTextViewText(R.id.widget_empty, tr("Здесь появятся последние тетради", "Your recent notebooks will appear here"))
             views.setOnClickPendingIntent(R.id.widget_quick_note, PendingIntent.getActivity(context, 1, QuickNotes.intent(context), flags))
             val app = Intent(context, MainActivity::class.java).setAction(Intent.ACTION_MAIN).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             views.setOnClickPendingIntent(R.id.widget_open_app, PendingIntent.getActivity(context, 2, app, flags))

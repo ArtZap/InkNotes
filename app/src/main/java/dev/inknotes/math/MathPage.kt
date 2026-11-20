@@ -1,5 +1,6 @@
 package dev.inknotes.math
 
+import dev.inknotes.data.tr
 import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.math.max
@@ -215,7 +216,7 @@ object MathPage {
             // An identity (a result written out by hand: (x³)' = 3x²) or an unreadable line says
             // nothing worth showing; errors are kept for a "{" only.
             val answer = runCatching { Calc.solve(listOf(d.left to d.right), envAt(d.index)) }.getOrNull() ?: continue
-            if ((answer as? Answer.Text)?.lines == listOf("∞ решений")) continue
+            if ((answer as? Answer.Text)?.lines == listOf(tr("∞ решений", "∞ solutions"))) continue
             out += PageAnswer(at, eq.cy, eq.h, answer, steps = Steps.of(listOf(d.left to d.right), envAt(d.index)))
         }
         val done = HashSet<Ink>()

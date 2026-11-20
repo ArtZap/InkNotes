@@ -1,5 +1,6 @@
 package dev.inknotes.ui
 
+import dev.inknotes.data.tr
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -121,18 +122,18 @@ fun SidePickerDialog(repo: NotebookRepository, except: String, onPick: (Notebook
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = { Icon(InkIcons.SideBySide, null) },
-        title = { Text("Открыть рядом") },
+        title = { Text(tr("Открыть рядом", "Open side by side")) },
         text = {
             Column {
                 Text(
-                    "Вторая тетрадь встанет справа: например, PDF и конспект. Линию между ними можно двигать.",
+                    tr("Вторая тетрадь встанет справа: например, PDF и конспект. Линию между ними можно двигать.", "The second notebook goes on the right: a PDF and your notes, for example. The line between them can be moved."),
                     fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 OutlinedTextField(
                     value = query,
                     onValueChange = { query = it },
-                    label = { Text("Найти по названию") },
+                    label = { Text(tr("Найти по названию", "Find by title")) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
                 )
@@ -142,7 +143,7 @@ fun SidePickerDialog(repo: NotebookRepository, except: String, onPick: (Notebook
                 } else {
                     val shown = all.filter { it.id != except && (query.isBlank() || it.title.contains(query.trim(), ignoreCase = true)) }
                         .sortedByDescending { it.updatedAt }
-                    if (shown.isEmpty()) Text("Нет других тетрадей", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (shown.isEmpty()) Text(tr("Нет других тетрадей", "No other notebooks"), color = MaterialTheme.colorScheme.onSurfaceVariant)
                     LazyColumn(Modifier.heightIn(max = 360.dp)) {
                         items(shown, key = { it.id }) { nb ->
                             Row(
@@ -151,7 +152,7 @@ fun SidePickerDialog(repo: NotebookRepository, except: String, onPick: (Notebook
                             ) {
                                 Icon(if (nb.pdfPages.isNotEmpty()) InkIcons.PdfPage else InkIcons.Notebook, null, Modifier.size(20.dp))
                                 Text(nb.title, Modifier.padding(start = 12.dp).weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                Text("${nb.pageIds.size} стр.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(tr("${nb.pageIds.size} стр.", "${nb.pageIds.size} p."), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                     }
@@ -159,6 +160,6 @@ fun SidePickerDialog(repo: NotebookRepository, except: String, onPick: (Notebook
             }
         },
         confirmButton = {},
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(tr("Отмена", "Cancel")) } },
     )
 }

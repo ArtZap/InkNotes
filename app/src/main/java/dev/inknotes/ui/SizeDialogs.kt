@@ -1,5 +1,6 @@
 package dev.inknotes.ui
 
+import dev.inknotes.data.tr
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.widthIn
@@ -35,10 +36,10 @@ import java.math.RoundingMode
 
 /** Units for sizes on paper; [mm] millimetres in one unit. */
 enum class LengthUnit(val title: String, val mm: Float, val decimals: Int) {
-    MM("мм", 1f, 1),
-    CM("см", 10f, 2),
-    INCH("дюймы", 25.4f, 2),
-    PT("пт", 25.4f / 72f, 1),
+    MM(tr("мм", "mm"), 1f, 1),
+    CM(tr("см", "cm"), 10f, 2),
+    INCH(tr("дюймы", "inches"), 25.4f, 2),
+    PT(tr("пт", "pt"), 25.4f / 72f, 1),
 }
 
 private fun format(v: Float, decimals: Int): String {
@@ -71,7 +72,7 @@ fun SelectionSizeDialog(c: EditorController, onDismiss: () -> Unit) {
     val hv = parse(h)
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Размер выделенного") },
+        title = { Text(tr("Размер выделенного", "Size of the selection")) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -81,7 +82,7 @@ fun SelectionSizeDialog(c: EditorController, onDismiss: () -> Unit) {
                             w = s
                             if (keep) parse(s)?.let { h = format(it * ratio, unit.decimals) }
                         },
-                        label = { Text("Ширина") },
+                        label = { Text(tr("Ширина", "Width")) },
                         suffix = { Text(unit.title) },
                         isError = wv == null,
                         singleLine = true,
@@ -90,7 +91,7 @@ fun SelectionSizeDialog(c: EditorController, onDismiss: () -> Unit) {
                     )
                     IconAction(
                         if (c.keepProportions) InkIcons.Link else InkIcons.LinkOff,
-                        if (c.keepProportions) "Пропорции сохраняются" else "Пропорции не сохраняются",
+                        if (c.keepProportions) tr("Пропорции сохраняются", "Proportions kept") else tr("Пропорции не сохраняются", "Proportions not kept"),
                         {
                             c.keepProportions = !c.keepProportions
                             // Locking takes the width as it is and fits the height to it.
@@ -104,7 +105,7 @@ fun SelectionSizeDialog(c: EditorController, onDismiss: () -> Unit) {
                             h = s
                             if (keep) parse(s)?.let { w = format(it / ratio, unit.decimals) }
                         },
-                        label = { Text("Высота") },
+                        label = { Text(tr("Высота", "Height")) },
                         suffix = { Text(unit.title) },
                         isError = hv == null,
                         singleLine = true,
@@ -127,7 +128,7 @@ fun SelectionSizeDialog(c: EditorController, onDismiss: () -> Unit) {
                     }
                 }
                 Text(
-                    if (c.keepProportions) "Пропорции сохраняются: измените одну сторону, вторая подстроится." else "Стороны меняются независимо.",
+                    if (c.keepProportions) tr("Пропорции сохраняются: измените одну сторону, вторая подстроится.", "Proportions kept: change one side, the other follows.") else tr("Стороны меняются независимо.", "The sides change independently."),
                     fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -140,9 +141,9 @@ fun SelectionSizeDialog(c: EditorController, onDismiss: () -> Unit) {
                     if (wv != null && hv != null) c.resizeSelectionMm(wv * unit.mm, hv * unit.mm)
                     onDismiss()
                 },
-            ) { Text("Применить") }
+            ) { Text(tr("Применить", "Apply")) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(tr("Отмена", "Cancel")) } },
     )
 }
 
@@ -161,7 +162,7 @@ fun PaperSizeChoices(
     canvasSize: PageSize? = null,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("Формат страницы", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(tr("Формат страницы", "Page format"), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             for (f in PaperFormat.entries) {
                 FilterChip(
@@ -174,27 +175,27 @@ fun PaperSizeChoices(
                 )
             }
             if (onCanvas != null) {
-                FilterChip(selected = canvas, onClick = { onCanvas(true) }, label = { Text("Холст ∞") })
+                FilterChip(selected = canvas, onClick = { onCanvas(true) }, label = { Text(tr("Холст ∞", "Canvas ∞")) })
             }
         }
         if (canvas) {
             val size = canvasSize?.takeIf { it.isCanvas } ?: PageSize.CANVAS
             Text(
-                "Страница без формата: растёт вправо и вниз, когда пишете у края (до 2 м). " +
-                    "Для схем, карт понятий и задач, которым тесно на листе. Отдалите пальцами, чтобы увидеть всё.",
+                tr("Страница без формата: растёт вправо и вниз, когда пишете у края (до 2 м). ", "A page without a format: it grows right and down as you write near the edge (up to 2 m). ") +
+                    tr("Для схем, карт понятий и задач, которым тесно на листе. Отдалите пальцами, чтобы увидеть всё.", "For diagrams, concept maps and problems that don't fit a sheet. Pinch out to see everything."),
                 fontSize = 13.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Text("Сейчас ${format(size.widthMm, 0)} × ${format(size.heightMm, 0)} мм", fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
+            Text(tr("Сейчас ${format(size.widthMm, 0)} × ${format(size.heightMm, 0)} мм", "Now ${format(size.widthMm, 0)} × ${format(size.heightMm, 0)} mm"), fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
             return@Column
         }
-        Text("Ориентация", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(tr("Ориентация", "Orientation"), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(selected = !landscape, onClick = { onLandscape(false) }, label = { Text("Книжная") })
-            FilterChip(selected = landscape, onClick = { onLandscape(true) }, label = { Text("Альбомная") })
+            FilterChip(selected = !landscape, onClick = { onLandscape(false) }, label = { Text(tr("Книжная", "Portrait")) })
+            FilterChip(selected = landscape, onClick = { onLandscape(true) }, label = { Text(tr("Альбомная", "Landscape")) })
         }
         val size = PageSize(format, landscape)
-        Text("${format(size.widthMm, 1)} × ${format(size.heightMm, 1)} мм", fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
+        Text(tr("${format(size.widthMm, 1)} × ${format(size.heightMm, 1)} мм", "${format(size.widthMm, 1)} × ${format(size.heightMm, 1)} mm"), fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
     }
 }
 
@@ -209,12 +210,12 @@ fun PageSizeDialog(c: EditorController, index: Int, onDismiss: () -> Unit) {
     val pdf = c.isPdfPage(index)
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Размер страницы ${index + 1}") },
+        title = { Text(tr("Размер страницы ${index + 1}", "Size of page ${index + 1}")) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (pdf) {
                     Text(
-                        "Это страница PDF: её размер задан документом. Можно применить размер к остальным страницам.",
+                        tr("Это страница PDF: её размер задан документом. Можно применить размер к остальным страницам.", "This is a PDF page: its size comes from the document. You can apply the size to the other pages."),
                         fontSize = 13.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -224,14 +225,14 @@ fun PageSizeDialog(c: EditorController, index: Int, onDismiss: () -> Unit) {
                     TextButton(onClick = {
                         c.fitCanvas(index)
                         onDismiss()
-                    }) { Text("Обрезать по написанному") }
+                    }) { Text(tr("Обрезать по написанному", "Crop to the writing")) }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(checked = all || pdf, enabled = !pdf, onCheckedChange = { all = it })
-                    Text("Ко всем страницам тетради")
+                    Text(tr("Ко всем страницам тетради", "To all pages of the notebook"))
                 }
                 Text(
-                    "Записи сохраняют свой размер в миллиметрах и место от левого верхнего угла; то, что окажется за краем меньшей страницы, не пропадёт и вернётся при большем размере.",
+                    tr("Записи сохраняют свой размер в миллиметрах и место от левого верхнего угла; то, что окажется за краем меньшей страницы, не пропадёт и вернётся при большем размере.", "Writing keeps its size in millimetres and its place from the top left corner; whatever ends up beyond the edge of a smaller page is not lost and comes back at a larger size."),
                     fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -246,8 +247,8 @@ fun PageSizeDialog(c: EditorController, index: Int, onDismiss: () -> Unit) {
                 }
                 c.setPageSize(index, size, all = all || pdf)
                 onDismiss()
-            }) { Text("Применить") }
+            }) { Text(tr("Применить", "Apply")) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(tr("Отмена", "Cancel")) } },
     )
 }

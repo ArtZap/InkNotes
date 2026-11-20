@@ -1,5 +1,6 @@
 package dev.inknotes.math
 
+import dev.inknotes.data.tr
 import dev.inknotes.math.Expr.Add
 import dev.inknotes.math.Expr.Fn
 import dev.inknotes.math.Expr.Integral
@@ -34,7 +35,7 @@ object Numeric {
             vars[e.name] ?: when (e.name) {
                 "pi" -> PI
                 "e" -> Math.E
-                else -> throw MathError("неизвестно ${e.name}")
+                else -> throw MathError(tr("неизвестно ${e.name}", "${e.name} is unknown"))
             },
         )
         is Add -> e.terms.map { eval(it, vars) }.reduce(::plus)
@@ -46,7 +47,7 @@ object Numeric {
             when {
                 m != null && (e.name == "det" || e.name == "abs") -> Scalar(det(m))
                 m != null && e.name == "transpose" -> transpose(m)
-                args.any { it is Matrix } -> throw MathError("${e.name} от матрицы")
+                args.any { it is Matrix } -> throw MathError(tr("${e.name} от матрицы", "${e.name} of a matrix"))
                 else -> Scalar(function(e.name, args.map { (it as Scalar).v }))
             }
         }
@@ -56,24 +57,24 @@ object Numeric {
             Matrix(r, c, DoubleArray(r * c) { scalar(e.rows[it / c][it % c], vars) })
         }
         is Integral -> {
-            val lo = scalar(e.lo ?: throw MathError("неопределённый интеграл"), vars)
+            val lo = scalar(e.lo ?: throw MathError(tr("неопределённый интеграл", "indefinite integral")), vars)
             val hi = scalar(e.hi!!, vars)
             val inner = HashMap(vars)
             Scalar(integrate({ t -> inner[e.v] = t; scalar(e.body, inner) }, lo, hi))
         }
-        is Expr.Apply, is Expr.Deriv -> throw MathError("не вычисляется")
+        is Expr.Apply, is Expr.Deriv -> throw MathError(tr("не вычисляется", "cannot be computed"))
     }
 
     fun scalar(e: Expr, vars: Map<String, Double>): Double =
-        (eval(e, vars) as? Scalar)?.v ?: throw MathError("ожидалось число, а не матрица")
+        (eval(e, vars) as? Scalar)?.v ?: throw MathError(tr("ожидалось число, а не матрица", "expected a number, not a matrix"))
 
     private fun plus(a: Value, b: Value): Value = when {
         a is Scalar && b is Scalar -> Scalar(a.v + b.v)
         a is Matrix && b is Matrix -> {
-            if (a.rows != b.rows || a.cols != b.cols) throw MathError("размеры матриц не совпадают")
+            if (a.rows != b.rows || a.cols != b.cols) throw MathError(tr("размеры матриц не совпадают", "matrix sizes differ"))
             Matrix(a.rows, a.cols, DoubleArray(a.a.size) { a.a[it] + b.a[it] })
         }
-        else -> throw MathError("число + матрица")
+        else -> throw MathError(tr("число + матрица", "number + matrix"))
     }
 
     private fun times(a: Value, b: Value): Value = when {
@@ -84,7 +85,7 @@ object Numeric {
     }
 
     private fun matmul(a: Matrix, b: Matrix): Matrix {
-        if (a.cols != b.rows) throw MathError("матрицы ${a.rows}×${a.cols} и ${b.rows}×${b.cols} не перемножаются")
+        if (a.cols != b.rows) throw MathError(tr("матрицы ${a.rows}×${a.cols} и ${b.rows}×${b.cols} не перемножаются", "${a.rows}×${a.cols} and ${b.rows}×${b.cols} matrices cannot be multiplied"))
         return Matrix(a.rows, b.cols, DoubleArray(a.rows * b.cols) { idx ->
             val i = idx / b.cols
             val j = idx % b.cols
@@ -99,8 +100,8 @@ object Numeric {
         if (base is Matrix) {
             if (e.exp == Sym("T") && "T" !in vars) return transpose(base)
             val n = scalar(e.exp, vars)
-            if (n != round(n) || abs(n) > MAX_MATRIX_POWER) throw MathError("степень матрицы")
-            if (base.rows != base.cols) throw MathError("матрица не квадратная")
+            if (n != round(n) || abs(n) > MAX_MATRIX_POWER) throw MathError(tr("степень матрицы", "matrix power"))
+            if (base.rows != base.cols) throw MathError(tr("матрица не квадратная", "the matrix is not square"))
             val m = if (n < 0) inverse(base) else base
             var r = Matrix.identity(base.rows)
             repeat(abs(n).toInt()) { r = matmul(r, m) }
@@ -118,18 +119,18 @@ object Numeric {
             if (abs(1 / x - q) < 1e-9 && q.toLong() % 2L != 0L) return -Math.pow(-b, x)
             val r3 = round(3 / x)
             if (abs(3 / x - r3) < 1e-9 && r3.toLong() % 2L != 0L) return -Math.pow(-b, x)
-            throw MathError("не определено")
+            throw MathError(tr("не определено", "undefined"))
         }
-        if (b == 0.0 && x < 0) throw MathError("деление на ноль")
+        if (b == 0.0 && x < 0) throw MathError(tr("деление на ноль", "division by zero"))
         return Math.pow(b, x)
     }
 
     fun function(name: String, a: List<Double>): Double {
         val x = a.last()
         fun domain(ok: Boolean) {
-            if (!ok) throw MathError("не определено")
+            if (!ok) throw MathError(tr("не определено", "undefined"))
         }
-        if (a.size != 1 && name != "log" && name != "max" && name != "min") throw MathError("$name: аргументы")
+        if (a.size != 1 && name != "log" && name != "max" && name != "min") throw MathError(tr("$name: аргументы", "$name: arguments"))
         return when (name) {
             "sin" -> Math.sin(x)
             "cos" -> Math.cos(x)
@@ -145,7 +146,7 @@ object Numeric {
             "ln" -> { domain(x > 0); Math.log(x) }
             "lg" -> { domain(x > 0); Math.log10(x) }
             "log" -> {
-                if (a.size != 2) throw MathError("log: аргументы")
+                if (a.size != 2) throw MathError(tr("log: аргументы", "log: arguments"))
                 domain(x > 0 && a[0] > 0 && a[0] != 1.0)
                 Math.log(x) / Math.log(a[0])
             }
@@ -161,7 +162,7 @@ object Numeric {
             "max" -> a.max()
             "min" -> a.min()
             "det" -> x
-            else -> throw MathError("неизвестная функция $name")
+            else -> throw MathError(tr("неизвестная функция $name", "unknown function $name"))
         }
     }
 
@@ -170,7 +171,7 @@ object Numeric {
     fun transpose(m: Matrix) = Matrix(m.cols, m.rows, DoubleArray(m.a.size) { m[it % m.rows, it / m.rows] })
 
     fun det(m: Matrix): Double {
-        if (m.rows != m.cols) throw MathError("определитель неквадратной матрицы")
+        if (m.rows != m.cols) throw MathError(tr("определитель неквадратной матрицы", "determinant of a non-square matrix"))
         val n = m.rows
         val a = m.a.copyOf()
         var d = 1.0
@@ -192,7 +193,7 @@ object Numeric {
     }
 
     fun inverse(m: Matrix): Matrix {
-        if (m.rows != m.cols) throw MathError("обратная к неквадратной матрице")
+        if (m.rows != m.cols) throw MathError(tr("обратная к неквадратной матрице", "inverse of a non-square matrix"))
         val n = m.rows
         val a = m.a.copyOf()
         val inv = Matrix.identity(n).a
@@ -200,7 +201,7 @@ object Numeric {
         for (col in 0 until n) {
             var p = col
             for (r in col + 1 until n) if (abs(a[r * n + col]) > abs(a[p * n + col])) p = r
-            if (abs(a[p * n + col]) < 1e-12 * scale) throw MathError("матрица вырожденная")
+            if (abs(a[p * n + col]) < 1e-12 * scale) throw MathError(tr("матрица вырожденная", "the matrix is singular"))
             for (k in 0 until n) {
                 a[p * n + k] = a[col * n + k].also { a[col * n + k] = a[p * n + k] }
                 inv[p * n + k] = inv[col * n + k].also { inv[col * n + k] = inv[p * n + k] }
@@ -253,7 +254,7 @@ object Numeric {
         }
         val (whole, _) = kronrod(g, lo, hi, budget)
         val r = adaptive(g, lo, hi, whole, 0, budget)
-        if (!r.isFinite()) throw MathError("интеграл расходится")
+        if (!r.isFinite()) throw MathError(tr("интеграл расходится", "the integral diverges"))
         return r
     }
 
@@ -266,7 +267,7 @@ object Numeric {
         if (err <= max(1e-11, 1e-11 * abs(sum))) return sum
         if (depth >= MAX_DEPTH || budget[0] <= 0) {
             // Still far from converged: a divergent integral, not a precision problem.
-            if (err > 1e-6 * max(1.0, abs(sum))) throw MathError("интеграл расходится")
+            if (err > 1e-6 * max(1.0, abs(sum))) throw MathError(tr("интеграл расходится", "the integral diverges"))
             return sum
         }
         return adaptive(g, a, m, left, depth + 1, budget) + adaptive(g, m, b, right, depth + 1, budget)
@@ -277,14 +278,14 @@ object Numeric {
         val c = (a + b) / 2
         val h = (b - a) / 2
         val fc = g(c)
-        if (!fc.isFinite()) throw MathError("интеграл расходится")
+        if (!fc.isFinite()) throw MathError(tr("интеграл расходится", "the integral diverges"))
         var k = fc * WGK[7]
         var gs = fc * WG[3]
         for (j in 0 until 7) {
             val dx = h * XGK[j]
             val f1 = g(c - dx)
             val f2 = g(c + dx)
-            if (!f1.isFinite() || !f2.isFinite()) throw MathError("интеграл расходится")
+            if (!f1.isFinite() || !f2.isFinite()) throw MathError(tr("интеграл расходится", "the integral diverges"))
             k += WGK[j] * (f1 + f2)
             if (j % 2 == 1) gs += WG[j / 2] * (f1 + f2)
         }

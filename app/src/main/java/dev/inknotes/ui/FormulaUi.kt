@@ -1,5 +1,6 @@
 package dev.inknotes.ui
 
+import dev.inknotes.data.tr
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
@@ -125,12 +126,12 @@ fun FormulaDialog(
     val preview = remember(latex, color) { FormulaArt.bitmap(latex, letterPx, color) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Формула") },
+        title = { Text(tr("Формула", "Formula")) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (readFailed) {
                     Text(
-                        "Формулу прочитать не удалось. Напишите её в LaTeX сами — картинка появится сразу.",
+                        tr("Формулу прочитать не удалось. Напишите её в LaTeX сами — картинка появится сразу.", "The formula could not be read. Type it in LaTeX yourself — the picture appears at once."),
                         color = MaterialTheme.colorScheme.error,
                         fontSize = 13.sp,
                     )
@@ -145,9 +146,9 @@ fun FormulaDialog(
                     contentAlignment = Alignment.CenterStart,
                 ) {
                     if (preview != null) {
-                        Image(preview.asImageBitmap(), contentDescription = "Формула: $latex")
+                        Image(preview.asImageBitmap(), contentDescription = tr("Формула: $latex", "Formula: $latex"))
                     } else {
-                        Text("Пусто", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(tr("Пусто", "Empty"), color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
                 OutlinedTextField(
@@ -158,18 +159,18 @@ fun FormulaDialog(
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Text(
-                    "Проверьте: если буква прочиталась не так, исправьте её в строке LaTeX. \\frac{a}{b} — дробь, x^{2} — степень, \\sqrt{x} — корень.",
+                    tr("Проверьте: если буква прочиталась не так, исправьте её в строке LaTeX. \\frac{a}{b} — дробь, x^{2} — степень, \\sqrt{x} — корень.", "Check it: if a letter was read wrong, fix it in the LaTeX line. \\frac{a}{b} is a fraction, x^{2} a power, \\sqrt{x} a root."),
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(enabled = latex.isNotBlank(), onClick = { onCopyLatex(latex) }) { Text("Копировать LaTeX") }
-                    OutlinedButton(enabled = preview != null, onClick = { onCopyPicture(latex) }) { Text("Копировать картинкой") }
-                    OutlinedButton(enabled = preview != null, onClick = { onBelow(latex) }) { Text("Вставить под ней") }
+                    OutlinedButton(enabled = latex.isNotBlank(), onClick = { onCopyLatex(latex) }) { Text(tr("Копировать LaTeX", "Copy LaTeX")) }
+                    OutlinedButton(enabled = preview != null, onClick = { onCopyPicture(latex) }) { Text(tr("Копировать картинкой", "Copy as picture")) }
+                    OutlinedButton(enabled = preview != null, onClick = { onBelow(latex) }) { Text(tr("Вставить под ней", "Insert below it")) }
                 }
             }
         },
-        confirmButton = { Button(enabled = preview != null, onClick = { onReplace(latex) }) { Text("Заменить почерк") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Закрыть") } },
+        confirmButton = { Button(enabled = preview != null, onClick = { onReplace(latex) }) { Text(tr("Заменить почерк", "Replace handwriting")) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(tr("Закрыть", "Close")) } },
     )
 }

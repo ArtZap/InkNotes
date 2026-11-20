@@ -1,5 +1,6 @@
 package dev.inknotes.ui
 
+import dev.inknotes.data.tr
 import android.content.Context
 import android.content.Intent
 import android.net.ConnectivityManager
@@ -75,17 +76,17 @@ class CloudSync(private val context: Context, private val repo: NotebookReposito
         val opened = runCatching { from.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }.isSuccess
         if (!opened) {
             server.close()
-            status = "Нет браузера, чтобы войти в Google"
+            status = tr("Нет браузера, чтобы войти в Google", "No browser to sign in to Google")
             return
         }
         signingIn = true
-        status = "Войдите в Google в браузере и вернитесь сюда"
+        status = tr("Войдите в Google в браузере и вернитесь сюда", "Sign in to Google in the browser and come back here")
         scope.launch {
             val result = runCatching {
                 when (val reply = server.await(state)) {
                     is GoogleAuth.Reply.Code -> DriveClient.exchange(clientId, secret, reply.code, server.redirect, verifier)
-                    is GoogleAuth.Reply.Error -> error(if (reply.error == "access_denied") "Доступ не разрешён" else "Google ответил: ${reply.error}")
-                    GoogleAuth.Reply.Other -> error("Вход не выполнен")
+                    is GoogleAuth.Reply.Error -> error(if (reply.error == "access_denied") tr("Доступ не разрешён", "Access was not allowed") else tr("Google ответил: ${reply.error}", "Google replied: ${reply.error}"))
+                    GoogleAuth.Reply.Other -> error(tr("Вход не выполнен", "Sign-in failed"))
                 }
             }
             server.close()
@@ -95,7 +96,7 @@ class CloudSync(private val context: Context, private val repo: NotebookReposito
                 result.onSuccess { t ->
                     val refresh = t.refresh
                     if (refresh == null) {
-                        status = "Google не дал постоянного ключа. Отзовите доступ InkNotes в аккаунте Google и войдите снова"
+                        status = tr("Google не дал постоянного ключа. Отзовите доступ InkNotes в аккаунте Google и войдите снова", "Google did not give a lasting key. Remove InkNotes' access in your Google account and sign in again")
                     } else {
                         // Another account: what was synced with the old one does not count.
                         // What was synced is kept per account: the same account again compares as
@@ -108,7 +109,7 @@ class CloudSync(private val context: Context, private val repo: NotebookReposito
                         prefs.driveEmail = t.email
                         email = t.email
                         signedIn = true
-                        status = "Вход выполнен" + (t.email?.let { ": $it" } ?: "")
+                        status = tr("Вход выполнен", "Signed in") + (t.email?.let { ": $it" } ?: "")
                     }
                 }.onFailure { status = signInError(it) }
             }
@@ -117,9 +118,9 @@ class CloudSync(private val context: Context, private val repo: NotebookReposito
     }
 
     private fun signInError(e: Throwable): String = when (e) {
-        is java.net.SocketTimeoutException -> "Время входа вышло. Нажмите «Войти через Google» ещё раз"
-        is java.net.SocketException -> "Вход прерван"
-        else -> e.message?.takeIf { it.isNotBlank() } ?: "Вход не выполнен"
+        is java.net.SocketTimeoutException -> tr("Время входа вышло. Нажмите «Войти через Google» ещё раз", "Sign-in timed out. Press “Sign in with Google” again")
+        is java.net.SocketException -> tr("Вход прерван", "Sign-in interrupted")
+        else -> e.message?.takeIf { it.isNotBlank() } ?: tr("Вход не выполнен", "Sign-in failed")
     }
 
     fun signOut() {
@@ -133,7 +134,7 @@ class CloudSync(private val context: Context, private val repo: NotebookReposito
         prefs.driveEmail = null
         signedIn = false
         email = null
-        status = "Вы вышли. Тетради на Диске остались"
+        status = tr("Вы вышли. Тетради на Диске остались", "Signed out. Notebooks on the Drive stay there")
     }
 
     /**
@@ -221,11 +222,11 @@ class CloudSync(private val context: Context, private val repo: NotebookReposito
         if (!configured || !signedIn) return
         if (!DriveSync.running.compareAndSet(false, true)) return
         running = true
-        status = "Синхронизация…"
+        status = tr("Синхронизация…", "Syncing…")
         scope.launch {
             val result = runCatching {
-                if (!online()) error("Нет интернета")
-                val refresh = prefs.driveRefreshToken ?: error("Войдите в Google")
+                if (!online()) error(tr("Нет интернета", "No internet"))
+                val refresh = prefs.driveRefreshToken ?: error(tr("Войдите в Google", "Sign in to Google"))
                 val token = { DriveClient.refresh(clientId, secret, refresh).access }
                 val api = DriveClient(token, token)
                 DriveSync(repo, api, stateFile(), context.cacheDir).run({ busy + openNow() }, trashMany)
@@ -233,15 +234,15 @@ class CloudSync(private val context: Context, private val repo: NotebookReposito
             DriveSync.running.set(false)
             val now = System.currentTimeMillis()
             val text = result.fold(
-                { "Синхронизировано: $it" },
+                { tr("Синхронизировано: $it", "Synced: $it") },
                 { e ->
                     val m = e.message.orEmpty()
                     when {
                         // The sign-in was taken back (or ran out): sign in again.
-                        m.contains("invalid_grant") -> "Вход в Google больше не действует — войдите снова"
-                        e is java.net.UnknownHostException || e is java.net.SocketTimeoutException -> "Нет связи с Google Диском"
+                        m.contains("invalid_grant") -> tr("Вход в Google больше не действует — войдите снова", "The Google sign-in has expired — sign in again")
+                        e is java.net.UnknownHostException || e is java.net.SocketTimeoutException -> tr("Нет связи с Google Диском", "Cannot reach Google Drive")
                         e is dev.inknotes.data.DriveError -> e.friendly()
-                        else -> "Не удалось: ${m.take(200)}"
+                        else -> tr("Не удалось: ${m.take(200)}", "Failed: ${m.take(200)}")
                     }
                 },
             )

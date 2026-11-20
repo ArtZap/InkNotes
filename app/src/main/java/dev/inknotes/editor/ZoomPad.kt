@@ -1,5 +1,6 @@
 package dev.inknotes.editor
 
+import dev.inknotes.data.tr
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Canvas
@@ -53,14 +54,14 @@ class ZoomPad(context: Context, private val host: PageEditorView) : FrameLayout(
     private var pressed = -1
 
     private enum class Button(val glyph: String, val hint: String) {
-        LEFT("◀", "Левее"),
-        RIGHT("▶", "Правее"),
-        UP("▲", "Выше"),
-        DOWN("▼", "Ниже"),
-        NEW_LINE("↵", "Новая строка"),
-        LESS("−", "Меньше"),
-        MORE("+", "Крупнее"),
-        CLOSE("✕", "Закрыть окно увеличения"),
+        LEFT("◀", tr("Левее", "Left")),
+        RIGHT("▶", tr("Правее", "Right")),
+        UP("▲", tr("Выше", "Up")),
+        DOWN("▼", tr("Ниже", "Down")),
+        NEW_LINE("↵", tr("Новая строка", "New line")),
+        LESS("−", tr("Меньше", "Smaller")),
+        MORE("+", tr("Крупнее", "Larger")),
+        CLOSE("✕", tr("Закрыть окно увеличения", "Close the zoom window")),
     }
 
     private val buttonRects = Button.entries.associateWith { RectF() }
@@ -68,7 +69,7 @@ class ZoomPad(context: Context, private val host: PageEditorView) : FrameLayout(
     init {
         addView(surface, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
         addView(ink, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
-        contentDescription = "Окно увеличения"
+        contentDescription = tr("Окно увеличения", "Zoom window")
     }
 
     /** Shows [page] from [x], [y] (page units, the top left of the part shown). */

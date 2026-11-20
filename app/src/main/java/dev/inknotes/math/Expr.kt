@@ -1,5 +1,7 @@
 package dev.inknotes.math
 
+import dev.inknotes.data.tr
+
 /** Something in a handwritten formula could not be read or computed; the message is for the user. */
 class MathError(message: String) : Exception(message)
 
@@ -92,9 +94,9 @@ class Parser private constructor(private val toks: List<Tok>) {
 
         fun parse(text: String): Expr {
             val p = Parser(lex(text))
-            if (p.toks.isEmpty()) throw MathError("пусто")
+            if (p.toks.isEmpty()) throw MathError(tr("пусто", "empty"))
             val e = p.expr()
-            if (p.pos != p.toks.size) throw MathError("лишнее: ${p.toks[p.pos]}")
+            if (p.pos != p.toks.size) throw MathError(tr("лишнее: ${p.toks[p.pos]}", "extra: ${p.toks[p.pos]}"))
             return e
         }
 
@@ -114,7 +116,7 @@ class Parser private constructor(private val toks: List<Tok>) {
                             i++
                             while (i < text.length && text[i].isDigit()) i++
                         }
-                        val v = text.substring(start, i).replace(',', '.').toDoubleOrNull() ?: throw MathError("число")
+                        val v = text.substring(start, i).replace(',', '.').toDoubleOrNull() ?: throw MathError(tr("число", "number"))
                         out += Tok.N(v)
                     }
                     c == '\\' -> {
@@ -163,7 +165,7 @@ class Parser private constructor(private val toks: List<Tok>) {
                             '"', '″', '”' -> "\""
                             '°', 'º', '˚' -> "°"
                             '+', '^', '(', ')', '[', ']', '{', '}', '|', '!', ',', ';', '_', '&', '%', '°' -> c.toString()
-                            else -> throw MathError("символ «$c»")
+                            else -> throw MathError(tr("символ «$c»", "symbol “$c”"))
                         }
                         out += Tok.Op(op)
                         i++
@@ -228,7 +230,7 @@ class Parser private constructor(private val toks: List<Tok>) {
     private fun peek(): Tok? = toks.getOrNull(pos)
     private fun isOp(s: String, at: Int = pos) = (toks.getOrNull(at) as? Tok.Op)?.s == s
     private fun expect(s: String) {
-        if (!isOp(s)) throw MathError("ожидалось «$s»")
+        if (!isOp(s)) throw MathError(tr("ожидалось «$s»", "expected “$s”"))
         pos++
     }
 
@@ -334,7 +336,7 @@ class Parser private constructor(private val toks: List<Tok>) {
         var k = 0
         while (isOp("'")) { pos++; k++ }
         // Each order multiplies the expression: as far as d⁵/dx⁵ goes.
-        if (k > 5) throw MathError("слишком высокий порядок производной")
+        if (k > 5) throw MathError(tr("слишком высокий порядок производной", "derivative order too high"))
         return k
     }
 
@@ -364,7 +366,7 @@ class Parser private constructor(private val toks: List<Tok>) {
     }
 
     private fun primary(): Expr {
-        val t = peek() ?: throw MathError("незаконченное выражение")
+        val t = peek() ?: throw MathError(tr("незаконченное выражение", "unfinished expression"))
         pos++
         return when (t) {
             is Tok.N -> Expr.Num(t.v)
@@ -380,7 +382,7 @@ class Parser private constructor(private val toks: List<Tok>) {
                     expect("|")
                     Expr.Fn("abs", listOf(e))
                 }
-                else -> throw MathError("неожиданное «${t.s}»")
+                else -> throw MathError(tr("неожиданное «${t.s}»", "unexpected “${t.s}”"))
             }
             is Tok.Cmd -> command(t.name)
             is Tok.Id -> identifier(t.name)
@@ -426,10 +428,10 @@ class Parser private constructor(private val toks: List<Tok>) {
                 isOp("&") -> pos++
                 isOp("\\\\") -> { pos++; rows += row; row = ArrayList() }
                 isOp("}") -> { pos++; rows += row; break }
-                else -> throw MathError("матрица")
+                else -> throw MathError(tr("матрица", "matrix"))
             }
         }
-        if (rows.any { it.size != rows[0].size }) throw MathError("строки матрицы разной длины")
+        if (rows.any { it.size != rows[0].size }) throw MathError(tr("строки матрицы разной длины", "matrix rows of different lengths"))
         return Expr.Mat(rows)
     }
 
@@ -443,7 +445,7 @@ class Parser private constructor(private val toks: List<Tok>) {
                 else -> break
             }
         }
-        if ((lo == null) != (hi == null)) throw MathError("у интеграла один предел")
+        if ((lo == null) != (hi == null)) throw MathError(tr("у интеграла один предел", "the integral has only one limit"))
         // The integrand runs up to "d<variable>".
         var depth = 0
         var end = -1
@@ -460,10 +462,10 @@ class Parser private constructor(private val toks: List<Tok>) {
                 break
             }
         }
-        if (end < 0) throw MathError("нет dx")
+        if (end < 0) throw MathError(tr("нет dx", "no dx"))
         val sub = Parser(toks.subList(pos, end))
         val body = sub.expr()
-        if (sub.pos != sub.toks.size) throw MathError("подынтегральное выражение")
+        if (sub.pos != sub.toks.size) throw MathError(tr("подынтегральное выражение", "integrand"))
         val v = (toks[end + 1] as Tok.Id).name
         pos = end + 2
         return Expr.Integral(body, v, lo, hi)
@@ -502,10 +504,10 @@ class Parser private constructor(private val toks: List<Tok>) {
                 pos++
                 val s = StringBuilder()
                 while (!isOp("}")) {
-                    when (val t = peek() ?: throw MathError("индекс")) {
+                    when (val t = peek() ?: throw MathError(tr("индекс", "index"))) {
                         is Tok.N -> s.append(formatIndex(t.v))
                         is Tok.Id -> s.append(t.name)
-                        else -> throw MathError("индекс")
+                        else -> throw MathError(tr("индекс", "index"))
                     }
                     pos++
                 }
@@ -515,7 +517,7 @@ class Parser private constructor(private val toks: List<Tok>) {
                 when (val t = peek()) {
                     is Tok.N -> formatIndex(t.v)
                     is Tok.Id -> t.name
-                    else -> throw MathError("индекс")
+                    else -> throw MathError(tr("индекс", "index"))
                 }.also { pos++ }
             }
             full += sub

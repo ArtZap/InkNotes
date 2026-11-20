@@ -1,5 +1,6 @@
 package dev.inknotes.ui
 
+import dev.inknotes.data.tr
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -201,7 +202,7 @@ fun MysticFolder(count: Int, modifier: Modifier = Modifier) {
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text("$count", style = TextStyle(brush = OldGold.Foil), fontFamily = FontFamily.Serif, fontSize = 44.sp)
-            Text("ТЕТРАДЕЙ", fontSize = 10.sp, letterSpacing = 3.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(tr("ТЕТРАДЕЙ", "NOTEBOOKS"), fontSize = 10.sp, letterSpacing = 3.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
