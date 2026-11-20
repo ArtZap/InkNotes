@@ -122,6 +122,7 @@ class MathNotes(
             exec.execute {
                 if (latest[key] != n) return@execute
                 // A failure must cost the answers of a page, never the app.
+                usePersonal()
                 val answers = runCatching { MathPage.analyze(toInk(strokes), reader, pageWidth, fixes.pins()) }.getOrDefault(emptyList())
                 main.post { if (latest[key] == n) onResult(answers) }
             }
@@ -204,11 +205,13 @@ class MathNotes(
         if (state != State.Ready) return onResult(null)
         runCatching {
             exec.execute {
+                usePersonal()
                 val draft = runCatching {
                     val learned = fixes.learned.takeIf { fixes.learn }
+                    val samples = fixes.samples.takeIf { fixes.learn }
                     val rows = fix.rows.map { row ->
-                        val left = Correct.side(row.left, row.h, row.axis, reader, row.leftRead, learned)
-                        val right = row.right?.let { Correct.side(it, row.h, row.axis, reader, row.rightRead, learned) }
+                        val left = Correct.side(row.left, row.h, row.axis, reader, row.leftRead, learned, samples)
+                        val right = row.right?.let { Correct.side(it, row.h, row.axis, reader, row.rightRead, learned, samples) }
                         if (left == null || row.right != null && right == null) return@runCatching null
                         Row(row, left, right)
                     }
@@ -222,16 +225,25 @@ class MathNotes(
     /** A formula as read, symbol by symbol: its [rows] (the equations of a system, or one). */
     class Draft(val fix: Fix, val rows: List<Row>)
 
+    /** The layout follows the writer's placements when learning is on (on the math thread). */
+    private fun usePersonal() {
+        Tune.personal = fixes.placements.takeIf { fixes.learn && !it.isEmpty() }
+    }
+
     /** Both sides of one formula; [right] null for `expr =`. */
     class Row(val fix: Fix, val left: Correct.Side, val right: Correct.Side?)
 
     internal val reader = object : RunReader {
         override fun read(strokes: List<Ink>, lineHeight: Float): List<String> {
             val texts = this@MathNotes.read(strokes, lineHeight)
-            // What the writer meant by a symbol, learned from their corrections.
-            if (!fixes.learn || fixes.learned.isEmpty() || texts.isEmpty()) return texts
-            val symbols = runCatching { MathLayout.items(strokes, lineHeight).size }.getOrDefault(0)
-            return fixes.learned.adjust(texts, symbols)
+            // What the writer meant by a symbol, learned from their corrections: the choices
+            // they made, then their own symbols' shapes as a second voice.
+            if (!fixes.learn || fixes.learned.isEmpty() && fixes.samples.isEmpty() || texts.isEmpty()) return texts
+            val glyphs = runCatching {
+                MathLayout.items(strokes, lineHeight).filterIsInstance<MathLayout.G>().sortedBy { it.box.left }.map { it.glyph.strokes }
+            }.getOrDefault(emptyList())
+            val counted = fixes.learned.adjust(texts, glyphs.size)
+            return Voices.adjust(counted, glyphs, fixes.samples)
         }
 
         // Both readings (plain and after arithmetic) put the same text first: measured on

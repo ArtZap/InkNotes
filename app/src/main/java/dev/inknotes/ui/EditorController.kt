@@ -1722,14 +1722,14 @@ class EditorController(
      * equations of a system in order) pinned to the strokes they read; the symbols chosen
      * learned. The page is then read anew.
      */
-    fun applyFix(answer: PageAnswer, texts: List<Pair<String, String?>>, read: List<String>, chosen: List<String>) {
+    fun applyFix(answer: PageAnswer, texts: List<Pair<String, String?>>, read: List<String>, chosen: List<String>, strokes: List<List<dev.inknotes.math.Ink>> = emptyList(), places: List<dev.inknotes.math.Placements.P> = emptyList()) {
         val fix = answer.fix ?: return
         for ((row, text) in fix.rows.zip(texts)) {
             val (left, right) = text
             if (left.isNotBlank()) math.fixes.pin(Correct.fingerprint(row.left), left)
             if (right != null && right.isNotBlank() && row.right != null) math.fixes.pin(Correct.fingerprint(row.right), right)
         }
-        math.fixes.learn(read, chosen)
+        math.fixes.learn(read, chosen, strokes, places)
         val pageId = mathAnswers.entries.firstOrNull { (_, list) -> list.any { it === answer } }?.key
         if (pageId != null) mathRevision.remove(pageId) else mathRevision.clear()
         requestMath()
