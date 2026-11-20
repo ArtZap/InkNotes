@@ -50,6 +50,21 @@ class ReplayBenchTest {
             }
         }
 
+        /** The synthetic formulas and equations (SynthFormulas), as the device reads them. */
+        fun synthetic(): List<FormulaJudge.Formula> {
+            val root = System.getenv("CROHME_DIR")?.let(::File)?.takeIf { it.isDirectory } ?: return emptyList()
+            val bank = SynthFormulas.bank(root) ?: return emptyList()
+            // Through the exported line, as on the device (strokes rounded to 0.1); the values as
+            // FormulaExportTest computes them, in decimals.
+            val numbers = Printer.numbers
+            Printer.numbers = Printer.Numbers.DECIMAL
+            try {
+                return SynthFormulas.generate(bank).mapNotNull { FormulaJudge.parse(SynthFormulas.exportLine(it.formula)) }
+            } finally {
+                Printer.numbers = numbers
+            }
+        }
+
         fun reads(): Map<String, Map<List<Int>, Pair<List<String>, List<String>>>>? {
             System.getenv("REPLAY_READS")?.let(::File)?.takeIf { it.isFile }?.let { f ->
                 val lines = if (f.name.endsWith(".gz")) GZIPInputStream(f.inputStream()).bufferedReader().readLines() else f.readLines()
@@ -71,16 +86,15 @@ class ReplayBenchTest {
             var missing = 0
             try {
                 for (f in formulas) {
-                    val r = reads["${f.set}/${f.id}"] ?: reads[f.id]
-                    if (r == null) {
-                        missing++
-                        continue
-                    }
+                    // Nothing recorded: nothing was read on the device either (no "=" found, say).
+                    val r = reads["${f.set}/${f.id}"] ?: reads[f.id] ?: emptyMap<List<Int>, Pair<List<String>, List<String>>>().also { missing++ }
                     val reader = RecordedReader(r)
                     val o = if (FormulaJudge.hasSelected(f)) FormulaJudge.selected(f, reader).first else "SKIP"
-                    if (o != "SKIP") for (k in listOf("all", f.kind, f.set)) layout.getOrPut(k) { Tally() }.add(o)
+                    // "all" stays CROHME, as on the emulator.
+                    val keys = if (f.set == "synthetic") listOf(f.set, "${f.set}/${f.kind}") else listOf("all", f.kind, f.set)
+                    if (o != "SKIP") for (k in keys) layout.getOrPut(k) { Tally() }.add(o)
                     val po = FormulaJudge.page(f, reader)
-                    if (po != null) for (k in listOf("all", f.kind, f.set)) page.getOrPut(k) { Tally() }.add(po)
+                    if (po != null) for (k in keys) page.getOrPut(k) { Tally() }.add(po)
                     outcomes["${f.set}/${f.id}"] = o to po
                 }
             } finally {
@@ -91,7 +105,7 @@ class ReplayBenchTest {
         }
 
         fun report(r: Result): String = buildString {
-            append("== повтор чтений с эмулятора (формул без записи: ${r.missing})\n")
+            append("== повтор чтений с эмулятора (формул без записи — на устройстве ничего не читалось: ${r.missing})\n")
             append("== формула выделена\n")
             for ((k, t) in r.layout) append("  %-30s %s\n".format(k, t))
             append("== страница (дописан «=»)\n")
@@ -108,7 +122,7 @@ class ReplayBenchTest {
     fun replay() {
         val formulas = formulas() ?: return
         val reads = reads() ?: return
-        val r = measure(formulas, reads)
+        val r = measure(formulas + synthetic(), reads)
         val text = report(r)
         println(text)
         File("build").mkdirs()
