@@ -140,6 +140,16 @@ class AppPrefs(context: Context) {
         get() = prefs.getString("exportPages", "all") ?: "all"
         set(value) = prefs.edit().putString("exportPages", value).apply()
 
+    /** Light ticks under the fingers while editing. */
+    var haptics: Boolean
+        get() = prefs.getBoolean(HAPTICS, true)
+        set(value) = prefs.edit().putBoolean(HAPTICS, value).apply()
+
+    /** The pen above the page shows its brush (size and colour). */
+    var brushPreview: Boolean
+        get() = prefs.getBoolean(BRUSH_PREVIEW, true)
+        set(value) = prefs.edit().putBoolean(BRUSH_PREVIEW, value).apply()
+
     /** A zigzag scribbled over writing erases it. */
     var scribbleErase: Boolean
         get() = prefs.getBoolean(SCRIBBLE, true)
@@ -292,6 +302,8 @@ class AppPrefs(context: Context) {
         const val DASH_STYLE = "dashStyle"
         const val PAGE_SHIFT = "pageShift"
         const val SCRIBBLE = "scribbleErase"
+        const val HAPTICS = "haptics"
+        const val BRUSH_PREVIEW = "brushPreview"
         const val GLASS = "glassCovers"
         const val SORT = "librarySort"
         const val BACKUP_FOLDER = "backupFolder"

@@ -45,6 +45,14 @@ private class Topic(val title: String, val entries: List<Pair<String, String>>)
 
 private val TOPICS = listOf(
     Topic(
+        tr("Новое в 0.51", "What's new in 0.51"),
+        listOf(
+            tr("Кисть под пером", "The brush under the pen") to tr("Держите перо над страницей, не касаясь: под ним видно, чем оно будет рисовать — точку размером и цветом кисти, у маркера — плоский кончик, у ластика — пунктирный круг. Работает, если перо и планшет сообщают о наведении (M-Pencil на MatePad — да).", "Hold the pen above the page without touching: under it you see what it will draw with — a dot of the brush's size and colour, the marker's flat tip, a dashed ring for the eraser. Works when the pen and tablet report hovering (M-Pencil on a MatePad does)."),
+            tr("Тактильный отклик", "Haptic feedback") to tr("Лёгкий щелчок, когда фигура выпрямилась, стёрт целый штрих, линейка встала на 0°, 45° или 90°, лассо что-то выделило, отменено двумя или повторено тремя пальцами. Если щелчков нет — проверьте, включена ли вибрация при касании в настройках Android.", "A light tick when a shape snaps, a whole stroke is erased, the ruler meets 0°, 45° or 90°, the lasso selects something, two fingers undo or three redo. No ticks? Check that touch vibration is on in Android's settings."),
+            tr("Где выключить", "Where to turn them off") to tr("Настройки в библиотеке → «Тактильный отклик» и «Кисть под пером».", "Settings in the library → “Haptic feedback” and “Brush under the pen”."),
+        ),
+    ),
+    Topic(
         tr("Новое в 0.50", "What's new in 0.50"),
         listOf(
             tr("Шкала у числа", "A scale for a number") to tr("Напишите, например, «a = 3», а ниже формулы и графики с a. Коснитесь пальцем числа 3 — под страницей появится линейка. Тяните её или нажимайте − и +: ответы и графики, где есть a, пересчитываются сразу. Шаг — последняя написанная цифра (у 2,5 — 0,1), кнопки ×10 и ÷10 его меняют. «Готово» оставляет новое значение: поверх написанного числа будет плашка с ним. Чтобы вернуть написанное, коснитесь плашки и нажмите «Как написано».", "Write, say, “a = 3”, with formulas and graphs using a below it. Tap the 3 with a finger: a ruler appears under the page. Drag it or tap − and +: the answers and graphs with a change at once. The step is the last written digit (0.1 for 2.5); ×10 and ÷10 change it. “Done” keeps the new value: a chip with it covers the written number. To go back, tap the chip and press “As written”."),
