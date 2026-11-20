@@ -134,10 +134,10 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         fun onKnobTapped(page: Int, knob: Knob) {}
 
         /**
-         * A graph is dragged by a finger held on it: by ([dx], [dy]) from where it was, [k]
-         * times its size (by its corner); [done] when the finger lifts.
+         * A finger tapped a selected picture again: when it is a graph's picture, its window
+         * opens (true); otherwise the tap goes on as usual (false).
          */
-        fun onGraphMoved(page: Int, answer: PageAnswer, dx: Float, dy: Float, k: Float, done: Boolean) {}
+        fun onGraphPictureTapped(page: Int, image: PageImage): Boolean = false
 
         /** A finger tapped a word underlined as maybe misspelt. */
         fun onTypoTapped(page: Int, typo: dev.inknotes.search.Spelling.Typo) {}
@@ -199,6 +199,9 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
 
         /** Answers computed after "=" on page [index]. */
         fun answers(index: Int): List<PageAnswer> = emptyList()
+
+        /** The picture [file] is a graph's (it opens in the graph's window). */
+        fun isGraphPicture(file: String): Boolean = false
 
         /** Numbers of page [index] that can be turned on a scale (a = 3). */
         fun knobs(index: Int): List<Knob> = emptyList()
@@ -395,7 +398,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
     private val density = resources.displayMetrics.density
     private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop.toFloat()
 
-    private enum class Mode { NONE, DRAW, SNAPPED, ERASE, GESTURE, PATH, MOVE, LASER, RULER, RULER_DRAW, SPACE, COMPASS, PDF_TEXT, GRAPH }
+    private enum class Mode { NONE, DRAW, SNAPPED, ERASE, GESTURE, PATH, MOVE, LASER, RULER, RULER_DRAW, SPACE, COMPASS, PDF_TEXT }
 
     private var mode = Mode.NONE
 
@@ -1130,6 +1133,23 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         changed()
     }
 
+    /** Picture [old] of [page] (or one of its file) becomes [new]: a graph's picture redrawn. */
+    fun replaceImage(page: Int, old: PageImage, new: PageImage) {
+        val doc = doc(page) ?: return
+        val at = doc.images.indexOfFirst { it === old }.takeIf { it >= 0 } ?: doc.images.indexOfFirst { it.file == old.file }
+        if (at < 0) {
+            insert(page, images = listOf(new))
+            return
+        }
+        // Where it is now (it may have been moved since), as tall as the new view.
+        val now = doc.images[at]
+        val placed = PageImage(new.file, now.x, now.y, now.w, now.w * new.h / new.w, now.rotation, null, now.layer)
+        doc.edit(images = doc.images.toMutableList().also { it[at] = placed })
+        selectionPage = page
+        reselect(listOf(placed))
+        changed()
+    }
+
     /**
      * «Выровнять почерк» ([Tidy]): the selected handwriting set level, on one baseline per
      * line, words of about one size and even gaps. Highlighter strokes, fills and pictures stay.
@@ -1380,7 +1400,6 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                     val i = e.findPointerIndex(activePointerId)
                     if (i >= 0) spaceTo(toPage(spacePage, e.getX(i), e.getY(i))[1])
                 }
-                Mode.GRAPH -> graphTo(e, done = false)
                 Mode.NONE, Mode.SNAPPED -> Unit
             }
 
@@ -1405,7 +1424,6 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                     Mode.COMPASS -> endCompass()
                     Mode.PDF_TEXT -> endPdfText()
                     Mode.SPACE -> endSpace()
-                    Mode.GRAPH -> graphTo(e, done = true)
                     Mode.NONE, Mode.SNAPPED -> Unit
                 }
                 mode = Mode.NONE
@@ -1453,7 +1471,6 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                         pageLayer.invalidate()
                     }
                     Mode.PDF_TEXT -> clearPdfText()
-                    Mode.GRAPH -> graphTo(e, done = true)
                     else -> Unit
                 }
                 mode = Mode.NONE
@@ -1499,7 +1516,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             Mode.COMPASS -> startCompass(e, index)
             Mode.PDF_TEXT -> startPdfText(e, index)
             Mode.SPACE -> startSpace(e, index)
-            Mode.NONE, Mode.SNAPPED, Mode.GRAPH -> Unit
+            Mode.NONE, Mode.SNAPPED -> Unit
         }
     }
 
@@ -2112,62 +2129,9 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         pageLayer.invalidate()
     }
 
-    // A graph held by a finger: its answer, page, box at the start, by its corner (sizing) or not.
-    private var graphHeld: PageAnswer? = null
-    private var graphPage = 0
-    private var graphBox = RectF()
-    private var graphCorner = false
-    private var graphStartX = 0f
-    private var graphStartY = 0f
-
-    /** The graph under ([x], [y]) on [page], and whether the point is at its sizing corner. */
-    private fun graphAt(page: Int, x: Float, y: Float): Pair<PageAnswer, Boolean>? {
-        val grab = HANDLE_GRAB_DP * density / currentScale()
-        for (a in source?.answers(page).orEmpty()) {
-            if (a.answer !is Answer.Graph) continue
-            val box = RectF(a.x, a.y, a.x + a.size * Plot.WIDTH, a.y + a.size * Plot.HEIGHT)
-            val corner = hypot(x - box.right, y - box.bottom) < grab
-            if (corner || box.contains(x, y)) return a to corner
-        }
-        return null
-    }
-
-    /** The finger stayed still on a graph: from here it moves it, or sizes it by its corner. */
-    private fun startGraphDrag(): Boolean {
-        val page = pageAt(downX, downY)
-        val p = toPage(page, downX, downY)
-        val (a, corner) = graphAt(page, p[0], p[1]) ?: return false
-        mode = Mode.GRAPH
-        graphHeld = a
-        graphPage = page
-        graphBox = RectF(a.x, a.y, a.x + a.size * Plot.WIDTH, a.y + a.size * Plot.HEIGHT)
-        graphCorner = corner
-        graphStartX = p[0]
-        graphStartY = p[1]
-        buzz(HapticFeedbackConstants.LONG_PRESS)
-        return true
-    }
-
-    private fun graphTo(e: MotionEvent, done: Boolean) {
-        val a = graphHeld ?: return
-        val i = e.findPointerIndex(activePointerId).takeIf { it >= 0 } ?: e.actionIndex
-        val p = toPage(graphPage, e.getX(i), e.getY(i))
-        val dx = p[0] - graphStartX
-        val dy = p[1] - graphStartY
-        if (graphCorner) {
-            // Sized from its top-left corner, in proportion.
-            val k = ((graphBox.width() + dx) / graphBox.width() + (graphBox.height() + dy) / graphBox.height()) / 2
-            listener?.onGraphMoved(graphPage, a, 0f, 0f, k.coerceIn(0.3f, 4f), done)
-        } else {
-            listener?.onGraphMoved(graphPage, a, dx, dy, 1f, done)
-        }
-        if (done) graphHeld = null
-    }
-
-    /** The finger stayed still: from here it draws a lasso (or, on a graph, moves the graph). */
+    /** The finger stayed still: from here it draws a lasso. */
     private fun startFingerLasso() {
         if (mode != Mode.GESTURE || tops.isEmpty()) return
-        if (startGraphDrag()) return
         mode = Mode.PATH
         fingerLasso = true
         activePage = pageAt(downX, downY)
@@ -2339,6 +2303,8 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             if (items.any { it !in selected }) freshCopy = false
             reselect(items)
         }
+        // A graph's picture tapped again: its window.
+        if (hit is PageImage && hit in selected && selected.size == 1 && listener?.onGraphPictureTapped(selectionPage, hit) == true) return
         when {
             doc == null || hit == null -> pageLayer.invalidate()
             hit !in selected -> pick(Objects.joined(doc, hit, ::editable))
