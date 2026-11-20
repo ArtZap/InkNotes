@@ -669,6 +669,14 @@ object MathLayout {
         private fun raisedOver(b: Box, r: Box): Boolean =
             b.left > r.cx && b.height < Tune.nestSize * r.height && b.bottom < r.top + Tune.nestBottom * r.height && b.cy < r.top + Tune.nestMiddle * r.height
 
+        /** How far right of its top end an upright ends at the bottom, in its heights. */
+        private fun hookRight(v: Ink): Float {
+            val down = v.ys.last() >= v.ys[0]
+            val top = if (down) v.xs[0] else v.xs.last()
+            val bottom = if (down) v.xs.last() else v.xs[0]
+            return (bottom - top) / max(v.height, 0.5f)
+        }
+
         /** "+" (a short upright and a dash crossing near both middles) or "-" (a lone short dash). */
         private fun sign(g: Glyph): String? {
             // A pen dot left at the end of a stroke is not part of the shape.
@@ -683,6 +691,9 @@ object MathLayout {
             if (v.height !in 0.5f * d.width..2f * d.width) return null
             val crossesV = d.cy in v.top + 0.25f * v.height..v.bottom - 0.25f * v.height
             val crossesD = v.cx in d.left + 0.25f * d.width..d.right - 0.25f * d.width
+            // A t: as tall as a letter, the bar in its upper half, the upright ending in a hook to
+            // the right (2t = after t = 7 read 2+). On CROHME: 21 % of the t's, 0.3 % of the +'s.
+            if (v.height > Tune.tTall * h && d.cy < v.top + Tune.tBar * v.height && hookRight(v) > Tune.tHook) return null
             return if (crossesV && crossesD) "+" else null
         }
 
@@ -1118,6 +1129,11 @@ object Tune {
 
     /** A long bar reaches this part of its width (0: as any bar, [fracReach]). */
     @JvmField var longBarReach = 0.25f
+
+    /** A cross is a t, not "+", when its upright is taller than this part of the line, its bar above [tBar] of it and its end [tHook] of its height to the right. */
+    @JvmField var tTall = 0.75f
+    @JvmField var tBar = 0.5f
+    @JvmField var tHook = 0.3f
 
     /** Above 0: a round bracket without its pair is read by the reader, not taken as a bracket. */
     @JvmField var unpairedRead = 0f

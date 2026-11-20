@@ -84,6 +84,22 @@ class MathPageTest {
     }
 
     @Test
+    fun crossedLetterTAfterDefinition() {
+        // t = 7, then 2t = under it: 14. The bar of the t is not a minus or an "=".
+        val s = Sheet()
+        s.add("t", listOf(106f, 106f, 114f), listOf(60f, 82f, 84f))
+        s.dash(100f, 68f, 12f, null)
+        s.equals(122f, 72f)
+        s.glyph("7", 146f, 60f)
+        s.glyph("2", 100f, 120f)
+        s.add("t", listOf(126f, 126f, 134f), listOf(120f, 142f, 144f))
+        s.dash(120f, 128f, 12f, null)
+        s.equals(142f, 132f)
+        val a = s.answers()
+        assertEquals(a.joinToString { text(it) }, "14", text(a.single()))
+    }
+
+    @Test
     fun simpleSum() {
         val s = Sheet()
         s.glyph("2", 100f, 100f)

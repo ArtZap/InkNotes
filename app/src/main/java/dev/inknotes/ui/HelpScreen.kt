@@ -47,6 +47,8 @@ private val TOPICS = listOf(
     Topic(
         tr("Новое в 0.65", "What's new in 0.65"),
         listOf(
+            tr("Окно «Как прочитано»", "The \"As read\" window") to tr("Окно показывает ровно то прочтение, по которому посчитан ответ на странице, и только те штрихи, что в него вошли (без слова «Ответ:» перед формулой).", "The window shows exactly the reading the page computed its answer from, and only the strokes that went into it (without a word like \"Answer:\" before the formula)."),
+            tr("Буква t", "The letter t") to tr("t с крючком внизу больше не принимается за плюс: после t = 7 строка 2t = даёт 14.", "A t with a hook at the bottom is no longer taken for a plus: after t = 7, 2t = gives 14."),
             tr("Перечёркнутая 7 в дроби", "A crossed 7 in a fraction") to tr("Перекладина семёрки над дробной чертой больше не принимается за «=»: 7/9 + 4/3 = считается целиком.", "The bar of a crossed 7 over a fraction bar is no longer taken for \"=\": 7/9 + 4/3 = is computed whole."),
             tr("Подпись перед формулой", "A label before a formula") to tr("Слово с двоеточием перед формулой («Ответ: 2 + 3 =») не входит в неё, даже если написано вплотную.", "A word with a colon before a formula (\"Answer: 2 + 3 =\") is not part of it, even written close."),
             tr("Меньше неверных ответов", "Fewer wrong answers") to tr("Если начало формулы перед «=» не прочиталось, программа больше не считает один её хвост (из 7/9 + 4/3 = не выйдет 4/3). Вместо неверного ответа — метка «?», нажмите, чтобы исправить.", "When the start of a formula before \"=\" does not read, the app no longer computes just its tail (7/9 + 4/3 = will not give 4/3). Instead of a wrong answer there is a \"?\" mark: tap it to correct."),

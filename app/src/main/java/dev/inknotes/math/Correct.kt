@@ -41,6 +41,30 @@ object Correct {
      * first among the other candidates.
      */
     fun side(strokes: List<Ink>, h: Float, axis: Float, reader: RunReader, target: Expr? = null, learned: Learned? = null, samples: Samples? = null): Side? {
+        val (draft, options) = build(strokes, h, axis, reader, learned, samples, null) ?: return null
+        if (target == null) return draft
+        find(draft, options, target)?.let { return it }
+        // The page read it otherwise than the runs read here give (as digits, a 1 for an l,
+        // a sign for a degree): those readings first, so that the window shows what the page did.
+        val chosen = MathPage.choiceFor(strokes, h, axis, reader, target) ?: return draft
+        val (again, options2) = build(strokes, h, axis, reader, learned, samples, chosen) ?: return draft
+        return find(again, options2, target) ?: again
+    }
+
+    /** The page's reading: the first combination of whole-run readings that gives [target]. */
+    private fun find(draft: Side, holeOptions: List<List<List<Pair<Int, Int>>>>, target: Expr): Side? {
+        var tried = 0
+        for (choice in combos(holeOptions)) {
+            if (++tried > MAX_TRIES) break
+            val picks = draft.initial.toMutableList()
+            for (hole in choice) for ((s, c) in hole) picks[s] = Pick(c, draft.syms[s].level)
+            if (MathPage.parseText(text(draft, picks)) == target) return Side(draft.strokes, draft.parts, draft.syms, picks)
+        }
+        return null
+    }
+
+    /** [strokes] taken apart into symbols, and per run the readings that fit its symbols; [chosen] (per piece) first. */
+    private fun build(strokes: List<Ink>, h: Float, axis: Float, reader: RunReader, learned: Learned?, samples: Samples?, chosen: List<String?>?): Pair<Side, List<List<List<Pair<Int, Int>>>>>? {
         if (strokes.isEmpty()) return null
         val pieces = runCatching { MathLayout.formula(strokes, h, axis) }.getOrNull() ?: return null
         val parts = ArrayList<Part>()
@@ -48,21 +72,24 @@ object Correct {
         // Per hole: the readings of the whole run that fit its symbols, as indices into each
         // symbol's candidates; tried to find the page's reading.
         val holeOptions = ArrayList<List<List<Pair<Int, Int>>>>()
-        for (p in pieces) {
+        for ((i, p) in pieces.withIndex()) {
+            val page = chosen?.getOrNull(i)
             when (p) {
                 is Piece.Text -> if (p.strokes.isEmpty()) {
                     parts += Part.Raw(p.s)
                 } else {
                     parts += Part.S(syms.size)
-                    syms += Sym(p.strokes, SIGN_ALTS[p.s] ?: listOf(p.s), p.level, sign = true, unsure = false)
+                    syms += Sym(p.strokes, (listOfNotNull(page) + (SIGN_ALTS[p.s] ?: listOf(p.s))).distinct(), p.level, sign = true, unsure = false)
                 }
                 is Piece.Hole -> {
                     val raw = reader.read(p.strokes, p.h).map(MathText::normalize).filter { it.isNotEmpty() }.take(MAX_RUNS)
                     // As the page reads runs: a lone upright may be 1, letters may be digits misread.
-                    val runs = (raw + raw.filter { it.length == 1 && it[0] in "lI|/" }.map { "1" } + raw.take(3).mapNotNull(MathPage::asDigits)).distinct()
+                    val runs = (listOfNotNull(page) + raw + raw.filter { it.length == 1 && it[0] in "lI|/" }.map { "1" } + raw.take(3).mapNotNull(MathPage::asDigits)).distinct()
                     val n = p.glyphs.size
                     val fitting = runs.map(::tokens).filter { it.size == n }
-                    if (fitting.isEmpty() || n == 1 && runs.isNotEmpty() && fitting.size < runs.size && tokens(runs[0]).size != 1) {
+                    // What the page read for it does not fit its symbols: read as a whole, as the page did.
+                    val pageApart = page != null && tokens(page).size != n
+                    if (pageApart || fitting.isEmpty() || n == 1 && runs.isNotEmpty() && fitting.size < runs.size && tokens(runs[0]).size != 1) {
                         // The reader saw the run otherwise than as its symbols ("sin" from two
                         // shapes): one wheel for the whole run, its readings as they are.
                         val cands = runs.ifEmpty { listOf("?") }
@@ -93,17 +120,7 @@ object Correct {
             }
         }
         val base = syms.map { Pick(0, it.level) }
-        val draft = Side(strokes, parts, syms, base)
-        if (target == null) return draft
-        // The page's reading: the first combination of whole-run readings that gives it.
-        var tried = 0
-        for (choice in combos(holeOptions)) {
-            if (++tried > MAX_TRIES) break
-            val picks = base.toMutableList()
-            for (hole in choice) for ((s, c) in hole) picks[s] = Pick(c, syms[s].level)
-            if (MathPage.parseText(text(draft, picks)) == target) return Side(strokes, parts, syms, picks)
-        }
-        return draft
+        return Side(strokes, parts, syms, base) to holeOptions
     }
 
     private fun <T> combos(options: List<List<T>>): Sequence<List<T>> = sequence {

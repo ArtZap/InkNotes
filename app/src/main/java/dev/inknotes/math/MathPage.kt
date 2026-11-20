@@ -265,9 +265,14 @@ object MathPage {
                     continue
                 }
             }
-            val pl = pin(left)
-            var l = pl ?: readTrimmed(left, eq, reader, known)
-            fun fix(read: Expr?) = Fix(left, null, listOf(eq.top, eq.bottom) + eq.extra, eq.h, eq.cy, envAt(i), leftRead = read)
+            // The strokes the formula was read from: without a word before it ("Ответ: 2 + 3 =").
+            // The correction window gets these, so that it shows what the page read.
+            val pinnedWhole = pin(left)
+            val trimmed = if (pinnedWhole != null) null else readTrimmedPart(left, eq, reader, known)
+            val used = trimmed?.second ?: left
+            val pl = pinnedWhole ?: pin(used).takeIf { used !== left }
+            var l = pl ?: trimmed?.first
+            fun fix(read: Expr?) = Fix(used, null, listOf(eq.top, eq.bottom) + eq.extra, eq.h, eq.cy, envAt(i), leftRead = read)
             if (l == null) {
                 // Nothing after "=" though something is before it: a mark to tap, not a blank.
                 out += PageAnswer(at, eq.cy, eq.h, Answer.Text(listOf("?")), missing = true, fix = fix(null))
@@ -287,7 +292,7 @@ object MathPage {
                 }
                 if (error != null) {
                     val first = l
-                    val better = readings(left, eq.h, eq.cy, reader, Prefer.NUMBERS, known).firstOrNull { e ->
+                    val better = readings(used, eq.h, eq.cy, reader, Prefer.NUMBERS, known).firstOrNull { e ->
                         e != first && runCatching { Calc.evaluate(e, envAt(i)) != null }.getOrDefault(false)
                     }
                     if (better != null) {
@@ -312,7 +317,7 @@ object MathPage {
                         PageAnswer(at, eq.cy, eq.h, Answer.Text(listOf("?")), missing = true, fix = fix(l))
                     } else {
                         val others = if (pl != null) emptyList() else otherAnswers(answer) { shift -> readTrimmed(left, eq, reader, known, shift)?.let { Calc.evaluate(it, envAt(i)) } }
-                            .ifEmpty { if (readSure(left, eq, reader)) emptyList() else otherReadings(answer, left, eq, reader, known) { Calc.evaluate(it, envAt(i)) } }
+                            .ifEmpty { if (readSure(used, eq, reader)) emptyList() else otherReadings(answer, used, eq, reader, known) { Calc.evaluate(it, envAt(i)) } }
                             .ifEmpty { listOfNotNull(fellBack) }
                         PageAnswer(at, eq.cy, eq.h, answer, others = others, fix = fix(l))
                     }
@@ -674,28 +679,7 @@ object MathPage {
         }
         val holes = pieces.filterIsInstance<Piece.Hole>()
         if (holes.size > MAX_HOLES) return emptyList()
-        val cands = holes.map { hole ->
-            val texts = reader.read(hole.strokes, hole.h).map(MathText::normalize).filter { it.isNotEmpty() }.map(::digitIndex)
-            // A lone upright read as l or I is a 1 nine times in ten (CROHME, read by ML Kit on
-            // the emulator: l 47 of 51, I 33 of 38), so 1 is tried first; not when the page has
-            // that letter already (l = 2 м above: the length).
-            val main = texts.flatMap {
-                when {
-                    it.length != 1 || it[0] !in ONE_LIKE -> listOf(it)
-                    ReadOptions.oneFirst && !known(it) -> listOf("1", it)
-                    else -> listOf(it, "1")
-                }
-            }.distinct()
-            // In a system a misread coefficient (oz for 9z) adds an unknown, which the choice
-            // of readings then rules out; elsewhere it would only add wrong guesses.
-            val lookalikes = if (prefer == Prefer.LETTERS) main.take(2).mapNotNull(::digitLookalike) else emptyList()
-            // Digits read as letters without context ("60" as Go): the same run as digits.
-            val digits = if (prefer != Prefer.FIRST) main.take(3).mapNotNull(::asDigits) else emptyList()
-            val all = (main.take(MAX_CANDIDATES) + digits + lookalikes).distinct().ifEmpty { return emptyList() }
-            // Computing: digit readings first, so the combinations tried first are numbers
-            // (1/5 · 5/1, not I/s · s/d) — there are too many to try them all.
-            if (prefer == Prefer.NUMBERS) all.sortedBy { t -> if (t.all { it.isDigit() || it == ',' || it == '.' }) 0 else 1 } else all
-        }
+        val cands = holes.map { hole -> holeTexts(hole, reader, prefer, known).ifEmpty { return emptyList() } }
         // Signs told by their shape may be what the reader would take them for (a prime is
         // a 1 written short, a degree a small 0): tried after the sign, and a reading with one
         // counts a little worse than the same reading with the sign.
@@ -756,6 +740,64 @@ object MathPage {
         return found.sortedBy { it.second }.map { it.first }.take(MAX_READINGS)
     }
 
+    /** The texts a run is read as, best first, for [readings]; empty when the reader saw nothing. */
+    private fun holeTexts(hole: Piece.Hole, reader: RunReader, prefer: Prefer, known: (String) -> Boolean): List<String> {
+        val texts = reader.read(hole.strokes, hole.h).map(MathText::normalize).filter { it.isNotEmpty() }.map(::digitIndex)
+        // A lone upright read as l or I is a 1 nine times in ten (CROHME, read by ML Kit on
+        // the emulator: l 47 of 51, I 33 of 38), so 1 is tried first; not when the page has
+        // that letter already (l = 2 м above: the length).
+        val main = texts.flatMap {
+            when {
+                it.length != 1 || it[0] !in ONE_LIKE -> listOf(it)
+                ReadOptions.oneFirst && !known(it) -> listOf("1", it)
+                else -> listOf(it, "1")
+            }
+        }.distinct()
+        // In a system a misread coefficient (oz for 9z) adds an unknown, which the choice
+        // of readings then rules out; elsewhere it would only add wrong guesses.
+        val lookalikes = if (prefer == Prefer.LETTERS) main.take(2).mapNotNull(::digitLookalike) else emptyList()
+        // Digits read as letters without context ("60" as Go): the same run as digits.
+        val digits = if (prefer != Prefer.FIRST) main.take(3).mapNotNull(::asDigits) else emptyList()
+        val all = (main.take(MAX_CANDIDATES) + digits + lookalikes).distinct()
+        // Computing: digit readings first, so the combinations tried first are numbers
+        // (1/5 · 5/1, not I/s · s/d) — there are too many to try them all.
+        return if (prefer == Prefer.NUMBERS) all.sortedBy { t -> if (t.all { it.isDigit() || it == ',' || it == '.' }) 0 else 1 } else all
+    }
+
+    /**
+     * What each piece of the layout of [strokes] was read as to give [target]: the text of
+     * each run (and of each sign told by its shape), null for the rest; null when no reading
+     * tried gives it. The correction window starts from these, so that it shows what the
+     * page read, whichever way of reading (numbers, letters, a graph) the page took.
+     */
+    fun choiceFor(strokes: List<Ink>, h: Float, axis: Float, reader: RunReader, target: Expr, known: (String) -> Boolean = { false }): List<String?>? {
+        val pieces = runCatching { MathLayout.formula(strokes, h, axis) }.getOrNull() ?: return null
+        val slots = pieces.map { p ->
+            when (p) {
+                is Piece.Hole -> (holeTexts(p, reader, Prefer.NUMBERS, known) + holeTexts(p, reader, Prefer.LETTERS, known)).distinct().ifEmpty { return null }
+                is Piece.Text -> if (p.strokes.isNotEmpty() && (SIGN_ALTERNATIVES[p.s]?.size ?: 0) > 1) SIGN_ALTERNATIVES.getValue(p.s) else listOf(p.s)
+            }
+        }
+        if (pieces.count { it is Piece.Hole } > MAX_HOLES) return null
+        // As [combinations], without its limit: the page's reading differs from the first
+        // guesses in at most two places.
+        val best = slots.map { it[0] }
+        val tries = sequence {
+            yield(best)
+            for (i in slots.indices) for (j in 1 until slots[i].size) yield(best.toMutableList().also { it[i] = slots[i][j] })
+            for (i in slots.indices) for (k in i + 1 until slots.size) for (a in 1 until slots[i].size) for (b in 1 until slots[k].size) {
+                yield(best.toMutableList().also { it[i] = slots[i][a]; it[k] = slots[k][b] })
+            }
+        }
+        for (choice in tries.take(MAX_CHOICE_TRIES)) {
+            val text = choice.joinToString("")
+            if (integralVariants(text).flatMap { listOf(it) + bracketFixes(it) }.any { v -> runCatching { Parser.parse(v) }.getOrNull() == target }) {
+                return pieces.indices.map { i -> if (pieces[i] is Piece.Hole || choice[i] != (pieces[i] as Piece.Text).s) choice[i] else null }
+            }
+        }
+        return null
+    }
+
     /**
      * The text of a formula written by hand (a lasso selection), in the parser's LaTeX-like
      * form: the first reading that parses (each side of an "=" on its own), else the first
@@ -805,10 +847,15 @@ object MathPage {
      * ("Ответ: 2+3 =") spoil the reading; then the parts left of wide gaps are dropped one by
      * one while that gives a cleaner reading (one that parses, with fewer unknown letters).
      */
-    private fun readTrimmed(left: List<Ink>, eq: Equals, reader: RunReader, known: (String) -> Boolean, shift: MathLayout.Shift = MathLayout.Shift.NONE): Expr? {
+    private fun readTrimmed(left: List<Ink>, eq: Equals, reader: RunReader, known: (String) -> Boolean, shift: MathLayout.Shift = MathLayout.Shift.NONE): Expr? =
+        readTrimmedPart(left, eq, reader, known, shift).first
+
+    /** [readTrimmed] and the strokes it read: [left], or its part after a word. */
+    private fun readTrimmedPart(left: List<Ink>, eq: Equals, reader: RunReader, known: (String) -> Boolean, shift: MathLayout.Shift = MathLayout.Shift.NONE): Pair<Expr?, List<Ink>> {
         fun score(e: Expr) = letters(e).count { !known(it) }
         var best = read(left, eq.h, eq.cy, reader, Prefer.NUMBERS, known, shift)
-        if (best != null && score(best) == 0) return best
+        var bestInk = left
+        if (best != null && score(best) == 0) return best to left
         // Split points: gaps in the x-extent of the side wider than a symbol's width.
         val spans = left.map { it.left to it.right }.sortedBy { it.first }
         val cuts = ArrayList<Float>()
@@ -828,10 +875,13 @@ object MathPage {
             // some text: "7/9 + 4/3 =" with the 7 unread would answer 4/3.
             if (startsWithSign(part, eq, reader, shift)) continue
             val e = read(part, eq.h, eq.cy, reader, Prefer.NUMBERS, known, shift) ?: continue
-            if (best == null || score(e) < score(best)) best = e
+            if (best == null || score(e) < score(best)) {
+                best = e
+                bestInk = part
+            }
             if (score(e) == 0) break
         }
-        return best
+        return best to bestInk
     }
 
     /** Where colons among [strokes] end (two dots one over the other), left to right. */
@@ -1399,6 +1449,7 @@ object MathPage {
     private const val MAX_COMBINATIONS = 40
     private const val MAX_READINGS = 6
     private const val MAX_TRIMS = 4
+    private const val MAX_CHOICE_TRIES = 2000
 
     /** Signs a formula does not start with: a part read from one is the tail of a formula. */
     private const val LEADING_SIGNS = "+-−·×÷*/"

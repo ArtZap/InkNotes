@@ -119,6 +119,7 @@ PageAnswer                    ответ, «под вопросом» (others), 
 | `app/src/androidTest/.../math` (эмулятор, ML Kit) | `RealPagesTest` (обязателен, ru и en), `SymbolReadTest`, `FormulaReadTest`, `MathNotesTest` (на API 34 падает — редактору нужно окно; на планшете проходит) |
 | `app/src/sharedTest` | Общий код стендов: `FormulaValues` (сравнение по значению с одинаковыми случайными значениями букв), `FormulaJudge` (как стенд оценивает формулу — одинаково на эмуляторе и в повторе), `RecordedReader` (записанные прочтения ML Kit) |
 | `SynthBenchTest` (JVM) | Синтетические формулы и уравнения с идеальным чтением, регрессия по `synth-outcomes.tsv` |
+| `WindowAgreementTest` (JVM) | Окно «Как прочитано» начинает с прочтения страницы (повтор ML Kit), порог 97 % |
 | `ReplayBenchTest` (JVM) | Стенд эмулятора на записанных прочтениях ML Kit, регрессия по `replay-outcomes.tsv` |
 | `tools/formula-bench.sh` | Данные CROHME (кеш, проверка хэша), `--update` — новая базовая линия (только при намеренном изменении) |
 | `tools/crohme_symbols.py` | Нарезка символов CROHME для стенда на устройстве |
