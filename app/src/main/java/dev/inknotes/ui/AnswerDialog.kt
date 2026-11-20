@@ -53,7 +53,15 @@ fun AnswerDialog(c: EditorController, a: PageAnswer, onDismiss: () -> Unit) {
     var expected by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (a.error) tr("Не получилось", "Did not work") else tr("Ответ", "Answer")) },
+        title = {
+            Text(
+                when {
+                    a.error -> tr("Не получилось", "Did not work")
+                    a.unsure -> tr("Ответ под вопросом", "Answer not certain")
+                    else -> tr("Ответ", "Answer")
+                },
+            )
+        },
         text = {
             Column(Modifier.heightIn(max = 460.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 (a.answer as? Answer.Surface)?.let { SurfaceView(it) }
@@ -82,6 +90,22 @@ fun AnswerDialog(c: EditorController, a: PageAnswer, onDismiss: () -> Unit) {
                     }) { Text(tr("Сохранить пример", "Save example")) }
                 }
                 Text(text, style = MaterialTheme.typography.titleMedium)
+                if (a.unsure) {
+                    Text(
+                        tr(
+                            "Написанное можно прочитать по-разному (где показатель степени, где индекс, где дробь), и ответы при этом расходятся. Другие возможные ответы:",
+                            "What is written can be read in more than one way (what is an exponent, an index, a fraction), and the answers differ. Other possible answers:",
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    for (other in a.others) Text(other, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        tr("Чтобы ответ стал точным, напишите показатели и индексы заметно меньше и выше или ниже строки.", "To make the answer certain, write exponents and indices clearly smaller and above or below the line."),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 val steps = a.steps
                 if (!steps.isNullOrEmpty()) {
                     HorizontalDivider()

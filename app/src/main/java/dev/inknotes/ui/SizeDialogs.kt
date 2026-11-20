@@ -44,7 +44,7 @@ enum class LengthUnit(val title: String, val mm: Float, val decimals: Int) {
 
 private fun format(v: Float, decimals: Int): String {
     if (!v.isFinite()) return ""
-    return BigDecimal(v.toDouble()).setScale(decimals, RoundingMode.HALF_UP).stripTrailingZeros().toPlainString().replace('.', ',')
+    return BigDecimal(v.toDouble()).setScale(decimals, RoundingMode.HALF_UP).stripTrailingZeros().toPlainString().let { if (dev.inknotes.data.Lang.english) it else it.replace('.', ',') }
 }
 
 /** A positive size as typed (comma or point); null for anything else or absurdly large. */

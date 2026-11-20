@@ -27,8 +27,21 @@ jobs:
             ./gradlew --no-daemon :app:updateLintBaseline || true
             echo "=====LINT BASELINE"; base64 -w 8000 app/lint-baseline.xml || true; echo "=====END"
           fi
+      # Handwritten formulas for the formula bench (CC BY-NC-SA: tests only, never in the APK).
+      # With them FormulaBenchTest runs with the other unit tests and fails on a regression.
+      - uses: actions/cache@v4
+        with:
+          path: build/crohme
+          key: crohme-e5fa1924a89558b97086f15dde2ac4c2420e86d1
+      - name: Formula bench data
+        run: tools/formula-bench.sh --fetch
       - name: Compile, unit tests, compile device tests, lint, shrunk release
+        env:
+          CROHME_DIR: ${{ github.workspace }}/build/crohme/CROHME_full_v2
         run: ./gradlew --no-daemon --stacktrace :app:testDebugUnitTest :app:compileDebugAndroidTestKotlin :app:lintDebug :app:assembleRelease
+      - name: Formula bench report
+        if: always()
+        run: cat app/build/formula-report.json 2>/dev/null || echo "no formula report"
       - name: Release APK size
         if: always()
         run: ls -la app/build/outputs/apk/release/ app/build/outputs/mapping/release/ 2>/dev/null || true

@@ -37,12 +37,15 @@ object Printer {
         if (a == floor(a) && a < 1e15) return sign + a.toLong().toString()
         if (a >= 1e-4 && a < 1e15) {
             val s = BigDecimal(a).round(MathContext(SIGNIFICANT)).stripTrailingZeros().toPlainString()
-            return sign + s.replace('.', ',')
+            return sign + s.replace('.', point())
         }
         val exp = floor(log10(a)).toInt()
         val mant = BigDecimal(a / Math.pow(10.0, exp.toDouble())).round(MathContext(4)).stripTrailingZeros().toPlainString()
-        return sign + mant.replace('.', ',') + "·10" + superscript(exp.toString())
+        return sign + mant.replace('.', point()) + "·10" + superscript(exp.toString())
     }
+
+    /** The decimal separator of the interface language: 2,5 in Russian, 2.5 in English. */
+    private fun point() = if (dev.inknotes.data.Lang.english) '.' else ','
 
     /** A result: 1/3 rather than 0,333333 when the decimal would not end; 2,5 stays decimal. */
     fun value(v: Double): String {

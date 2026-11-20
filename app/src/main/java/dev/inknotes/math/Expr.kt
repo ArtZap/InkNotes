@@ -47,7 +47,7 @@ sealed class Expr {
 /**
  * Parses math as read from handwriting: ordinary infix text (`2x+sin x`, `3:4`, `5!`) plus the
  * structures found in the 2-D layout, written in a small LaTeX-like form:
- * `\frac{a}{b}`, `x^{2}`, `x_{1}`, `\sqrt{a}`, `\int_{a}^{b} … dx`, `\mat{1&2\\3&4}`, `\det{…}`.
+ * `\frac{a}{b}`, `x^{2}`, `x_{1}`, `\sqrt{a}`, `\sqrt[3]{a}`, `\int_{a}^{b} … dx`, `\mat{1&2\\3&4}`, `\det{…}`.
  * Multiplication may be implicit (`2x`, `3(x+1)`, `sin x cos x`).
  */
 class Parser private constructor(private val toks: List<Tok>) {
@@ -395,7 +395,18 @@ class Parser private constructor(private val toks: List<Tok>) {
             val den = group()
             derivativeOrder(num, den)?.let { (v, n) -> Expr.Deriv(implicitChain(), v, n) } ?: Expr.div(num, den)
         }
-        "sqrt" -> if (isOp("{") || isOp("(")) Expr.Fn("sqrt", listOf(if (isOp("(")) primary() else group())) else Expr.Fn("sqrt", listOf(postfix()))
+        "sqrt" -> if (isOp("[")) {
+            // \sqrt[3]{x}: the root of degree 3, x to the power 1/3.
+            pos++
+            val degree = expr()
+            expect("]")
+            val radicand = if (isOp("(")) primary() else group()
+            Expr.Pow(radicand, Expr.div(Expr.Num(1.0), degree))
+        } else if (isOp("{") || isOp("(")) {
+            Expr.Fn("sqrt", listOf(if (isOp("(")) primary() else group()))
+        } else {
+            Expr.Fn("sqrt", listOf(postfix()))
+        }
         "det" -> Expr.Fn("det", listOf(group()))
         "mat" -> matrix()
         "int" -> integral()

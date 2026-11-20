@@ -3506,6 +3506,9 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                 val color = when {
                     a.error && dark -> 0xFFE57373.toInt()
                     a.error -> 0xFFC62828.toInt()
+                    // Unsure (the formula reads two ways): grey, with a "?" after it.
+                    a.unsure && dark -> 0xFF9AA0A6.toInt()
+                    a.unsure -> 0xFF80868B.toInt()
                     dark -> 0xFF82AAFF.toInt()
                     else -> ANSWER_COLOR
                 }
@@ -3514,27 +3517,28 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                 val ts = answerPaint.textSize
                 when (val ans = a.answer) {
                     is Answer.Text -> {
+                        val lines = if (a.unsure) ans.lines.dropLast(1) + (ans.lines.last() + " ?") else ans.lines
                         answerPaint.textAlign = Paint.Align.LEFT
                         // An "=" near the right edge: a smaller answer, or else one under the line.
                         val room = pageWidth - ANSWER_MARGIN - a.x
-                        val wide = ans.lines.maxOf { answerPaint.measureText(it) }
+                        val wide = lines.maxOf { answerPaint.measureText(it) }
                         var x = a.x
                         var y = a.y
                         if (wide > room) {
                             answerPaint.textSize = ts * max(MIN_ANSWER_SCALE, room / wide)
-                            val w = ans.lines.maxOf { answerPaint.measureText(it) }
+                            val w = lines.maxOf { answerPaint.measureText(it) }
                             if (w > room) {
                                 answerPaint.textSize = ts
                                 x = max(ANSWER_MARGIN, pageWidth - ANSWER_MARGIN - wide)
-                                y = a.y + a.size * (0.9f + 0.65f * ans.lines.size)
+                                y = a.y + a.size * (0.9f + 0.65f * lines.size)
                             }
                         }
                         val size = answerPaint.textSize
                         val lineH = size * 1.25f
-                        var baseline = y - (ans.lines.size - 1) * lineH / 2 + size * 0.36f
-                        val textW = ans.lines.maxOf { answerPaint.measureText(it) }
-                        bounds(a).set(x, baseline - size, x + textW, baseline + (ans.lines.size - 1) * lineH + size * 0.3f)
-                        for (line in ans.lines) {
+                        var baseline = y - (lines.size - 1) * lineH / 2 + size * 0.36f
+                        val textW = lines.maxOf { answerPaint.measureText(it) }
+                        bounds(a).set(x, baseline - size, x + textW, baseline + (lines.size - 1) * lineH + size * 0.3f)
+                        for (line in lines) {
                             canvas.drawText(line, x, baseline, answerPaint)
                             baseline += lineH
                         }

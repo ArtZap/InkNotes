@@ -22,7 +22,8 @@ import kotlin.random.Random
  */
 object FormulaBench {
 
-    enum class Outcome { RIGHT, WRONG, NONE }
+    /** UNSURE: an answer the app shows as unsure (grey, with others to choose from), not as right or wrong. */
+    enum class Outcome { RIGHT, WRONG, NONE, UNSURE }
 
     class Result(val sample: InkSample, val kind: String, val outcome: Outcome, val got: String?, val cut: Int)
 
@@ -86,21 +87,31 @@ object FormulaBench {
         return abs(a - b) <= 1e-5 * max(1.0, max(abs(a), abs(b)))
     }
 
+    /**
+     * Line height and middle as the app takes them for a lasso selection
+     * ([MathPage.formulaSource]): the height three quarters up the stroke heights, the middle of
+     * the strokes about that tall. A median over all symbols would be the index's height in T₈₅₀.
+     */
     private fun axis(s: InkSample): Pair<Float, Float> {
-        val boxes = s.symbols.filter { it.label.length == 1 && it.label[0].isLetterOrDigit() }.map { sym ->
-            val ink = sym.strokes.map { s.strokes[it] }
-            Box.of(ink)
-        }.ifEmpty { listOf(Box.of(s.strokes)) }
-        val h = MathLayout.median(boxes.map { it.height })!!.coerceAtLeast(8f)
-        return h to MathLayout.median(boxes.map { it.cy })!!
+        val heights = s.strokes.filter { !it.isDash }.map { it.height }.sorted()
+        val h = max(heights.getOrNull(heights.size * 3 / 4) ?: s.strokes.maxOf { it.height }, 8f)
+        val mids = s.strokes.filter { it.height in 0.4f * h..1.6f * h }.map { it.cy }
+        return h to (MathLayout.median(mids) ?: Box.of(s.strokes).cy)
     }
 
     fun layout(s: InkSample, expected: Expr): Result {
         val reader = PerfectReader(s)
         val (h, ax) = axis(s)
         val got = runCatching { MathPage.read(s.strokes, h, ax, reader, MathPage.Prefer.FIRST) }.getOrNull()
+        // Read again with the layout's thresholds moved: another value means the app shows
+        // the answer as unsure, not as an answer.
+        val unsure = got != null && MathLayout.Shift.CHECKS.any { shift ->
+            val again = runCatching { MathPage.read(s.strokes, h, ax, reader, MathPage.Prefer.FIRST, shift = shift) }.getOrNull()
+            again != null && again != got && !same(again, got)
+        }
         val outcome = when {
             got == null -> Outcome.NONE
+            unsure -> Outcome.UNSURE
             same(got, expected) -> Outcome.RIGHT
             else -> Outcome.WRONG
         }
@@ -128,15 +139,16 @@ object FormulaBench {
         val text = (a?.answer as? Answer.Text)?.lines?.joinToString(";")
         val outcome = when {
             text == null || a.error -> Outcome.NONE
+            a.unsure -> Outcome.UNSURE
             close(text, want) -> Outcome.RIGHT
             else -> Outcome.WRONG
         }
         return Result(s, kind(s.truth), outcome, text, reader.cut)
     }
 
-    class Figures(var n: Int = 0, var right: Int = 0, var wrong: Int = 0) {
+    class Figures(var n: Int = 0, var right: Int = 0, var wrong: Int = 0, var unsure: Int = 0) {
         fun pct(k: Int) = if (n == 0) 0.0 else 100.0 * k / n
-        override fun toString() = "%5d  верно %5.1f%%  неверно %5.1f%%  нет ответа %5.1f%%".format(n, pct(right), pct(wrong), pct(n - right - wrong))
+        override fun toString() = "%5d  верно %5.1f%%  неверно %5.1f%%  не уверен %5.1f%%  нет ответа %5.1f%%".format(n, pct(right), pct(wrong), pct(unsure), pct(n - right - wrong - unsure))
     }
 
     fun figures(results: List<Result>): Map<String, Figures> {
@@ -147,6 +159,7 @@ object FormulaBench {
                 f.n++
                 if (r.outcome == Outcome.RIGHT) f.right++
                 if (r.outcome == Outcome.WRONG) f.wrong++
+                if (r.outcome == Outcome.UNSURE) f.unsure++
             }
         }
         return out
