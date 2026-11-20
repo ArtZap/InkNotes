@@ -1036,6 +1036,48 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         changed()
     }
 
+    /**
+     * «Выровнять почерк» ([Tidy]): the selected handwriting set level, on one baseline per
+     * line, words of about one size and even gaps. Highlighter strokes, fills and pictures stay.
+     * Returns false when there was nothing to straighten.
+     */
+    fun tidySelection(): Boolean {
+        val doc = doc(selectionPage) ?: return false
+        val ink = doc.strokes.filter { it in selected && it.kind.isInk }
+        if (ink.size < 2) return false
+        val p = StrokeInput()
+        val marks = ink.map { s ->
+            val inputs = s.stroke.inputs
+            val xs = FloatArray(inputs.size)
+            val ys = FloatArray(inputs.size)
+            for (i in 0 until inputs.size) {
+                inputs.populate(i, p)
+                xs[i] = p.x
+                ys[i] = p.y
+            }
+            Tidy.Mark(xs, ys)
+        }
+        val moves = Tidy.moves(marks)
+        if (moves.all { it.still }) return false
+        val byStroke = java.util.IdentityHashMap<PageStroke, Tidy.Move>()
+        ink.forEachIndexed { i, s -> byStroke[s] = moves[i] }
+        val moved = ArrayList<Any>()
+        val strokes = doc.strokes.map { s ->
+            val m = byStroke[s]
+            if (m == null || m.still) {
+                if (s in selected) moved += s
+                s
+            } else {
+                val matrix = Matrix().apply { setValues(floatArrayOf(m.a, m.b, m.c, m.d, m.e, m.f, 0f, 0f, 1f)) }
+                PageEdits.transform(s, PageEdits.Transform(matrix, scale = m.scale, rotation = m.angle)).also(moved::add)
+            }
+        }
+        doc.edit(strokes = strokes)
+        reselect(moved + doc.fills.filter { it in selected } + doc.images.filter { it in selected })
+        changed()
+        return true
+    }
+
     /** A pen, finger or gesture is on the page: undo and redo wait until it is done. */
     val busy get() = mode != Mode.NONE
 
