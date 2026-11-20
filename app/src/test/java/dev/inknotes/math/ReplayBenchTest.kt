@@ -77,8 +77,8 @@ class ReplayBenchTest {
                         continue
                     }
                     val reader = RecordedReader(r)
-                    val o = FormulaJudge.selected(f, reader).first
-                    for (k in listOf("all", f.kind, f.set)) layout.getOrPut(k) { Tally() }.add(o)
+                    val o = if (FormulaJudge.hasSelected(f)) FormulaJudge.selected(f, reader).first else "SKIP"
+                    if (o != "SKIP") for (k in listOf("all", f.kind, f.set)) layout.getOrPut(k) { Tally() }.add(o)
                     val po = FormulaJudge.page(f, reader)
                     if (po != null) for (k in listOf("all", f.kind, f.set)) page.getOrPut(k) { Tally() }.add(po)
                     outcomes["${f.set}/${f.id}"] = o to po

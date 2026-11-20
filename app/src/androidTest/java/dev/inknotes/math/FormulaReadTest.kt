@@ -69,7 +69,9 @@ class FormulaReadTest {
                 } else {
                     { run: List<Ink>, plain: List<String>, guesses: List<String> -> recorded.add(RecordedReader.line(recordingId, run, plain, guesses)); Unit }
                 }
-                val (summary, report) = measure(lines, math)
+                // The synthetic formulas (equations among them) only as shipped: the switches are
+                // compared on CROHME.
+                val (summary, report) = measure(if (recorded != null) lines else lines.filter { !it.startsWith(SYNTHETIC) }, math)
                 math.onRecognized = null
                 if (recorded != null) File(dir, "reads.tsv").writeText(recorded.joinToString("\n", postfix = "\n"))
                 compared += "  %-18s %s".format(name, summary)
@@ -88,6 +90,8 @@ class FormulaReadTest {
         Log.i("FormulaReadTest", report)
     }
 
+    private val SYNTHETIC = "synthetic\t"
+
     /** The formula being read, for the recorded readings. */
     private var recordingId = ""
 
@@ -105,8 +109,10 @@ class FormulaReadTest {
                 val (set, id, kind) = Triple(f.set, f.id, f.kind)
                 val strokes = f.strokes
                 recordingId = "$set/$id"
-                val (o, got) = FormulaJudge.selected(f, math.reader)
-                for (k in listOf("all", kind, set)) layout.getOrPut(k) { Tally() }.add(o)
+                val (o, got) = if (FormulaJudge.hasSelected(f)) FormulaJudge.selected(f, math.reader) else ("SKIP" to null)
+                // "all" stays CROHME, comparable with the runs before the synthetic formulas.
+                val keys = if (set == "synthetic") listOf(set, "$set/$kind") else listOf("all", kind, set)
+                if (o != "SKIP") for (k in keys) layout.getOrPut(k) { Tally() }.add(o)
                 // Signals for "unsure", measured before one is chosen: the moved layouts disagree;
                 // the first readings (the reader's first guesses and the next ones) give other values.
                 if (got != null) {
@@ -122,7 +128,7 @@ class FormulaReadTest {
                 }
                 if (o == "WRONG" && wrongs.size < 60) wrongs += "$set/$id  →  ${runCatching { Printer.expr(got!!) }.getOrDefault("?")}"
                 val po = FormulaJudge.page(f, math.reader) ?: continue
-                for (k in listOf("all", kind, set)) page.getOrPut(k) { Tally() }.add(po)
+                for (k in keys) page.getOrPut(k) { Tally() }.add(po)
             }
         }
         val report = buildString {

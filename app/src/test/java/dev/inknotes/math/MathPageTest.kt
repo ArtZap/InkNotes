@@ -47,6 +47,59 @@ class MathPageTest {
     private fun text(a: PageAnswer) = (a.answer as Answer.Text).lines.joinToString("\n")
 
     @Test
+    fun crossedSevenOverFractionBarIsNotEquals() {
+        // 7/9 + 4/3 = with a crossed 7: its crossbar and the fraction bar under it are not an
+        // "=" (the left side was cut there and 4/3 answered).
+        val s = Sheet()
+        s.add("7", listOf(100f, 114f, 104f), listOf(70f, 70f, 94f))
+        s.dash(102f, 84f, 13f, null)
+        s.dash(96f, 100f, 24f)
+        s.glyph("9", 101f, 106f)
+        s.glyph("+", 128f, 94f, 12f, 12f)
+        s.glyph("4", 150f, 70f)
+        s.dash(146f, 100f, 22f)
+        s.glyph("3", 150f, 106f)
+        s.equals(178f, 100f)
+        val a = s.answers()
+        assertTrue(a.joinToString { text(it) }, a.none { text(it).startsWith("1,33") })
+        assertEquals("19/9", text(a.single()))
+    }
+
+    @Test
+    fun wordWithColonBeforeFormulaIsLeftOut() {
+        // "Ответ: 2 + 3 =": the word and the colon are not part of the formula.
+        val s = Sheet()
+        s.glyph("О", 20f, 100f)
+        s.glyph("т", 38f, 104f, 12f, 20f)
+        s.glyph("в", 54f, 104f, 12f, 20f)
+        s.glyph("е", 70f, 104f, 12f, 20f)
+        s.glyph("т", 86f, 104f, 12f, 20f)
+        s.add(null, listOf(104f, 105f, 106f), listOf(108f, 109f, 108f))
+        s.add(null, listOf(104f, 105f, 106f), listOf(120f, 121f, 120f))
+        s.glyph("2", 118f, 100f)
+        s.glyph("+", 138f, 106f, 12f, 12f)
+        s.glyph("3", 158f, 100f)
+        s.equals(180f, 112f)
+        assertEquals("5", text(s.answers().single()))
+    }
+
+    @Test
+    fun crossedLetterTAfterDefinition() {
+        // t = 7, then 2t = under it: 14. The bar of the t is not a minus or an "=".
+        val s = Sheet()
+        s.add("t", listOf(106f, 106f, 114f), listOf(60f, 82f, 84f))
+        s.dash(100f, 68f, 12f, null)
+        s.equals(122f, 72f)
+        s.glyph("7", 146f, 60f)
+        s.glyph("2", 100f, 120f)
+        s.add("t", listOf(126f, 126f, 134f), listOf(120f, 142f, 144f))
+        s.dash(120f, 128f, 12f, null)
+        s.equals(142f, 132f)
+        val a = s.answers()
+        assertEquals(a.joinToString { text(it) }, "14", text(a.single()))
+    }
+
+    @Test
     fun simpleSum() {
         val s = Sheet()
         s.glyph("2", 100f, 100f)

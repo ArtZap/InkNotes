@@ -19,9 +19,11 @@ class FormulaExportTest {
             val lines = FormulaBench.SETS.drop(1).flatMap { set ->
                 InkMl.loadDir(File(root, set)).mapNotNull { s -> FormulaBench.covered(s)?.let { FormulaBench.exportLine(set, s, it) } }
             }
+            // Synthetic formulas and equations (SynthFormulas), read on the device as shipped.
+            val synth = SynthFormulas.bank(root)?.let { SynthFormulas.generate(it) }.orEmpty().map { SynthFormulas.exportLine(it.formula) }
             out.parentFile?.mkdirs()
-            out.writeText(lines.joinToString("\n", postfix = "\n"))
-            println("formulas for the device: ${lines.size}")
+            out.writeText((lines + synth).joinToString("\n", postfix = "\n"))
+            println("formulas for the device: ${lines.size} + synthetic ${synth.size}")
         } finally {
             Printer.numbers = numbers
         }
