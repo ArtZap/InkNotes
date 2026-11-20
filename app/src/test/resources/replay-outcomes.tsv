@@ -9,6 +9,7 @@ CROHME2013_data/TestINKMLGT/104_em_48	WRONG
 CROHME2013_data/TestINKMLGT/104_em_53	WRONG	
 CROHME2013_data/TestINKMLGT/104_em_55	UNSURE	
 CROHME2013_data/TestINKMLGT/105_em_77	UNSURE	
+CROHME2013_data/TestINKMLGT/105_em_80	NONE	
 CROHME2013_data/TestINKMLGT/105_em_81	UNSURE	
 CROHME2013_data/TestINKMLGT/106_em_108	UNSURE	
 CROHME2013_data/TestINKMLGT/106_em_110	WRONG	
@@ -27,6 +28,7 @@ CROHME2013_data/TestINKMLGT/118_em_221	RIGHT
 CROHME2013_data/TestINKMLGT/118_em_226	UNSURE	
 CROHME2013_data/TestINKMLGT/118_em_236	UNSURE	
 CROHME2013_data/TestINKMLGT/118_em_241	UNSURE	
+CROHME2013_data/TestINKMLGT/118_em_245	NONE	
 CROHME2013_data/TestINKMLGT/120_em_287	RIGHT	
 CROHME2013_data/TestINKMLGT/120_em_292	RIGHT	
 CROHME2013_data/TestINKMLGT/120_em_300	NONE	
@@ -96,12 +98,14 @@ CROHME2013_data/TestINKMLGT/rit_42125_3	WRONG
 CROHME2013_data/TestINKMLGT/rit_42130_0	RIGHT	RIGHT
 CROHME2013_data/TestINKMLGT/rit_42130_2	WRONG	WRONG
 CROHME2013_data/TestINKMLGT/rit_42130_4	RIGHT	
-CROHME2013_data/TestINKMLGT/rit_42145_2	RIGHT	UNSURE
+CROHME2013_data/TestINKMLGT/rit_42140_1	NONE	
+CROHME2013_data/TestINKMLGT/rit_42145_2	WRONG	UNSURE
 CROHME2013_data/TestINKMLGT/rit_42150_0	RIGHT	WRONG
 CROHME2013_data/TestINKMLGT/rit_42150_3	WRONG	WRONG
 CROHME2013_data/TestINKMLGT/rit_42150_4	NONE	
 CROHME2013_data/TestINKMLGT/rit_42155_0	NONE	
 CROHME2013_data/TestINKMLGT/rit_42155_1	RIGHT	
+CROHME2013_data/TestINKMLGT/rit_42155_3	NONE	
 CROHME2013_data/TestINKMLGT/rit_4215_0	RIGHT	
 CROHME2013_data/TestINKMLGT/rit_4215_1	RIGHT	
 CROHME2013_data/TestINKMLGT/rit_4215_2	RIGHT	
@@ -224,6 +228,7 @@ CROHME2012_data/testDataGT/KME2G3_5_sub_61	WRONG	WRONG
 CROHME2012_data/testDataGT/KME2G3_5_sub_63	RIGHT	
 CROHME2012_data/testDataGT/KME2G3_6_sub_15	WRONG	
 CROHME2012_data/testDataGT/KME2G3_6_sub_3	NONE	
+CROHME2012_data/testDataGT/KME2G3_6_sub_39	NONE	
 CROHME2012_data/testDataGT/KME2G3_6_sub_42	UNSURE	
 CROHME2012_data/testDataGT/KME2G3_6_sub_61	NONE	NONE
 CROHME2012_data/testDataGT/KME2G3_6_sub_63	WRONG	
@@ -273,6 +278,7 @@ CROHME2012_data/testDataGT/formulaire049-equation063	WRONG
 CROHME2012_data/testDataGT/formulaire049-equation068	UNSURE	
 CROHME2012_data/testDataGT/formulaire050-equation006	WRONG	
 CROHME2012_data/testDataGT/formulaire050-equation048	RIGHT	UNSURE
+CROHME2012_data/testDataGT/formulaire050-equation061	NONE	
 CROHME2012_data/testDataGT/formulaire050-equation073	UNSURE	
 CROHME2012_data/testDataGT/formulaire051-equation021	RIGHT	WRONG
 CROHME2012_data/testDataGT/formulaire052-equation003	RIGHT	
@@ -340,39 +346,39 @@ synthetic/fraction-0	RIGHT	RIGHT
 synthetic/fraction-1	RIGHT	UNSURE
 synthetic/fraction-2	RIGHT	WRONG
 synthetic/fraction-3	UNSURE	RIGHT
-synthetic/fraction-4	WRONG	WRONG
+synthetic/fraction-4	WRONG	RIGHT
 synthetic/fraction-5	WRONG	UNSURE
-synthetic/fraction-6	WRONG	UNSURE
+synthetic/fraction-6	RIGHT	UNSURE
 synthetic/fraction-7	WRONG	RIGHT
-synthetic/fraction-8	WRONG	WRONG
+synthetic/fraction-8	RIGHT	RIGHT
 synthetic/fraction-9	WRONG	RIGHT
 synthetic/fraction-10	WRONG	RIGHT
-synthetic/fraction-11	WRONG	WRONG
+synthetic/fraction-11	WRONG	RIGHT
 synthetic/fraction-12	RIGHT	RIGHT
-synthetic/fraction-13	WRONG	WRONG
+synthetic/fraction-13	RIGHT	RIGHT
 synthetic/fraction-14	WRONG	UNSURE
 synthetic/fraction-15	NONE	NONE
 synthetic/fraction-16	RIGHT	RIGHT
-synthetic/fraction-17	WRONG	WRONG
-synthetic/fraction-18	WRONG	WRONG
+synthetic/fraction-17	WRONG	RIGHT
+synthetic/fraction-18	RIGHT	RIGHT
 synthetic/fraction-19	WRONG	RIGHT
 synthetic/fraction-20	NONE	NONE
 synthetic/fraction-21	RIGHT	RIGHT
 synthetic/fraction-22	WRONG	UNSURE
 synthetic/fraction-23	RIGHT	WRONG
-synthetic/fraction-24	WRONG	WRONG
+synthetic/fraction-24	RIGHT	RIGHT
 synthetic/fraction-25	RIGHT	RIGHT
 synthetic/fraction-26	WRONG	RIGHT
 synthetic/fraction-27	WRONG	NONE
-synthetic/fraction-28	WRONG	WRONG
-synthetic/fraction-29	WRONG	UNSURE
+synthetic/fraction-28	WRONG	RIGHT
+synthetic/fraction-29	RIGHT	UNSURE
 synthetic/fraction-30	RIGHT	RIGHT
 synthetic/fraction-31	WRONG	UNSURE
 synthetic/fraction-32	NONE	NONE
 synthetic/fraction-33	WRONG	RIGHT
-synthetic/fraction-34	WRONG	WRONG
-synthetic/fraction-35	WRONG	WRONG
-synthetic/fraction-36	WRONG	WRONG
+synthetic/fraction-34	RIGHT	RIGHT
+synthetic/fraction-35	WRONG	RIGHT
+synthetic/fraction-36	RIGHT	RIGHT
 synthetic/fraction-37	WRONG	UNSURE
 synthetic/fraction-38	NONE	WRONG
 synthetic/fraction-39	RIGHT	RIGHT
@@ -525,8 +531,10 @@ synthetic/equation-linear-25	SKIP	UNSURE
 synthetic/equation-linear-26	SKIP	RIGHT
 synthetic/equation-linear-27	SKIP	RIGHT
 synthetic/equation-linear-28	SKIP	RIGHT
+synthetic/equation-linear-29	SKIP	NONE
 synthetic/equation-linear-30	SKIP	RIGHT
 synthetic/equation-linear-31	SKIP	RIGHT
+synthetic/equation-linear-32	SKIP	NONE
 synthetic/equation-linear-33	SKIP	RIGHT
 synthetic/equation-linear-34	SKIP	WRONG
 synthetic/equation-linear-35	SKIP	WRONG
@@ -540,12 +548,14 @@ synthetic/equation-fraction-2	SKIP	RIGHT
 synthetic/equation-fraction-3	SKIP	WRONG
 synthetic/equation-fraction-4	SKIP	UNSURE
 synthetic/equation-fraction-5	SKIP	WRONG
+synthetic/equation-fraction-6	SKIP	NONE
 synthetic/equation-fraction-7	SKIP	RIGHT
 synthetic/equation-fraction-8	SKIP	NONE
 synthetic/equation-fraction-9	SKIP	NONE
 synthetic/equation-fraction-10	SKIP	UNSURE
 synthetic/equation-fraction-11	SKIP	RIGHT
 synthetic/equation-fraction-12	SKIP	RIGHT
+synthetic/equation-fraction-13	SKIP	NONE
 synthetic/equation-fraction-14	SKIP	UNSURE
 synthetic/equation-fraction-15	SKIP	NONE
 synthetic/equation-fraction-16	SKIP	RIGHT
@@ -555,6 +565,7 @@ synthetic/equation-fraction-19	SKIP	UNSURE
 synthetic/equation-fraction-20	SKIP	NONE
 synthetic/equation-fraction-21	SKIP	UNSURE
 synthetic/equation-fraction-22	SKIP	RIGHT
+synthetic/equation-fraction-23	SKIP	NONE
 synthetic/equation-fraction-24	SKIP	RIGHT
 synthetic/equation-fraction-25	SKIP	UNSURE
 synthetic/equation-fraction-26	SKIP	RIGHT
@@ -568,11 +579,13 @@ synthetic/equation-fraction-33	SKIP	UNSURE
 synthetic/equation-fraction-34	SKIP	RIGHT
 synthetic/equation-fraction-35	SKIP	RIGHT
 synthetic/equation-fraction-36	SKIP	UNSURE
+synthetic/equation-fraction-37	SKIP	NONE
 synthetic/equation-fraction-38	SKIP	UNSURE
 synthetic/equation-fraction-39	SKIP	RIGHT
 synthetic/equation-quadratic-0	SKIP	NONE
 synthetic/equation-quadratic-1	SKIP	RIGHT
 synthetic/equation-quadratic-2	SKIP	NONE
+synthetic/equation-quadratic-3	SKIP	NONE
 synthetic/equation-quadratic-4	SKIP	UNSURE
 synthetic/equation-quadratic-5	SKIP	NONE
 synthetic/equation-quadratic-6	SKIP	NONE
@@ -582,6 +595,7 @@ synthetic/equation-quadratic-9	SKIP	WRONG
 synthetic/equation-quadratic-10	SKIP	NONE
 synthetic/equation-quadratic-11	SKIP	RIGHT
 synthetic/equation-quadratic-12	SKIP	RIGHT
+synthetic/equation-quadratic-13	SKIP	NONE
 synthetic/equation-quadratic-14	SKIP	UNSURE
 synthetic/equation-quadratic-15	SKIP	UNSURE
 synthetic/equation-quadratic-16	SKIP	NONE
@@ -604,6 +618,7 @@ synthetic/equation-quadratic-32	SKIP	UNSURE
 synthetic/equation-quadratic-33	SKIP	NONE
 synthetic/equation-quadratic-34	SKIP	UNSURE
 synthetic/equation-quadratic-35	SKIP	WRONG
+synthetic/equation-quadratic-36	SKIP	NONE
 synthetic/equation-quadratic-37	SKIP	UNSURE
 synthetic/equation-quadratic-38	SKIP	NONE
 synthetic/equation-quadratic-39	SKIP	RIGHT
