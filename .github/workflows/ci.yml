@@ -47,7 +47,9 @@ jobs:
 
   screenshots:
     # Pictures of the editor on a tablet emulator, to look at changes of the interface.
-    if: github.event_name == 'workflow_dispatch' || contains(github.ref, 'toolbars') || contains(github.ref, 'v0.3')
+    # Also runs the data tests on a device (notebooks, archives, sync): for every pull request,
+    # every push to main and version branches, not only for some branch names.
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request' || github.ref == 'refs/heads/main' || contains(github.ref, 'v0.')
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:

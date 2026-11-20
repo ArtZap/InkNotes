@@ -10,7 +10,14 @@ cd "$(dirname "$0")/.."
 DATA=build/crohme/CROHME_full_v2
 if [ ! -d "$DATA" ]; then
   mkdir -p build/crohme
-  curl -fL -o build/crohme/full.zip https://raw.githubusercontent.com/ThomasLech/CROHME_extractor/master/data/CROHME_full_v2.zip
+  # A fixed commit, and the file checked against its git blob id there: a changed or
+  # tampered archive is not unpacked.
+  curl -fL -o build/crohme/full.zip https://raw.githubusercontent.com/ThomasLech/CROHME_extractor/ca2d9328b8ad4dabec94587d8f98f94851ff3a49/data/CROHME_full_v2.zip
+  if [ "$(git hash-object build/crohme/full.zip)" != "e5fa1924a89558b97086f15dde2ac4c2420e86d1" ]; then
+    rm -f build/crohme/full.zip
+    echo "CROHME_full_v2.zip не совпадает с ожидаемым (git blob e5fa192…), не распаковываю" >&2
+    exit 1
+  fi
   (cd build/crohme && unzip -q full.zip && rm full.zip)
 fi
 CROHME_DIR="$PWD/$DATA" ./gradlew :app:testDebugUnitTest --tests 'dev.inknotes.math.FormulaBenchTest' --rerun

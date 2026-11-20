@@ -63,4 +63,33 @@ class SyncPlanTest {
         val r = listOf(Remote("old", "a", 2, 5), Remote("new", "a", 7, 9))
         assertEquals(listOf(Action.Download("a", "new")), plan(remote = r))
     }
+
+    @Test
+    fun manyDeletionsAtOnceLookLikeAMistake() {
+        val trash = { n: Int -> List(n) { Action.TrashLocal("n$it") } }
+        // One notebook deleted on the other device: as before.
+        assertEquals(false, SyncPlan.massTrash(trash(1), 1))
+        // Two of three, or every one: asked first.
+        assertEquals(true, SyncPlan.massTrash(trash(2), 3))
+        assertEquals(true, SyncPlan.massTrash(trash(5), 5))
+        // A few of a big library: as before; ten or more at once: asked.
+        assertEquals(false, SyncPlan.massTrash(trash(3), 40))
+        assertEquals(true, SyncPlan.massTrash(trash(10), 400))
+        // Other actions don't count.
+        assertEquals(false, SyncPlan.massTrash(listOf(Action.Upload("a", null), Action.TrashRemote("b", "f")), 2))
+    }
+
+    @Test
+    fun aClockSetBackStillCountsAsAChange() {
+        val s = mapOf("a" to Synced("f", 10, 3))
+        assertEquals(listOf(Action.Upload("a", "f")), plan(listOf(Local("a", "A", 5)), listOf(Remote("f", "a", 3, 10)), s))
+    }
+
+    @Test
+    fun manyGoneHereAtOnceAreAskedAboutToo() {
+        val gone = List(4) { Action.TrashRemote("n$it", "f$it") }
+        // An unreadable library looks like every notebook deleted here: not sent to the Drive's trash unasked.
+        assertEquals(true, SyncPlan.massTrash(gone, 0, 4))
+        assertEquals(false, SyncPlan.massTrash(gone.take(1), 0, 40))
+    }
 }

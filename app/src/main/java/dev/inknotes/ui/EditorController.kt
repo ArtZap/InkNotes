@@ -56,7 +56,6 @@ import dev.inknotes.math.PageAnswer
 import dev.inknotes.math.Printer
 import dev.inknotes.search.TextLine
 import java.io.File
-import java.util.concurrent.Executors
 import kotlin.math.max
 import kotlin.math.min
 
@@ -375,9 +374,12 @@ class EditorController(
     private val pdfBitmaps = HashMap<String, Bitmap>()
     private val pdfPending = HashSet<String>()
 
-    private val thumbExec = Executors.newSingleThreadExecutor { r -> Thread(r, "thumbnails") }
-    private val loader = Executors.newSingleThreadExecutor { r -> Thread(r, "page-load") }
+    private val thumbExec = dev.inknotes.data.idleExecutor("thumbnails")
+    private val loader = dev.inknotes.data.idleExecutor("page-load")
     private val loading = HashSet<String>()
+
+    /** Reads under way (see [loadedDocument]): a pen touch can wait for one ([awaitDocument]). */
+    private val loads = HashMap<String, java.util.concurrent.Future<dev.inknotes.data.PageContent?>>()
 
     // Pictures placed on pages, decoded off the main thread; LruCache is thread-safe, the
     // thumbnail thread reads it too.
@@ -385,7 +387,7 @@ class EditorController(
         override fun sizeOf(key: String, value: Bitmap) = value.byteCount
     }
     private val imagePending = HashSet<String>()
-    private val imageExec = Executors.newSingleThreadExecutor { r -> Thread(r, "page-images") }
+    private val imageExec = dev.inknotes.data.idleExecutor("page-images")
     var importingImage by mutableStateOf(false)
         private set
     private val thumbRevision = HashMap<String, Int>()
@@ -394,6 +396,14 @@ class EditorController(
     var pendingHit: SearchHit? = null
 
     /** Page to show when the editor first appears (a quick note: the empty page at the end). */
+    /** New elements go onto this notebook's active layer (see [dev.inknotes.data.Layers.active]). */
+    fun activateLayer() {
+        dev.inknotes.data.Layers.active = notebook.activeLayer
+    }
+
+    /** Two notebooks side by side: this one's tool bar is hidden for room (the pen keeps its tool). */
+    var toolsHidden by mutableStateOf(false)
+
     var openAtPage: Int? = null
 
     fun attach(v: PageEditorView) {
@@ -434,6 +444,39 @@ class EditorController(
         view?.listener = null
         view = null
         zoomPadOpen = false
+        sleep()
+    }
+
+    /**
+     * The tab is out of sight: it keeps only the page it was left on (and pages with an undo
+     * history, which lives in the page) — everything else is read again when it is shown. Its
+     * threads end by themselves when idle ([dev.inknotes.data.idleExecutor]).
+     */
+    private fun sleep() {
+        val here = notebook.pageIds.getOrNull(pageIndex)
+        val drop = docs.filter { (id, doc) -> id != here && savedRevision[id] == doc.revision && !doc.canUndo && !doc.canRedo }.keys
+        for (id in drop) {
+            docs.remove(id)
+            mathAnswers.remove(id)
+            mathRevision.remove(id)
+        }
+        // Pages still being read: not wanted now; read again when the tab is shown.
+        loads.values.forEach { it.cancel(false) }
+        loads.clear()
+        loading.clear()
+        thumbnails.clear()
+        thumbRevision.clear()
+        photoCache.clear()
+        pdfBitmaps.clear()
+        pdfPending.clear()
+        imageCache.evictAll()
+        imagePending.clear()
+        pdfPages.trim()
+        pdfTextPages.clear()
+        pdfWordCache.clear()
+        pdfTextPending.clear()
+        pdfText?.close()
+        pdfText = null
     }
 
     /** The notebook's tab is closed: nothing of it runs any more. */
@@ -567,7 +610,10 @@ class EditorController(
         val r = if (android.os.Build.VERSION.SDK_INT >= 31) android.media.MediaRecorder(context) else @Suppress("DEPRECATION") android.media.MediaRecorder()
         val ok = runCatching {
             r.setAudioSource(android.media.MediaRecorder.AudioSource.MIC)
-            r.setOutputFormat(android.media.MediaRecorder.OutputFormat.MPEG_4)
+            // AAC in ADTS frames, not an MP4 box: MP4 is readable only once the recorder has
+            // finished it, while ADTS plays up to wherever it was cut off (the app killed in the
+            // middle of a lecture). The name stays .m4a: players go by the contents.
+            r.setOutputFormat(android.media.MediaRecorder.OutputFormat.AAC_ADTS)
             r.setAudioEncoder(android.media.MediaRecorder.AudioEncoder.AAC)
             r.setAudioEncodingBitRate(64_000)
             r.setAudioSamplingRate(44_100)
@@ -584,8 +630,18 @@ class EditorController(
         recorder = r
         recordingFile = file
         pendingMarks.clear()
-        recordingSince = System.currentTimeMillis()
+        val since = System.currentTimeMillis()
+        recordingSince = since
+        repo.saveRecordingJournal(notebook, file.name, since, emptyList())
+        // Keeps the microphone with the app when the screen goes off or another app is opened.
+        appContext = context.applicationContext
+        RecordingService.onStopRequested = { stopRecording() }
+        RecordingService.onNotKept = { if (recorder != null) showStatus(RECORDING_ON_SCREEN_ONLY) }
+        if (!RecordingService.start(context.applicationContext, notebook.title)) showStatus(RECORDING_ON_SCREEN_ONLY)
     }
+
+    /** For stopping the recording service from wherever the recording is stopped. */
+    private var appContext: Context? = null
 
     fun stopRecording() {
         val r = recorder ?: return
@@ -594,13 +650,20 @@ class EditorController(
         recorder = null
         recordingSince = null
         recordingFile = null
+        RecordingService.onStopRequested = null
+        RecordingService.onNotKept = null
+        appContext?.let(RecordingService::stop)
         val ok = runCatching { r.stop() }.isSuccess
         runCatching { r.release() }
-        if (!ok) {
+        repo.endRecordingJournal(notebook, file.name)
+        if (!ok && file.length() < MIN_RECORDING_BYTES) {
             // Stopped right after starting: nothing was recorded.
             file.delete()
             return
         }
+        // A stop that failed (a call came, the system took the microphone) still keeps what was
+        // recorded up to then: AAC in ADTS frames plays without being finished.
+        if (!ok) showStatus("Запись прервана системой — сохранено то, что успело записаться")
         val rec = dev.inknotes.data.Recording(file.name, since, System.currentTimeMillis() - since)
         val marks = pendingMarks.toList()
         notebook = repo.addRecording(notebook, rec, marks)
@@ -632,6 +695,8 @@ class EditorController(
         } else {
             pendingMarks += dev.inknotes.data.AudioMark(pageId, bounds.left, bounds.top, bounds.right, bounds.bottom, file.name, at)
         }
+        // What was written so far survives the app being stopped mid-recording.
+        repo.saveRecordingJournal(notebook, file.name, since, pendingMarks.toList())
     }
 
     /** Plays [rec] from [fromMs]. */
@@ -868,6 +933,10 @@ class EditorController(
             docs[pageId] = it
             savedRevision[pageId] = it.revision
             it.onEdit = ::onPageEdited
+            repo.takeDamaged(notebook, pageId)?.let { copy ->
+                val n = notebook.pageIds.indexOf(pageId) + 1
+                showStatus("Страница $n повреждена и открыта пустой. Её файл не удалён: он сохранён рядом как $copy — пришлите его разработчику или верните из автокопии")
+            }
         }
 
     private fun prefetch(index: Int) {
@@ -890,10 +959,11 @@ class EditorController(
         if (loading.add(pageId)) {
             val nb = notebook
             runCatching {
-                loader.execute {
+                loads[pageId] = loader.submit<dev.inknotes.data.PageContent?> {
                     val content = runCatching { repo.loadPage(nb, pageId) }.getOrNull()
                     handler.post {
                         loading.remove(pageId)
+                        loads.remove(pageId)
                         if (content != null && pageId in notebook.pageIds && pageId !in docs) {
                             install(pageId, content)
                             view?.refresh()
@@ -901,10 +971,23 @@ class EditorController(
                             handler.postDelayed(mathRunnable, MATH_DELAY_MS / 2)
                         }
                     }
+                    content
                 }
             }.onFailure { loading.remove(pageId) }
         }
         return null
+    }
+
+    override fun awaitDocument(index: Int, timeoutMs: Long): PageDocument? {
+        loadedDocument(index)?.let { return it }
+        val pageId = notebook.pageIds.getOrNull(index) ?: return null
+        val content = runCatching { loads[pageId]?.get(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS) }.getOrNull() ?: return null
+        // Installed now; the read's own post then finds it there and does nothing.
+        return docs[pageId] ?: install(pageId, content).also { view?.refresh() }
+    }
+
+    override fun onPageNotReady(page: Int) {
+        showStatus("Страница ${page + 1} ещё открывается — коснитесь пером ещё раз")
     }
 
     override fun thumbnail(index: Int): Bitmap? =
@@ -1092,7 +1175,7 @@ class EditorController(
         for ((id, m) in moves) {
             val content = docs[id]?.content() ?: repo.loadPage(nb, id)
             val moved = movedContent(content, m)
-            repo.savePageAsync(nb, id, moved)
+            repo.savePageAsync(nb, id, moved) { problem, saved -> notSaved(id, problem, saved) }
             handwriting.pageSaved(nb, id, moved)
             val open = docs.remove(id) != null
             savedRevision.remove(id)
@@ -1257,16 +1340,17 @@ class EditorController(
         val nb = notebook
         status = if (format == ExportFormat.PDF) "Экспорт PDF…" else "Экспорт PNG…"
         Thread({
+            val missing = ArrayList<Int>()
             val result = runCatching {
                 if (format == ExportFormat.PDF) {
                     (outFor(-1, 0) ?: error("cannot open output")).use { out ->
-                        PdfExporter.export(repo, nb, out, pages) { k, total ->
+                        missing += PdfExporter.export(repo, nb, out, pages) { k, total ->
                             handler.post { status = "Экспорт PDF: $k / $total" }
                         }
                     }
                 } else {
                     pages.forEachIndexed { k, i ->
-                        (outFor(i, k) ?: error("cannot open output")).use { out -> PdfExporter.writePng(repo, nb, i, out) }
+                        (outFor(i, k) ?: error("cannot open output")).use { out -> if (!PdfExporter.writePng(repo, nb, i, out)) missing += i + 1 }
                         handler.post { status = "Экспорт PNG: ${k + 1} / ${pages.size}" }
                     }
                 }
@@ -1274,8 +1358,19 @@ class EditorController(
             handler.post {
                 status = null
                 done(result.isSuccess)
+                // Said after the caller's own message, so it is the one seen.
+                exportWarning(result.exceptionOrNull(), missing)?.let(::showStatus)
             }
         }, "export").start()
+    }
+
+    /** What went wrong with an export beyond "not saved": too little memory, pages that came out incomplete. */
+    private fun exportWarning(error: Throwable?, missing: List<Int>): String? = when {
+        error is OutOfMemoryError -> "Не хватило памяти: экспортируйте страницы частями (диапазоном)"
+        error != null -> null
+        missing.isEmpty() -> null
+        else -> "Сохранено, но " + (if (missing.size == 1) "страницу ${missing[0]}" else "страницы ${missing.take(10).joinToString(", ")}" + (if (missing.size > 10) " и другие" else "")) +
+            " не удалось прочитать — в файле они пустые или без PDF"
     }
 
     /** Writes the whole notebook as PDF to [uri] (from the system "save as" dialog). */
@@ -1355,6 +1450,7 @@ class EditorController(
                             result.isSuccess -> callback.onWriteFinished(arrayOf(android.print.PageRange.ALL_PAGES))
                             else -> callback.onWriteFailed(result.exceptionOrNull()?.message)
                         }
+                        exportWarning(result.exceptionOrNull(), result.getOrNull().orEmpty())?.let(::showStatus)
                     }
                 }, "print").start()
             }
@@ -2102,7 +2198,7 @@ class EditorController(
     var cardStates by mutableStateOf<Map<String, dev.inknotes.data.Cards.State>>(emptyMap())
         private set
     private val cardPages = HashMap<String, PageContent>()
-    private val cardExec = Executors.newSingleThreadExecutor { r -> Thread(r, "cards") }
+    private val cardExec = dev.inknotes.data.idleExecutor("cards")
     private val cardRenderer by lazy { PageRenderer() }
 
     /** Collects the cards of all pages (in the background) and opens the review. */
@@ -2234,6 +2330,24 @@ class EditorController(
 
     // ------------------------------------------------------------------- save
 
+    /**
+     * Page [id] holds more than a page file may and was not written (the copy on disk is the
+     * last one that fit): said on screen, and tried again at the next save.
+     */
+    private val warnedComplex = HashSet<String>()
+
+    private fun notSaved(id: String, problem: String, saved: Boolean) {
+        val n = notebook.pageIds.indexOf(id) + 1
+        if (saved) {
+            // Said once per page: it is saved at every pause in writing.
+            if (!warnedComplex.add(id)) return
+            showStatus("Страница $n сохранена, но $problem — на другой планшет и в файл тетради она так не попадёт. Перенесите часть на другую страницу или сотрите лишнее")
+            return
+        }
+        savedRevision.remove(id)
+        showStatus("Страница $n не сохранена: $problem. Перенесите часть на другую страницу")
+    }
+
     /** Writes every page whose revision changed since the last save. */
     fun flush() {
         handler.removeCallbacks(saveRunnable)
@@ -2241,7 +2355,7 @@ class EditorController(
         for ((id, doc) in docs) {
             if (savedRevision[id] == doc.revision) continue
             val content = doc.content()
-            repo.savePageAsync(notebook, id, content)
+            repo.savePageAsync(notebook, id, content) { problem, saved -> notSaved(id, problem, saved) }
             handwriting.pageSaved(notebook, id, content)
             savedRevision[id] = doc.revision
             any = true
@@ -2566,6 +2680,11 @@ class EditorController(
     }
 
     companion object {
+        const val RECORDING_ON_SCREEN_ONLY = "Запись идёт, но Android не дал записывать в фоне: не выключайте экран и не уходите из приложения до конца записи"
+
+        /** Less than this is a recording header with no sound in it. */
+        private const val MIN_RECORDING_BYTES = 2048L
+
         private const val SAVE_DELAY_MS = 800L
 
         /** Pages either side of the current one kept in memory. */

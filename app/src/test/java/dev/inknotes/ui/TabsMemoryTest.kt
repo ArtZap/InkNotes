@@ -36,4 +36,16 @@ class TabsMemoryTest {
         assertNull(TabsMemory.decode("a,b;a").side)
         assertNull(TabsMemory.restore(TabsMemory.decode("a;a;gone"), setOf("a"), 5).side)
     }
+
+    @Test
+    fun theTabsOfTheHalfBesideComeBackToo() {
+        val text = TabsMemory.encode(listOf("a", "b"), "a", "pdf", listOf("x", "pdf"))
+        val r = TabsMemory.restore(TabsMemory.decode(text), setOf("a", "b", "x", "pdf"), 5)
+        assertEquals(listOf("x", "pdf"), r.sideIds)
+        assertEquals("pdf", r.side)
+        // Saved by 0.36–0.38: the one notebook beside is that half's only tab.
+        assertEquals(listOf("pdf"), TabsMemory.decode("a;a;pdf").sideIds)
+        // One that is gone: the last left there is shown.
+        assertEquals("x", TabsMemory.restore(TabsMemory.decode(text), setOf("a", "b", "x"), 5).side)
+    }
 }

@@ -101,6 +101,21 @@ fun SyncDialog(cloud: CloudSync, prefs: AppPrefs, busy: () -> Set<String>, onDis
                         Text(s, fontSize = 13.sp)
                     }
                 }
+                androidx.compose.animation.AnimatedVisibility(cloud.held.isNotEmpty() && !cloud.running) { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    HorizontalDivider()
+                    Text("Пропали сразу ${cloud.held.size} тетрадей", fontWeight = FontWeight.Medium)
+                    Text(
+                        cloud.held.take(5).joinToString(", ") { "«${it.second}»" } + (if (cloud.held.size > 5) " и другие" else "") +
+                            ". Их нет на одной стороне — на Диске или на этом планшете. Так бывает, если папку InkNotes удалили или подменили " +
+                            "или память планшета не прочиталась. Пока ничего не удалено.",
+                        fontSize = 13.sp,
+                        color = muted,
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = { cloud.resolveHeld(trash = false) }) { Text("Оставить везде") }
+                        OutlinedButton(onClick = { cloud.resolveHeld(trash = true) }) { Text("Удалить везде") }
+                    }
+                } }
             }
         },
         confirmButton = {

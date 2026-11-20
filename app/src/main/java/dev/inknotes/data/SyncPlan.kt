@@ -68,7 +68,8 @@ object SyncPlan {
                         }
                         continue
                     }
-                    val localChanged = l.updatedAt > s.localAt
+                    // Any other time than at the last sync, earlier too: the clock may have been set back.
+                    val localChanged = l.updatedAt != s.localAt
                     val remoteChanged = r.version != s.remoteVersion || r.fileId != s.fileId
                     when {
                         localChanged && remoteChanged -> if (id !in busy) out += Action.Conflict(id, r.fileId)
@@ -81,4 +82,22 @@ object SyncPlan {
         }
         return out
     }
+
+    /**
+     * Whether [actions] put so many notebooks here in the trash at once that it looks like a
+     * mistake on the Drive (the folder deleted, emptied or replaced) rather than deletions made
+     * on another device: at least [MASS_TRASH_MIN] of them, and half the library or more (or
+     * [MASS_TRASH_MAX] and more). Then the sync asks before it does that; [localCount] is the
+     * number of notebooks here.
+     */
+    fun massTrash(actions: List<Action>, localCount: Int, remoteCount: Int = 0): Boolean {
+        fun many(n: Int, of: Int) = n >= MASS_TRASH_MIN && (n * 2 >= of || n >= MASS_TRASH_MAX)
+        // Either way: gone there at once (folder emptied), or gone here at once (a library that
+        // could not be read would look like every notebook deleted here).
+        return many(actions.count { it is Action.TrashLocal }, localCount) ||
+            many(actions.count { it is Action.TrashRemote }, remoteCount)
+    }
+
+    const val MASS_TRASH_MIN = 2
+    const val MASS_TRASH_MAX = 10
 }

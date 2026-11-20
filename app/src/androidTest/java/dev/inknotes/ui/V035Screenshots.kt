@@ -68,6 +68,8 @@ class V035Screenshots {
     @Test
     fun recordWriteListen() {
         instr.uiAutomation.grantRuntimePermission(ctx.packageName, android.Manifest.permission.RECORD_AUDIO)
+        // Asked with the microphone since 0.39 (the recording's notification): granted, so no dialog stands in the way.
+        if (android.os.Build.VERSION.SDK_INT >= 33) instr.uiAutomation.grantRuntimePermission(ctx.packageName, android.Manifest.permission.POST_NOTIFICATIONS)
         ctx.getSharedPreferences("app", 0).edit().putBoolean("toolbarIntroShown", true).remove("toolbarLayout").remove("openTabs").commit()
         val repo = NotebookRepository(ctx.filesDir)
         if (repo.list().none { it.title == "Скриншоты 0.35" }) repo.create("Скриншоты 0.35", PaperKind.LINED)

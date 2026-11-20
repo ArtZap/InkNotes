@@ -34,6 +34,8 @@ object QuickNotes {
     const val EXTRA_NOTEBOOK = "dev.inknotes.NOTEBOOK"
 
     suspend fun prepare(repo: NotebookRepository, prefs: AppPrefs): Notebook = repo.io {
+        // Notes written over the lock screen and left there (the app was stopped) come in first.
+        for (note in lockNotes()) mergeLockNote(note, prefs.quickNoteId, TITLE)?.let { prefs.quickNoteId = it.id }
         val nb = list().firstOrNull { it.id == prefs.quickNoteId }
             ?: create(TITLE, PaperKind.LINED).also { prefs.quickNoteId = it.id }
         val last = nb.pageIds.lastOrNull()
@@ -41,18 +43,41 @@ object QuickNotes {
         if (empty) nb else insertPage(nb, nb.pageIds.size)
     }
 
+    /**
+     * Over the lock screen: a notebook with only a new page (see [NotebookRepository.createLockNote]),
+     * so earlier notes can't be scrolled to before unlocking.
+     */
+    suspend fun prepareLocked(repo: NotebookRepository): Notebook = repo.io { createLockNote(TITLE, PaperKind.LINED) }
+
+    /** What was written over the lock screen goes to the end of the quick notes notebook. */
+    fun finishLocked(context: Context, note: Notebook) {
+        val services = AppServices.get(context)
+        services.repo.mergeLockNoteAsync(note, services.prefs.quickNoteId, TITLE) { nb ->
+            if (nb != null) {
+                services.prefs.quickNoteId = nb.id
+                services.prefs.quickNoteUsedAt = System.currentTimeMillis()
+                services.handwriting.indexAll()
+                QuickWidget.update(context)
+            }
+        }
+    }
+
     fun intent(context: Context) = Intent(context, QuickNoteActivity::class.java)
         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
 }
 
 /**
- * A note at once, even over the lock screen: only the quick notes notebook, on an empty page.
- * Locked, nothing else of the library can be reached from here (back closes it); the other
- * notebooks open after unlocking, in the app.
+ * A note at once, even over the lock screen. Unlocked: the quick notes notebook, on an empty
+ * page. Locked: a notebook of one new page, moved to the end of the quick notes when this is
+ * left, so neither earlier notes nor anything else of the library can be reached from here
+ * (back closes it); everything opens after unlocking, in the app.
  */
 class QuickNoteActivity : ComponentActivity() {
     private var controller by mutableStateOf<EditorController?>(null)
     private lateinit var penButton: PenButtonBinding
+
+    /** The note written over the lock screen (null: the quick notes notebook itself is open). */
+    private var lockNote: Notebook? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -64,11 +89,11 @@ class QuickNoteActivity : ComponentActivity() {
         penButton = PenButtonBinding(this)
         val locked = getSystemService(KeyguardManager::class.java)?.isKeyguardLocked == true
         lifecycleScope.launch {
-            val nb = QuickNotes.prepare(services.repo, prefs)
+            val nb = if (locked) QuickNotes.prepareLocked(services.repo).also { lockNote = it } else QuickNotes.prepare(services.repo, prefs)
             val dark = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
             controller = EditorController(services.repo, nb, penButton, prefs, dark, services.handwriting, services.math).also {
                 it.openAtPage = nb.pageIds.lastIndex
-                it.showStatus(if (locked) "Быстрая заметка поверх экрана блокировки. Остальные тетради — после разблокировки" else "Быстрая заметка: пишите, она сохранится сама")
+                it.showStatus(if (locked) "Быстрая заметка поверх экрана блокировки: видна только эта страница. Она допишется в «Быстрые заметки», остальное — после разблокировки" else "Быстрая заметка: пишите, она сохранится сама")
             }
         }
         setContent {
@@ -93,8 +118,14 @@ class QuickNoteActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        controller?.close()
+        controller?.let {
+            it.flush()
+            it.close()
+        }
         controller = null
+        // Saved above (queued first): the pages go to the quick notes notebook.
+        lockNote?.let { QuickNotes.finishLocked(this, it) }
+        lockNote = null
         QuickWidget.update(this)
         super.onDestroy()
     }

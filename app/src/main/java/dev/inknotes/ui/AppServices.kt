@@ -33,6 +33,14 @@ object AppServices {
             .also {
                 instance = it
                 repo.purgeOldTrash()
+                // Notes written over the lock screen by a run of the app that was stopped first.
+                Thread {
+                    runCatching {
+                        for (note in repo.lockNotes(leftOnly = true)) {
+                            repo.mergeLockNote(note, prefs.quickNoteId, QuickNotes.TITLE)?.let { nb -> prefs.quickNoteId = nb.id }
+                        }
+                    }
+                }.start()
             }
     }
 }

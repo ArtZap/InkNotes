@@ -4,6 +4,10 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkHorizontally
@@ -79,6 +83,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
@@ -122,8 +133,26 @@ fun EditorScreen(
     sideOpen: Boolean = false,
     /** Beside another: the two change places. */
     onSwap: (() -> Unit)? = null,
+    /**
+     * Half of the screen or less (two notebooks side by side): the bars take as little height
+     * as they can — the tools and their options in one line that scrolls instead of wrapping,
+     * and a button that hides them altogether.
+     */
+    compact: Boolean = false,
+    /** Tabs dragged out of the strip (to another place, beside, into the other half). */
+    tabDrag: TabDragging? = null,
+    /** This is the right half: its strip of tabs is told apart from the left one's. */
+    rightPane: Boolean = false,
+    /** Show the strip of tabs even with one tab (two halves: a tab can be dragged across). */
+    alwaysTabs: Boolean = false,
+    /** "+" in the strip: another notebook in this half (null: the library). */
+    onAddTab: (() -> Unit)? = null,
+    /** Closes every tab of this half (asked once more in the strip first). */
+    onCloseAllTabs: (() -> Unit)? = null,
+    /** The system back gesture (null: as the back arrow). */
+    onBack: (() -> Unit)? = null,
 ) {
-    BackHandler(onBack = onClose)
+    BackHandler(onBack = onBack ?: onClose)
     // The view this screen made: only it is let go of when the screen goes.
     val shownView = remember { arrayOfNulls<PageEditorView>(1) }
     DisposableEffect(controller) {
@@ -150,14 +179,24 @@ fun EditorScreen(
     var pageText by remember { mutableStateOf<List<dev.inknotes.search.TextLine>?>(null) }
     val context = LocalContext.current
     val resolver = context.contentResolver
-    val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) controller.startRecording(context) else controller.showStatus("Без доступа к микрофону записать звук нельзя")
+    // The microphone, and on Android 13+ the notification that a recording is on (it shows how
+    // long it has run and stops it; without it the recording still works).
+    val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { granted ->
+        if (granted[android.Manifest.permission.RECORD_AUDIO] == true) controller.startRecording(context) else controller.showStatus("Без доступа к микрофону записать звук нельзя")
     }
     val record = {
-        if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+        fun has(p: String) = androidx.core.content.ContextCompat.checkSelfPermission(context, p) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        val notify = if (android.os.Build.VERSION.SDK_INT >= 33) android.Manifest.permission.POST_NOTIFICATIONS else null
+        val missing = listOfNotNull(android.Manifest.permission.RECORD_AUDIO, notify).filter { !has(it) }
+        val prefs = AppServices.get(context).prefs
+        // Asked once: refused, it is not asked before every recording.
+        val askedNotify = notify != null && prefs.askedNotifications
+        val ask = missing.filter { it != notify || !askedNotify }
+        if (ask.isEmpty()) {
             controller.startRecording(context)
         } else {
-            micPermission.launch(android.Manifest.permission.RECORD_AUDIO)
+            if (notify in ask) prefs.askedNotifications = true
+            micPermission.launch(ask.toTypedArray())
         }
     }
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
@@ -273,7 +312,9 @@ fun EditorScreen(
             .background(MaterialTheme.colorScheme.surface)
             .safeDrawingPadding()
     ) {
-        if (tabs.size > 1) TabStrip(controller, tabs, onTab, onCloseTab, onLibrary = onClose)
+        if (tabs.size > 1 || (alwaysTabs || rightPane) && tabs.isNotEmpty()) {
+            TabStrip(controller, tabs, onTab, onCloseTab, onAdd = onAddTab ?: onClose, drag = tabDrag, right = rightPane, onCloseAll = onCloseAllTabs)
+        }
         val layout = controller.toolbar
         TopRow(
             c = controller,
@@ -284,17 +325,28 @@ fun EditorScreen(
             onClose = onClose,
             onAllFunctions = { showAllFunctions = true },
             onTimer = { showTimer = true },
+            compact = compact,
         )
         SoundBar(controller)
         PdfPickBar(controller)
-        ToolRow(
-            controller,
-            tools = layout.tools.mapNotNull(actions::get),
-            placing = placing,
-            onPickColor = { showPicker = true },
-            onHatchSettings = { showHatch = true },
-            onSelectionSize = { showSelectionSize = true },
-        )
+        // Hidden tools come back by themselves for a selection: its options are needed then.
+        // They fold up towards the top bar (where the button that brings them back is) and
+        // unfold from there, so it is seen where they went.
+        AnimatedVisibility(
+            !compact || !controller.toolsHidden || controller.selectionCount > 0,
+            enter = expandVertically(tween(TOOLS_FOLD_MS), expandFrom = Alignment.Top) + fadeIn(tween(TOOLS_FOLD_MS)),
+            exit = shrinkVertically(tween(TOOLS_FOLD_MS), shrinkTowards = Alignment.Top) + fadeOut(tween(TOOLS_FOLD_MS)),
+        ) {
+            ToolRow(
+                controller,
+                tools = layout.tools.mapNotNull(actions::get),
+                placing = placing,
+                onPickColor = { showPicker = true },
+                onHatchSettings = { showHatch = true },
+                onSelectionSize = { showSelectionSize = true },
+                compact = compact,
+            )
+        }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         Row(Modifier.fillMaxSize()) {
             // Slides in and out; the page beside it keeps its place (see PageEditorView.refit).
@@ -636,11 +688,14 @@ private fun TopRow(
     onClose: () -> Unit,
     onAllFunctions: () -> Unit,
     onTimer: () -> Unit,
+    compact: Boolean = false,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth()) {
-        // What does not fit goes to the top of the menu, in order.
-        val (fits, spill) = fitOnBar(top.map { it.id }, maxWidth - TOP_BAR_RESERVED)
+        // What does not fit goes to the top of the menu, in order (compact: room for the tools button).
+        // In a narrow pane undo and redo come first: they are the last to go into the menu.
+        val order = if (compact) top.sortedBy { if (it.id == "undo" || it.id == "redo") 0 else 1 } else top
+        val (fits, spill) = fitOnBar(order.map { it.id }, maxWidth - TOP_BAR_RESERVED - (if (compact) 48.dp else 0.dp))
         val shown = top.filter { it.id in fits }
         val spilled = top.filter { it.id in spill }.flatMap { if (it.id == "page-nav") pageNavMenu(c) else listOf(it) }
         Row(
@@ -656,12 +711,13 @@ private fun TopRow(
                 is MathNotes.State.Failed -> math.message
                 else -> null
             }
-            // Title with the status under it: they share the room left by the buttons.
-            Column(Modifier.weight(1f)) {
+            // Title with the status under it: they share the room left by the buttons. The line
+            // under the title opens and closes smoothly, and one message fades into the next.
+            Column(Modifier.weight(1f).animateContentSize(Motion.fast())) {
                 Text(
                     c.notebook.title,
                     fontWeight = FontWeight.SemiBold,
-                    fontSize = 18.sp,
+                    fontSize = if (compact) 16.sp else 18.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -672,18 +728,25 @@ private fun TopRow(
                             Text("Отмена", fontSize = 13.sp)
                         }
                     }
-                    status != null -> Text(
+                    status != null -> androidx.compose.animation.AnimatedContent(
                         status,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 13.sp,
-                        lineHeight = 15.sp,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                        transitionSpec = { fadeIn(Motion.fast()) togetherWith fadeOut(Motion.fast()) },
+                        label = "status",
+                    ) { shown ->
+                        Text(
+                            shown,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 13.sp,
+                            lineHeight = 15.sp,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
             }
             StudyTimerChip(onClick = onTimer)
             Row(verticalAlignment = Alignment.CenterVertically) { BarButtons(c, shown, placing, BarCatalog.GROUP_GAP) }
+            if (compact) ToolsToggle(c)
             Box {
                 IconAction(InkIcons.More, "Ещё", { menuOpen = true })
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
@@ -703,6 +766,19 @@ private fun TopRow(
             }
         }
     }
+}
+
+/** The icon of [tool] on its button. */
+private fun toolIcon(tool: Tool) = when (tool) {
+    Tool.PEN -> InkIcons.Pen
+    Tool.FOUNTAIN -> InkIcons.Fountain
+    Tool.HIGHLIGHTER -> InkIcons.Highlighter
+    Tool.ERASER -> InkIcons.Eraser
+    Tool.LASSO -> InkIcons.Lasso
+    Tool.AREA -> InkIcons.Area
+    Tool.NEON -> InkIcons.Neon
+    Tool.LASER -> InkIcons.Laser
+    Tool.SPOILER -> InkIcons.Spoiler
 }
 
 /** How long the pages panel takes to slide in or out. */
@@ -1032,6 +1108,7 @@ private fun ToolRow(
     onPickColor: () -> Unit,
     onHatchSettings: () -> Unit,
     onSelectionSize: () -> Unit,
+    compact: Boolean = false,
 ) {
     val selection = c.selectionCount > 0
     val toolButtons = tools
@@ -1041,6 +1118,13 @@ private fun ToolRow(
     }
     val options: @Composable () -> Unit = { ToolOptions(c, onPickColor, onHatchSettings, onSelectionSize) }
     val line: @Composable () -> Unit = if (selection) options else ({ tools(); divider(); options() })
+    if (compact) {
+        // One line that scrolls sideways: the page keeps the height that wrapping would take.
+        CompositionLocalProvider(LocalColorStrip provides COMPACT_COLOR_STRIP, LocalCompactBar provides true) {
+            ArrowRow { line() }
+        }
+        return
+    }
     SubcomposeLayout(Modifier.fillMaxWidth()) { constraints ->
         // The line laid out at its natural width with the narrowest colour strip, never shown.
         fun natural(slot: String, content: @Composable () -> Unit) = subcompose(slot) {
@@ -1073,6 +1157,10 @@ private fun ToolRow(
 private val LocalColorStrip = androidx.compose.runtime.compositionLocalOf<androidx.compose.ui.unit.Dp?> { null }
 private val MIN_COLOR_STRIP = 112.dp
 private val MAX_COLOR_STRIP = 336.dp
+private val COMPACT_COLOR_STRIP = 236.dp
+
+/** The bar is the one line of a narrow pane: sliders are shorter there. */
+private val LocalCompactBar = androidx.compose.runtime.compositionLocalOf { false }
 
 /** Options that wrap onto more lines rather than run off the edge. */
 @Composable
@@ -1090,11 +1178,11 @@ private fun androidx.compose.ui.layout.Measurable.naturalWidth(constraints: andr
     measure(androidx.compose.ui.unit.Constraints(maxHeight = constraints.maxHeight)).width
 
 @Composable
-private fun BarRow(modifier: Modifier = Modifier, scroll: Boolean = true, content: @Composable () -> Unit) {
+private fun BarRow(modifier: Modifier = Modifier, scroll: Boolean = true, vertical: androidx.compose.ui.unit.Dp = 4.dp, content: @Composable () -> Unit) {
     Row(
         modifier
             .let { if (scroll) it.fillMaxWidth().horizontalScroll(rememberScrollState()) else it }
-            .padding(horizontal = 16.dp, vertical = 4.dp),
+            .padding(horizontal = if (vertical == 0.dp) 8.dp else 16.dp, vertical = vertical),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) { content() }
@@ -1163,21 +1251,122 @@ private fun TabStrip(
     tabs: List<EditorController>,
     onTab: (EditorController) -> Unit,
     onCloseTab: (EditorController) -> Unit,
-    onLibrary: () -> Unit,
+    onAdd: () -> Unit,
+    drag: TabDragging?,
+    right: Boolean,
+    onCloseAll: (() -> Unit)? = null,
 ) {
-    Row(
-        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp, vertical = 2.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalAlignment = Alignment.CenterVertically,
+    // Where the strip and each tab are (in the window's root): a dragged tab is placed by them,
+    // in this strip or in the other half's.
+    val info = remember { TabDragging.Strip() }
+    if (drag != null) {
+        androidx.compose.runtime.DisposableEffect(drag, right) {
+            drag.strips[right] = info
+            onDispose { if (drag.strips[right] === info) drag.strips.remove(right) }
+        }
+    }
+    val bounds = info.tabs
+    info.tabs.keys.retainAll(tabs.toSet())
+    // A tab of this strip being dragged when the strip goes (its half closed): the drag ends,
+    // the overlay does not stay on screen.
+    if (drag != null) {
+        val mine = tabs.toSet()
+        androidx.compose.runtime.DisposableEffect(drag, mine) {
+            onDispose { if (drag.tab != null && drag.tab in mine) drag.cancel() }
+        }
+    }
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val dragging = drag?.tab
+    // The gap where the dragged tab would land, as wide as that tab; the other tabs slide.
+    val gapAt = drag?.target?.takeIf { it.first == right }?.second
+    val gapWidth = with(density) { ((dragging?.let { drag.strips.values.firstNotNullOfOrNull { s -> s.tabs[it] } }?.width ?: 0f)).toDp() }
+    val others = tabs.filter { it !== dragging }
+    // Tabs being closed: they fold away first, then go.
+    val closing = remember { androidx.compose.runtime.mutableStateMapOf<EditorController, Boolean>() }
+    val scope = rememberCoroutineScope()
+    fun closeSmoothly(list: List<EditorController>, then: () -> Unit) {
+        list.forEach { closing[it] = true }
+        scope.launch {
+            kotlinx.coroutines.delay(Motion.FAST.toLong())
+            list.forEach { closing.remove(it) }
+            then()
+        }
+    }
+    @Composable
+    fun gap(at: Int) {
+        val w by androidx.compose.animation.core.animateDpAsState(
+            if (gapAt == at) gapWidth else 0.dp,
+            androidx.compose.animation.core.tween(TAB_SLIDE_MS, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+            label = "tab gap",
+        )
+        if (w > 0.5.dp) {
+            Box(
+                Modifier
+                    .width(w)
+                    .height(TAB_HEIGHT)
+                    .border(1.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.6f), RoundedCornerShape(6.dp))
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.10f), RoundedCornerShape(6.dp)),
+            )
+        }
+    }
+    // Many tabs scroll sideways, with the same arrows at the ends as the tool line.
+    ArrowRow(
+        Modifier.onGloballyPositioned { info.rect = it.boundsInRoot() },
+        height = TAB_HEIGHT,
+        spacing = 4.dp,
+        padding = PaddingValues(horizontal = 6.dp, vertical = 1.dp),
     ) {
         for (t in tabs) {
             val selected = t === current
+            val dragged = dragging === t
+            if (!dragged) gap(others.indexOf(t))
+            // The dragged tab folds away where it was (it stays composed: the drag goes on in it).
+            val folded by androidx.compose.animation.core.animateFloatAsState(
+                if (dragged || closing[t] == true) 0f else 1f,
+                androidx.compose.animation.core.tween(if (closing[t] == true) Motion.FAST else TAB_SLIDE_MS, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+                label = "tab fold",
+            )
+            // A new tab unfolds into the strip.
+            val appear = remember(t) { androidx.compose.animation.core.Animatable(if (bounds.isEmpty()) 1f else 0f) }
+            LaunchedEffect(t) { appear.animateTo(1f, Motion.fast()) }
+            val fold = folded * appear.value
             Row(
                 Modifier
-                    .clip(RoundedCornerShape(8.dp))
+                    .height(TAB_HEIGHT)
+                    .clipToBounds()
+                    .layout { measurable, constraints ->
+                        val p = measurable.measure(constraints)
+                        // Only its laid-out width folds; where it was measured stays for the gap.
+                        layout((p.width * fold).toInt(), p.height) { p.placeRelative(0, 0) }
+                    }
+                    .onGloballyPositioned { if (!dragged) bounds[t] = it.boundsInRoot() }
+                    .alpha(fold)
+                    .clip(RoundedCornerShape(6.dp))
                     .background(if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant)
+                    .let { m ->
+                        if (drag == null) {
+                            m
+                        } else {
+                            // A long press picks the tab up; it follows the finger or pen.
+                            m.pointerInput(t) {
+                                var at = Offset.Zero
+                                detectDragGesturesAfterLongPress(
+                                    onDragStart = { local ->
+                                        at = (bounds[t]?.topLeft ?: Offset.Zero) + local
+                                        drag.start(t, at)
+                                    },
+                                    onDragEnd = { drag.drop(t, at) },
+                                    onDragCancel = { drag.cancel() },
+                                ) { change, amount ->
+                                    change.consume()
+                                    at += amount
+                                    drag.move(at)
+                                }
+                            }
+                        }
+                    }
                     .clickable { onTab(t) }
-                    .padding(start = 12.dp, end = 2.dp),
+                    .padding(start = 10.dp, end = 2.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
@@ -1185,14 +1374,224 @@ private fun TabStrip(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                    fontSize = 14.sp,
-                    modifier = Modifier.widthIn(max = 200.dp),
+                    fontSize = 13.sp,
+                    modifier = Modifier.widthIn(max = 180.dp),
                 )
-                TextButton(onClick = { onCloseTab(t) }, contentPadding = PaddingValues(horizontal = 6.dp)) { Text("✕", fontSize = 13.sp) }
+                // Wider than it looks: easy to hit with a finger, the strip stays thin.
+                Box(
+                    Modifier.width(36.dp).height(TAB_HEIGHT).clip(RoundedCornerShape(6.dp)).clickable { if (closing[t] != true) closeSmoothly(listOf(t)) { onCloseTab(t) } }.semantics { contentDescription = "Закрыть вкладку" },
+                    contentAlignment = Alignment.Center,
+                ) { Text("✕", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             }
         }
-        TextButton(onClick = onLibrary) { Text("+ Тетрадь") }
+        gap(others.size)
+        Box(
+            Modifier.height(TAB_HEIGHT).clip(RoundedCornerShape(6.dp)).clickable(onClick = onAdd).padding(horizontal = 10.dp),
+            contentAlignment = Alignment.Center,
+        ) { Text(if (right) "+" else "+ Тетрадь", fontSize = 13.sp, color = MaterialTheme.colorScheme.primary) }
+        if (onCloseAll != null && tabs.size >= 2) CloseAllTabs(tabs.size) { closeSmoothly(tabs, onCloseAll) }
     }
+}
+
+/**
+ * A line of buttons that scrolls sideways, with arrows at the ends while something is out of
+ * sight: a tap on one moves the line, by finger or pen, and shows that there is more.
+ */
+@Composable
+private fun ArrowRow(
+    modifier: Modifier = Modifier,
+    /** Height of the arrows: that of the line. */
+    height: androidx.compose.ui.unit.Dp = 48.dp,
+    spacing: androidx.compose.ui.unit.Dp = 8.dp,
+    padding: PaddingValues = PaddingValues(horizontal = 8.dp),
+    content: @Composable () -> Unit,
+) {
+    val scroll = rememberScrollState()
+    val scope = rememberCoroutineScope()
+    var width by remember { mutableStateOf(0) }
+    Box(modifier.fillMaxWidth().onSizeChanged { width = it.width }) {
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(scroll).padding(padding),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(spacing),
+        ) { content() }
+        val bg = MaterialTheme.colorScheme.surface
+        @Composable
+        fun arrow(forward: Boolean, align: Alignment) {
+            Box(
+                Modifier
+                    .align(align)
+                    .width(if (height < 40.dp) 36.dp else 44.dp)
+                    .height(height)
+                    .background(
+                        androidx.compose.ui.graphics.Brush.horizontalGradient(
+                            if (forward) listOf(bg.copy(alpha = 0f), bg, bg) else listOf(bg, bg, bg.copy(alpha = 0f)),
+                        ),
+                    )
+                    .clickable {
+                        // An unhurried glide that eases in and out, to the next part of the line.
+                        scope.launch {
+                            scroll.animateScrollBy(
+                                (if (forward) 1 else -1) * width * 0.7f,
+                                androidx.compose.animation.core.tween(ARROW_SCROLL_MS, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+                            )
+                        }
+                    }
+                    .semantics { contentDescription = if (forward) "Дальше по панели" else "Назад по панели" },
+                contentAlignment = if (forward) Alignment.CenterEnd else Alignment.CenterStart,
+            ) { InkIcon(if (forward) InkIcons.Next else InkIcons.Previous, contentDescription = null, modifier = Modifier.size(if (height < 40.dp) 16.dp else 20.dp)) }
+        }
+        // The arrows fade in and out as the line reaches its ends, instead of popping.
+        AnimatedVisibility(scroll.canScrollBackward, Modifier.align(Alignment.CenterStart), enter = fadeIn(tween(ARROW_FADE_MS)), exit = fadeOut(tween(ARROW_FADE_MS))) {
+            Box { arrow(forward = false, Alignment.CenterStart) }
+        }
+        AnimatedVisibility(scroll.canScrollForward, Modifier.align(Alignment.CenterEnd), enter = fadeIn(tween(ARROW_FADE_MS)), exit = fadeOut(tween(ARROW_FADE_MS))) {
+            Box { arrow(forward = true, Alignment.CenterEnd) }
+        }
+    }
+}
+
+private const val ARROW_SCROLL_MS = 450
+private const val TOOLS_FOLD_MS = Motion.NORMAL
+
+/**
+ * Hides the tools of a narrow pane, and brings them back. Shown: a plain "fold up" button.
+ * Hidden: a tinted chip with the tool in hand and an arrow down, that pulses as the tools fold
+ * into it — it is where they went, and a tap brings them out again.
+ */
+@Composable
+private fun ToolsToggle(c: EditorController) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val hidden = c.toolsHidden
+    val pulse = remember { androidx.compose.animation.core.Animatable(1f) }
+    LaunchedEffect(hidden) {
+        if (hidden) {
+            kotlinx.coroutines.delay(TOOLS_FOLD_MS.toLong() - 60)
+            pulse.animateTo(1.18f, tween(140))
+            pulse.animateTo(1f, androidx.compose.animation.core.spring(dampingRatio = 0.4f, stiffness = 500f))
+        }
+    }
+    val toggle = {
+        c.toolsHidden = !c.toolsHidden
+        if (c.toolsHidden) {
+            val prefs = AppServices.get(context).prefs
+            if (prefs.toolsHiddenHints < 3) {
+                prefs.toolsHiddenHints = prefs.toolsHiddenHints + 1
+                c.showStatus("Инструменты спрятаны в кнопку справа сверху — коснитесь её, чтобы вернуть")
+            }
+        }
+    }
+    if (!hidden) {
+        IconAction(InkIcons.ToolsHide, "Скрыть инструменты (больше места для страницы)", toggle)
+        return
+    }
+    Row(
+        Modifier
+            .padding(horizontal = 4.dp)
+            .graphicsLayer {
+                scaleX = pulse.value
+                scaleY = pulse.value
+            }
+            .clip(RoundedCornerShape(18.dp))
+            .background(MaterialTheme.colorScheme.secondaryContainer)
+            .clickable(onClick = toggle)
+            .semantics { contentDescription = "Показать инструменты" }
+            .padding(horizontal = 8.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        InkIcon(toolIcon(c.tool), contentDescription = null, modifier = Modifier.size(20.dp))
+        InkIcon(InkIcons.ToolsShow, contentDescription = null, modifier = Modifier.size(16.dp))
+    }
+}
+private const val TAB_SLIDE_MS = 220
+private const val ARROW_FADE_MS = 180
+
+/**
+ * "Закрыть все" at the end of a strip of tabs. Two taps: the first turns it into a red
+ * "Закрыть N вкладок?" for a few seconds, the second (only then) closes them; left alone it
+ * turns back. Easy on purpose, never by a stray touch.
+ */
+@Composable
+private fun CloseAllTabs(count: Int, onCloseAll: () -> Unit) {
+    var armed by remember { mutableStateOf(false) }
+    LaunchedEffect(armed) {
+        if (armed) {
+            kotlinx.coroutines.delay(CLOSE_ALL_ARMED_MS)
+            armed = false
+        }
+    }
+    val bg by androidx.compose.animation.animateColorAsState(
+        if (armed) MaterialTheme.colorScheme.error else Color.Transparent,
+        tween(180),
+        label = "close all",
+    )
+    Box(
+        Modifier
+            .height(TAB_HEIGHT)
+            .clip(RoundedCornerShape(6.dp))
+            .background(bg)
+            .clickable {
+                if (armed) {
+                    armed = false
+                    onCloseAll()
+                } else {
+                    armed = true
+                }
+            }
+            .semantics { contentDescription = if (armed) "Подтвердить: закрыть все вкладки" else "Закрыть все вкладки" }
+            .animateContentSize(tween(180))
+            .padding(horizontal = 10.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            if (armed) "Закрыть $count ${tabsWord(count)}?" else "Закрыть все",
+            fontSize = 13.sp,
+            fontWeight = if (armed) FontWeight.SemiBold else FontWeight.Normal,
+            color = if (armed) MaterialTheme.colorScheme.onError else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/** "вкладку", "вкладки", "вкладок" after [n]. */
+private fun tabsWord(n: Int): String = when {
+    n % 100 in 11..14 -> "вкладок"
+    n % 10 == 1 -> "вкладку"
+    n % 10 in 2..4 -> "вкладки"
+    else -> "вкладок"
+}
+
+private const val CLOSE_ALL_ARMED_MS = 3000L
+
+/** Height of a tab: a thin strip, the page keeps the room. */
+private val TAB_HEIGHT = 28.dp
+
+/**
+ * A tab being dragged, told to whoever shows the tabs: [move] and [drop] with the point in the
+ * window's root. [strips]: the strips of tabs on screen (true: the right half's), where they
+ * and their tabs are, so a tab can be dropped among the tabs of either.
+ */
+class TabDragging(
+    val start: (EditorController, Offset) -> Unit,
+    val move: (Offset) -> Unit,
+    val drop: (EditorController, Offset) -> Unit,
+    val cancel: () -> Unit,
+) {
+    /** The tab being dragged now (null: none). */
+    var tab by mutableStateOf<EditorController?>(null)
+
+    /**
+     * Where it would land now: the strip (true: the right half's) and its place among the other
+     * tabs there. That strip opens a gap there (the others slide aside); null: none does.
+     */
+    var target by mutableStateOf<Pair<Boolean, Int>?>(null)
+
+    class Strip {
+        var rect = androidx.compose.ui.geometry.Rect.Zero
+        val tabs = HashMap<EditorController, androidx.compose.ui.geometry.Rect>()
+    }
+
+    val strips = HashMap<Boolean, Strip>()
 }
 
 /** Typing text for the page (new, or editing a text box). */
@@ -1429,7 +1828,7 @@ private fun SizeSlider(c: EditorController, tool: Tool = c.tool) {
             value = value.coerceIn(range.min, range.max),
             onValueChange = { c.selectSize(it) },
             valueRange = range.min..range.max,
-            modifier = Modifier.width(160.dp),
+            modifier = Modifier.width(if (LocalCompactBar.current) 112.dp else 160.dp),
             valueLabel = { "%.1f".format(it) },
         )
     }

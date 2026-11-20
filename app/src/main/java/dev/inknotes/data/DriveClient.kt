@@ -17,6 +17,9 @@ interface DriveApi {
     /** The app's folder ("InkNotes" at the top of the Drive), made the first time. */
     fun folder(): String
 
+    /** Folder [folderId] is still there (not deleted, not in the trash), wherever it was moved. */
+    fun exists(folderId: String): Boolean
+
     fun list(folderId: String): List<DriveFile>
 
     /** [fileId] null: a new file in [folderId]; else that file gets new contents. */
@@ -28,7 +31,21 @@ interface DriveApi {
     fun trash(fileId: String)
 }
 
-class DriveError(message: String, val code: Int = 0) : IOException(message)
+class DriveError(message: String, val code: Int = 0) : IOException(message) {
+    /** What went wrong in words for the user, not Google's answer. */
+    fun friendly(): String {
+        val m = message.orEmpty()
+        return when {
+            m.contains("storageQuotaExceeded") || m.contains("quotaExceeded") && code == 403 -> "На Google Диске закончилось место"
+            code == 429 || m.contains("rateLimitExceeded") -> "Google Диск просит подождать: синхронизация продолжится позже"
+            code in 500..599 -> "Google Диск сейчас недоступен, синхронизация продолжится позже"
+            code == 401 || code == 403 -> "Нет доступа к Google Диску — войдите снова"
+            code == 404 -> "Файл на Google Диске не найден — синхронизация продолжится в следующий раз"
+            code != 0 -> "Ошибка Google Диска (код $code)"
+            else -> m.take(200)
+        }
+    }
+}
 
 /**
  * Google Drive over its REST API (plain HTTPS, no Google services needed). [token] gives an
@@ -37,15 +54,37 @@ class DriveError(message: String, val code: Int = 0) : IOException(message)
 class DriveClient(private val token: () -> String, private val refresh: () -> String) : DriveApi {
     private var access: String? = null
 
-    private fun <T> authorized(call: (String) -> T): T {
+    private fun <T> authorized(call: (String) -> T): T = retrying {
         val t = access ?: token().also { access = it }
-        return try {
+        try {
             call(t)
         } catch (e: DriveError) {
             if (e.code != 401) throw e
             val fresh = refresh().also { access = it }
             call(fresh)
         }
+    }
+
+    /**
+     * [call] again after a pause when Google asks to slow down (429), stumbles (5xx) or the
+     * connection breaks: up to [TRIES] times, waiting 1, 2, 4 s. Anything else fails at once.
+     */
+    private fun <T> retrying(call: () -> T): T {
+        var wait = 1000L
+        repeat(TRIES - 1) {
+            try {
+                return call()
+            } catch (e: DriveError) {
+                if (e.code != 429 && e.code !in 500..599) throw e
+            } catch (e: java.net.SocketTimeoutException) {
+                // retried
+            } catch (e: java.net.SocketException) {
+                // retried
+            }
+            Thread.sleep(wait)
+            wait *= 2
+        }
+        return call()
     }
 
     private fun open(url: String, method: String, auth: String): HttpURLConnection =
@@ -80,6 +119,16 @@ class DriveClient(private val token: () -> String, private val refresh: () -> St
             val conn = open("$API/files?fields=id", "POST", t)
             json(conn, JSONObject().put("name", FOLDER).put("mimeType", FOLDER_MIME))
             JSONObject(conn.answer()).getString("id")
+        }
+    }
+
+    override fun exists(folderId: String): Boolean = authorized { t ->
+        try {
+            val o = JSONObject(open("$API/files/${q(folderId)}?fields=${q("id,trashed,mimeType")}", "GET", t).answer())
+            !o.optBoolean("trashed") && o.optString("mimeType") == FOLDER_MIME
+        } catch (e: DriveError) {
+            // Gone for good (a 403 may be a rate limit: not taken for gone).
+            if (e.code == 404) false else throw e
         }
     }
 
@@ -155,6 +204,7 @@ class DriveClient(private val token: () -> String, private val refresh: () -> St
         const val FOLDER_MIME = "application/vnd.google-apps.folder"
         const val MIME = "application/octet-stream"
         const val FIELDS = "id,name,version,appProperties"
+        private const val TRIES = 4
 
         /** Tokens of a sign-in: [refresh] lasts, [access] for about an hour. */
         class Tokens(val access: String, val refresh: String?, val email: String?, val expiresIn: Long)
@@ -205,7 +255,15 @@ class DriveClient(private val token: () -> String, private val refresh: () -> St
                 while (true) {
                     val socket = server.accept()
                     socket.use { s ->
-                        val line = s.getInputStream().bufferedReader().readLine().orEmpty()
+                        // Browsers open spare connections ahead and may send nothing on them:
+                        // such a one is dropped after a few seconds instead of blocking the
+                        // one that brings the answer.
+                        s.soTimeout = 5_000
+                        val line = try {
+                            s.getInputStream().bufferedReader().readLine().orEmpty()
+                        } catch (e: java.net.SocketTimeoutException) {
+                            return@use
+                        }
                         val reply = GoogleAuth.parse(line, state)
                         val ok = reply is GoogleAuth.Reply.Code
                         val page = if (reply == GoogleAuth.Reply.Other) "" else

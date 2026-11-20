@@ -295,6 +295,15 @@ class NotebookRepository(filesDir: File) {
     /** Pages that could not be read for a reason other than damage (too little memory, newer app). */
     private val unreadable = java.util.Collections.synchronizedSet(HashSet<String>())
 
+    /** Pages set aside as damaged in this run, by path: the name of the kept copy. */
+    private val damaged = java.util.concurrent.ConcurrentHashMap<String, String>()
+
+    /** Notebooks with a page saved in this run: an undo there may bring a picture back. */
+    private val savedThisRun = java.util.Collections.synchronizedSet(HashSet<String>())
+
+    /** When this run began: lock screen notes older than this were left by an earlier one. */
+    private val startedAt = System.currentTimeMillis()
+
     init {
         // Leftovers of imports and exports cut short by the app being closed. On the thread
         // that makes them, first, so it never meets one of this run's.
@@ -306,16 +315,106 @@ class NotebookRepository(filesDir: File) {
         // A notebook being replaced when the app was stopped goes back (or its old copy goes).
         background {
             SafeFiles.recoverAside(root)
-            runCatching { sweepOrphans() }.onFailure { Log.w(TAG, "orphan sweep failed", it) }
+            runCatching { recoverRecordings() }.onFailure { Log.w(TAG, "recording recovery failed", it) }
+            // One notebook at a time, each queued after what was asked meanwhile: opening the
+            // library or a notebook does not wait for every page of every notebook to be read.
+            val dirs = root.listFiles().orEmpty().filter { !it.name.startsWith(".") && it.isDirectory }
+            sweepNext(dirs, 0)
         }
     }
 
     // Reads go through the same executor as writes, so they always see queued saves.
-    fun list(): List<Notebook> = onIo {
-        root.listFiles().orEmpty()
+    fun list(): List<Notebook> = onIo { listIn(root.listFiles().orEmpty()) }
+
+    /**
+     * Like [list], but a library folder that can't be read at all (storage trouble) is an error,
+     * not an empty library: the sync must never take every notebook for deleted here.
+     */
+    fun listForSync(): List<Notebook> = onIo {
+        listIn(root.listFiles() ?: throw IOException("library folder unreadable"))
+    }
+
+    private fun listIn(dirs: Array<out File>): List<Notebook> {
+        val missing = HashSet<String>()
+        return dirs.asList()
             .filter { !it.name.startsWith(".") } // skip import staging folders
-            .mapNotNull { dir -> runCatching { readMeta(dir) }.getOrNull() }
+            .filter { !File(it, LOCK_NOTE).exists() } // a note being written over the lock screen
+            .mapNotNull { dir ->
+                runCatching { readMeta(dir) }.getOrElse { e ->
+                    recoverMeta(dir, e).also { if (it == null && UUID_RE.matches(dir.name) && File(dir, META).exists()) missing += dir.name }
+                }
+            }
             .sortedByDescending { it.updatedAt }
+            .also { unlisted = missing }
+    }
+
+    /**
+     * Notebooks whose folder is here but that the last [list] could not read nor recover:
+     * not deleted, only unknown for now. The sync must not take them for deleted here.
+     */
+    @Volatile
+    var unlisted: Set<String> = emptySet()
+        private set
+
+    /** Notebooks rebuilt from their pages ([recoverMeta]) that are still marked so. */
+    fun recoveredIds(): Set<String> = onIo {
+        root.listFiles().orEmpty().filter { File(it, RECOVERED).exists() && UUID_RE.matches(it.name) }.map { it.name }.toSet()
+    }
+
+    /**
+     * Recovered notebook [id] becomes a notebook of its own under a new id, so a whole copy
+     * of [id] (from the Drive) can take its place instead of being written over by it.
+     * Returns the new id, or null if it could not be moved.
+     */
+    fun detachRecovered(id: String): String? = onIo {
+        val from = dir(id)
+        val nb = runCatching { readMeta(from) }.getOrNull() ?: return@onIo null
+        val copy = nb.copy(id = newId(), updatedAt = System.currentTimeMillis())
+        if (!from.renameTo(dir(copy.id))) return@onIo null
+        writeMetaNow(copy)
+        // Done once: from now on it is a notebook like any other (its files are still kept).
+        settle(dir(copy.id))
+        copy.id
+    }
+
+    /**
+     * Recovered notebook [id] has nothing on the Drive to be confused with: from now on it syncs
+     * like any other. Its files stay protected from the orphan sweep.
+     */
+    fun settleRecovered(id: String) = onIo { settle(dir(id)) }
+
+    private fun settle(d: File) {
+        val mark = File(d, RECOVERED)
+        if (mark.exists() && !mark.renameTo(File(d, RECOVERED_KEPT))) mark.delete()
+    }
+
+    /**
+     * A notebook whose notebook.json can't be read still has its pages: rather than drop it from
+     * the library unseen, the file is set aside (`notebook.json.broken-<time>`) and a new one
+     * lists the page files found, so the notebook shows up as «Восстановленная тетрадь». Page
+     * order, PDF pages under them and the like are lost; the files themselves all stay (the
+     * orphan sweep leaves such a notebook alone). Null when there is nothing to recover: a
+     * folder with no pages, or the leftover of a notebook that is in the trash.
+     */
+    private fun recoverMeta(dir: File, cause: Throwable): Notebook? {
+        if (!UUID_RE.matches(dir.name) || !dir.isDirectory) return null
+        if (File(trashDir(), dir.name).exists()) return null
+        val pagesDir = File(dir, "pages")
+        val pages = pagesDir.listFiles().orEmpty()
+            .filter { it.isFile && it.name.endsWith(".ink") && UUID_RE.matches(it.name.removeSuffix(".ink")) }
+            .sortedBy { it.lastModified() }
+        val meta = File(dir, META)
+        if (pages.isEmpty() && !meta.exists()) return null
+        Log.e(TAG, "notebook ${dir.name} unreadable, recovering its pages", cause)
+        return runCatching {
+            if (meta.exists() && !meta.renameTo(File(dir, "$META.broken-${System.currentTimeMillis()}"))) return null
+            File(dir, RECOVERED).writeText(System.currentTimeMillis().toString())
+            val now = System.currentTimeMillis()
+            val created = pages.minOfOrNull { it.lastModified() } ?: now
+            val bg = PageBackground(PaperKind.BLANK)
+            val ids = pages.map { it.name.removeSuffix(".ink") }.ifEmpty { listOf(newId()) }
+            Notebook(dir.name, "Восстановленная тетрадь", bg, bg, created, now, ids).also(::writeMetaNow)
+        }.onFailure { Log.e(TAG, "could not recover ${dir.name}", it) }.getOrNull()
     }
 
     fun create(
@@ -335,6 +434,89 @@ class NotebookRepository(filesDir: File) {
         val nb = Notebook(newId(), title, bg, bg, now, now, listOf(first), cover = cover, folder = folder, coverArt = coverArt?.takeIf { it in 0 until COVER_ARTS }, pageSizes = sizes)
         writeMeta(nb)
         return nb
+    }
+
+    // ------------------------------------------------- notes over the lock screen
+
+    /**
+     * A notebook of its own for one quick note written over the lock screen: it has only the
+     * new page, so nothing written before can be seen or reached without unlocking. It is not
+     * listed in the library; [mergeLockNote] moves what was written into the quick notes.
+     */
+    fun createLockNote(title: String, paper: PaperKind): Notebook {
+        val nb = create(title, paper)
+        val marker = File(dir(nb.id), LOCK_NOTE)
+        background { runCatching { marker.writeText(System.currentTimeMillis().toString()) } }
+        return nb
+    }
+
+    /**
+     * Lock screen notes not yet moved into the quick notes. [leftOnly]: only those of an earlier
+     * run of the app (stopped before it could move them), never one being written now.
+     */
+    fun lockNotes(leftOnly: Boolean = false): List<Notebook> = onIo {
+        root.listFiles().orEmpty()
+            .filter { d -> File(d, LOCK_NOTE).let { it.exists() && (!leftOnly || it.lastModified() < startedAt) } }
+            .mapNotNull { runCatching { readMeta(it) }.getOrNull() }
+    }
+
+    /**
+     * Moves the pages written in lock screen note [note] (empty ones are dropped), with their
+     * pictures and recordings, to the end of notebook [intoId], and removes the note. With no
+     * such notebook (never made, or deleted) the note itself becomes it, under [title].
+     * Returns the notebook that has the pages now (null: nothing was written).
+     */
+    fun mergeLockNote(note: Notebook, intoId: String?, title: String): Notebook? = onIo {
+        val from = dir(note.id)
+        val nb = runCatching { readMeta(from) }.getOrNull()
+        if (nb == null) {
+            deleteQuietly(from)
+            return@onIo null
+        }
+        val written = nb.pageIds.filter { id ->
+            val f = File(from, "pages/$id.ink")
+            f.isFile && runCatching { PageCodec.read(f, PageCodec.Limits.OWN) }.getOrNull()
+                ?.let { it.strokes.isNotEmpty() || it.fills.isNotEmpty() || it.images.isNotEmpty() } != false
+        }
+        if (written.isEmpty() && nb.recordings.isEmpty()) {
+            deleteQuietly(from)
+            return@onIo null
+        }
+        val target = intoId?.takeIf { UUID_RE.matches(it) && it != note.id }?.let { id ->
+            dir(id).takeIf { File(it, META).isFile && !File(it, LOCK_NOTE).exists() }?.let { runCatching { readMeta(it) }.getOrNull() }
+        }
+        if (target == null) {
+            // Becomes the quick notes notebook itself.
+            val own = nb.copy(title = title, pageIds = written.ifEmpty { nb.pageIds.take(1) }, updatedAt = System.currentTimeMillis())
+            writeMetaNow(own)
+            File(from, LOCK_NOTE).delete()
+            return@onIo own
+        }
+        val into = dir(target.id)
+        val intoPages = File(into, "pages").apply { mkdirs() }
+        for (id in written) File(from, "pages/$id.ink").renameTo(File(intoPages, "$id.ink"))
+        for (f in from.listFiles().orEmpty()) {
+            if (PageImage.NAME.matches(f.name) || REC_NAME.matches(f.name) || PHOTO_NAME.matches(f.name)) f.renameTo(File(into, f.name))
+        }
+        val pages = written.toSet()
+        val merged = target.copy(
+            pageIds = target.pageIds + written,
+            pageSizes = target.pageSizes + nb.pageSizes.filterKeys { it in pages },
+            recordings = target.recordings + nb.recordings,
+            audioMarks = (target.audioMarks + nb.audioMarks.filter { it.pageId in pages }).takeLast(MAX_MARKS),
+            updatedAt = System.currentTimeMillis(),
+        )
+        writeMetaNow(merged)
+        deleteQuietly(from)
+        merged
+    }
+
+    /** [mergeLockNote] off the main thread; [onDone] on the main thread. */
+    fun mergeLockNoteAsync(note: Notebook, intoId: String?, title: String, onDone: (Notebook?) -> Unit) {
+        background {
+            val nb = runCatching { mergeLockNote(note, intoId, title) }.onFailure { Log.e(TAG, "lock note not merged", it) }.getOrNull()
+            main.post { onDone(nb) }
+        }
     }
 
     fun rename(nb: Notebook, title: String): Notebook =
@@ -379,6 +561,81 @@ class NotebookRepository(filesDir: File) {
             audioMarks = (nb.audioMarks + marks.filter { it.pageId in nb.pageIds }).takeLast(MAX_MARKS),
             updatedAt = System.currentTimeMillis(),
         ).also(::writeMeta)
+
+    /**
+     * A recording under way, written down beside its file (`rec-….m4a.live`): when it began and
+     * the writing made so far. If the app is stopped before the recording is (killed by the
+     * system, out of battery), the next start adds it to its notebook from this (see
+     * [recoverRecordings]); a finished recording removes it ([endRecordingJournal]).
+     */
+    fun saveRecordingJournal(nb: Notebook, file: String, since: Long, marks: List<AudioMark>) {
+        if (!REC_NAME.matches(file)) return
+        val json = JSONObject().put("at", since).put(
+            "marks",
+            JSONArray(marks.takeLast(MAX_MARKS).map { JSONObject().put("page", it.pageId).put("l", it.left.toDouble()).put("t", it.top.toDouble()).put("r", it.right.toDouble()).put("b", it.bottom.toDouble()).put("ms", it.atMs) }),
+        ).toString().toByteArray()
+        val target = File(dir(nb.id), "$file$LIVE")
+        background { if (target.parentFile?.isDirectory == true) atomicWrite(target) { it.write(json) } }
+    }
+
+    fun endRecordingJournal(nb: Notebook, file: String) {
+        if (!REC_NAME.matches(file)) return
+        val target = File(dir(nb.id), "$file$LIVE")
+        background { target.delete() }
+    }
+
+    /**
+     * Recordings left unfinished by an app that was stopped: each one whose file has sound goes
+     * into its notebook with the writing made during it (the format, AAC in ADTS frames, plays
+     * up to where it was cut off). Run at start, before any recording can be under way.
+     */
+    private fun recoverRecordings() {
+        for (d in root.listFiles().orEmpty()) {
+            if (d.name.startsWith(".") || !d.isDirectory) continue
+            val journals = d.listFiles().orEmpty().filter { it.name.endsWith(LIVE) }
+            if (journals.isEmpty()) continue
+            var nb = runCatching { readMeta(d) }.getOrNull() ?: continue
+            for (j in journals) {
+                val name = j.name.removeSuffix(LIVE)
+                val audio = File(d, name)
+                runCatching {
+                    if (!REC_NAME.matches(name) || !audio.isFile || audio.length() < MIN_RECORDING_BYTES) {
+                        audio.takeIf { REC_NAME.matches(name) }?.delete()
+                        return@runCatching
+                    }
+                    if (nb.recordings.any { it.file == name }) return@runCatching
+                    val o = JSONObject(j.readText())
+                    val since = o.getLong("at")
+                    val pages = nb.pageIds.toSet()
+                    val a = o.optJSONArray("marks") ?: JSONArray()
+                    val marks = (0 until minOf(a.length(), MAX_MARKS)).mapNotNull { i ->
+                        val m = a.optJSONObject(i) ?: return@mapNotNull null
+                        val page = m.optString("page").takeIf { it in pages } ?: return@mapNotNull null
+                        AudioMark(page, m.optDouble("l").toFloat(), m.optDouble("t").toFloat(), m.optDouble("r").toFloat(), m.optDouble("b").toFloat(), name, m.optLong("ms"))
+                    }
+                    val duration = durationOf(audio) ?: (audio.lastModified() - since).coerceAtLeast(0L)
+                    nb = nb.copy(
+                        recordings = nb.recordings + Recording(name, since, duration),
+                        audioMarks = (nb.audioMarks + marks).takeLast(MAX_MARKS),
+                        updatedAt = System.currentTimeMillis(),
+                    )
+                    writeMetaNow(nb)
+                    Log.w(TAG, "recording $name of ${nb.id} recovered")
+                }.onFailure { Log.e(TAG, "recording ${j.name} not recovered", it) }
+                j.delete()
+            }
+        }
+    }
+
+    private fun durationOf(file: File): Long? = runCatching {
+        val r = android.media.MediaMetadataRetriever()
+        try {
+            r.setDataSource(file.path)
+            r.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()?.takeIf { it > 0 }
+        } finally {
+            r.release()
+        }
+    }.getOrNull()
 
     fun setAudioMarks(nb: Notebook, marks: List<AudioMark>): Notebook =
         nb.copy(audioMarks = marks.filter { it.pageId in nb.pageIds }.takeLast(MAX_MARKS)).also(::writeMeta)
@@ -515,12 +772,30 @@ class NotebookRepository(filesDir: File) {
         val from = dir(nb.id)
         if (!from.isDirectory) return@background
         val to = File(trashDir(), nb.id)
-        deleteQuietly(to)
+        // An older copy of it already in the trash (deleted, restored, deleted again) is kept
+        // under an id of its own, not removed unseen.
+        if (to.exists()) keepAsOtherTrashCopy(to)
         if (from.renameTo(to)) {
             runCatching { File(to, DELETED_AT).writeText(System.currentTimeMillis().toString()) }
         } else {
             Log.w(TAG, "could not move ${nb.id} to the trash")
         }
+    }
+
+    private fun keepAsOtherTrashCopy(old: File) {
+        val nb = runCatching { readMeta(old) }.getOrNull()
+        if (nb == null) {
+            deleteQuietly(old)
+            return
+        }
+        val title = if (nb.title.endsWith(OLD_COPY)) nb.title else "${nb.title}$OLD_COPY".take(MAX_TITLE)
+        val copy = nb.copy(id = newId(), title = title)
+        val moved = File(trashDir(), copy.id)
+        if (!old.renameTo(moved)) {
+            deleteQuietly(old)
+            return
+        }
+        runCatching { atomicWrite(File(moved, META)) { it.write(encodeMeta(copy, moved).second) } }
     }
 
     val trashDays get() = TRASH_DAYS
@@ -565,8 +840,17 @@ class NotebookRepository(filesDir: File) {
 
     private fun trashDir() = File(root, TRASH).apply { mkdirs() }
 
+    /**
+     * When [d] went to the trash. Without a readable record (it could not be written then) the
+     * time is taken as now and written down: the folder's own date is when the notebook was
+     * last changed, maybe long ago, and the notebook would be removed for good at once.
+     */
     private fun deletedAt(d: File): Long =
-        runCatching { File(d, DELETED_AT).readText().trim().toLong() }.getOrElse { d.lastModified() }
+        runCatching { File(d, DELETED_AT).readText().trim().toLong() }.getOrElse {
+            val now = System.currentTimeMillis()
+            runCatching { File(d, DELETED_AT).writeText(now.toString()) }
+            now
+        }
 
     fun insertPage(nb: Notebook, index: Int, size: PageSize = PageSize.DEFAULT): Notebook {
         val id = newId()
@@ -640,12 +924,16 @@ class NotebookRepository(filesDir: File) {
 
     /** Replaces one theme's background and deletes a photo that is no longer used. */
     fun setBackground(nb: Notebook, darkTheme: Boolean, bg: PageBackground): Notebook {
-        val updated = if (darkTheme) nb.copy(dark = bg) else nb.copy(light = bg)
+        val updated = (if (darkTheme) nb.copy(dark = bg) else nb.copy(light = bg)).copy(updatedAt = System.currentTimeMillis())
         val old = nb.background(darkTheme).photo
-        if (old != null && old != updated.light.photo && old != updated.dark.photo) {
-            background { File(dir(nb.id), old).delete() }
+        val (file, bytes) = encodeMeta(updated)
+        // The old photo goes only once notebook.json no longer names it: stopped in between,
+        // the notebook keeps a photo it does not use, never names one that is gone.
+        background {
+            atomicWrite(file) { it.write(bytes) }
+            if (old != null && old != updated.light.photo && old != updated.dark.photo) File(dir(nb.id), old).delete()
         }
-        return updated.copy(updatedAt = System.currentTimeMillis()).also(::writeMeta)
+        return updated
     }
 
     /**
@@ -952,30 +1240,41 @@ class NotebookRepository(filesDir: File) {
         zip.flush()
     }
 
-    /** Pictures in [dir] that a page of [nb] uses. */
+    /**
+     * Pictures in [dir] that a page of [nb] uses. Copies of damaged pages kept beside them
+     * (`.broken-…`, `.kept-…`) count as pages: the pictures they name stay, so a copy that is
+     * repaired later still has them.
+     */
     private fun usedPictures(nb: Notebook, dir: File): Set<String> {
         val all = dir.list().orEmpty().filter { PageImage.NAME.matches(it) }.toSet()
-        val pages = nb.pageIds.asSequence().map { File(dir, "pages/$it.ink") }.filter { it.isFile }.map { it.readBytes() }
+        val pagesDir = File(dir, "pages")
+        val copies = pagesDir.list().orEmpty().filter { PageCopies.pageOf(it) != null }.map { File(pagesDir, it) }
+        val pages = (nb.pageIds.asSequence().map { File(pagesDir, "$it.ink") } + copies.asSequence())
+            .filter { it.isFile }.map { it.readBytes() }
         return Orphans.referenced(all, pages)
     }
 
+    private fun sweepNext(dirs: List<File>, i: Int) {
+        if (i >= dirs.size) return
+        runCatching { sweepOrphans(dirs[i]) }.onFailure { Log.w(TAG, "orphan sweep failed", it) }
+        background { sweepNext(dirs, i + 1) }
+    }
+
     /**
-     * Pictures and PDFs no page uses any more (left by deleted pages) are removed from disk.
-     * Run at start, before any notebook is open (no undo can bring a page back then), and
-     * only for files older than a day.
+     * Pictures and PDFs no page of the notebook in [dir] uses any more (left by deleted pages)
+     * are removed from disk, only files older than a day. Started when the app starts; a
+     * notebook changed since then is left alone (an undo there may still bring a page back).
      */
-    private fun sweepOrphans() {
+    private fun sweepOrphans(dir: File) {
         val old = System.currentTimeMillis() - 24L * 3600 * 1000
-        for (dir in root.listFiles().orEmpty()) {
-            if (dir.name.startsWith(".") || !dir.isDirectory) continue
-            val nb = runCatching { readMeta(dir) }.getOrNull() ?: continue
-            val used = runCatching { usedPictures(nb, dir) }.getOrNull() ?: continue
-            val pdfs = nb.pdfPages.values.map { it.file }.toSet()
-            for (f in dir.listFiles().orEmpty()) {
-                if (f.lastModified() > old) continue
-                val orphan = (PageImage.NAME.matches(f.name) && f.name !in used) || (PDF_NAME.matches(f.name) && f.name !in pdfs && f.name != nb.light.photo && f.name != nb.dark.photo)
-                if (orphan) f.delete()
-            }
+        if (!dir.isDirectory || File(dir, RECOVERED).exists() || File(dir, RECOVERED_KEPT).exists() || dir.name in savedThisRun) return
+        val nb = runCatching { readMeta(dir) }.getOrNull() ?: return
+        val used = runCatching { usedPictures(nb, dir) }.getOrNull() ?: return
+        val pdfs = nb.pdfPages.values.map { it.file }.toSet()
+        for (f in dir.listFiles().orEmpty()) {
+            if (f.lastModified() > old) continue
+            val orphan = (PageImage.NAME.matches(f.name) && f.name !in used) || (PDF_NAME.matches(f.name) && f.name !in pdfs && f.name != nb.light.photo && f.name != nb.dark.photo)
+            if (orphan) f.delete()
         }
     }
 
@@ -1128,13 +1427,14 @@ class NotebookRepository(filesDir: File) {
             for (item in set.items) {
                 val ready = item.ready
                 val chosen = into
-                val folder = SafeFiles.importFolder(item.folder?.let(created::get), chosen, ready.existing?.folder)
+                val existing = current(ready)
+                val folder = SafeFiles.importFolder(item.folder?.let(created::get), chosen, existing?.folder)
                 // The same notebook twice in one import: the second one is a copy.
                 val again = !taken.add(ready.notebook.id)
                 val nb = runCatching {
-                    if (!again && (replace || ready.existing == null)) {
+                    if (!again && (replace || existing == null)) {
                         SafeFiles.replaceDir(ready.staging, dir(ready.notebook.id))
-                        ready.notebook.copy(folder = folder).also { writeMetaNow(it) }
+                        ready.notebook.copy(folder = folder, favorite = existing?.favorite == true).also { writeMetaNow(it) }
                     } else {
                         val copy = ready.notebook.copy(id = newId(), title = "${ready.notebook.title} (копия)".take(MAX_TITLE), folder = folder)
                         if (!ready.staging.renameTo(dir(copy.id))) throw IOException("rename failed")
@@ -1305,15 +1605,22 @@ class NotebookRepository(filesDir: File) {
         return result
     }
 
+    /** The notebook here that [ready] would replace, as it is now (null: none any more). */
+    private fun current(ready: ArchiveImport.Ready): Notebook? =
+        dir(ready.notebook.id).takeIf { it.isDirectory }?.let { runCatching { readMeta(it) }.getOrNull() } ?: ready.existing?.takeIf { dir(it.id).isDirectory }
+
     /** Moves a staged import into the library, replacing the local copy or as a new notebook. */
     fun commitImportAsync(ready: ArchiveImport.Ready, replace: Boolean, into: String? = null, onDone: (Notebook?) -> Unit) {
         background {
             // The same rule as for several files: a chosen folder, else where it already is.
-            val folder = SafeFiles.importFolder(null, into?.takeIf { id -> readFoldersOrNull().orEmpty().any { it.id == id } }, ready.existing?.folder)
+            // As it is now, not when the file was read: starred or moved meanwhile, it stays so.
+            val existing = current(ready)
+            val folder = SafeFiles.importFolder(null, into?.takeIf { id -> readFoldersOrNull().orEmpty().any { it.id == id } }, existing?.folder)
             val nb = runCatching {
-                if (replace || ready.existing == null) {
+                if (replace || existing == null) {
                     SafeFiles.replaceDir(ready.staging, dir(ready.notebook.id))
-                    ready.notebook.copy(folder = folder).also { writeMetaNow(it) }
+                    // Folder and star belong to this device (not in shared files): replacing keeps them.
+                    ready.notebook.copy(folder = folder, favorite = existing?.favorite == true).also { writeMetaNow(it) }
                 } else {
                     val copy = ready.notebook.copy(
                         id = newId(),
@@ -1406,12 +1713,17 @@ class NotebookRepository(filesDir: File) {
             try {
                 val bytes = file.readBytes()
                 reading = false
-                PageCodec.decode(bytes).also { unreadable -= file.path }
+                // Pages on this device are read with the wider limits: one written by a version
+                // that did not keep to the strict ones still opens (see PageCodec.Limits).
+                PageCodec.decode(bytes, PageCodec.Limits.OWN).also { unreadable -= file.path }
             } catch (t: Throwable) {
                 Log.e(TAG, "page $pageId not loaded", t)
                 when (PageCopies.failure(t, reading)) {
                     // Not a page: set aside, so the empty page that replaces it destroys nothing.
-                    PageCopies.Failure.DAMAGED -> file.renameTo(File(file.parentFile, "${file.name}.broken-${System.currentTimeMillis()}"))
+                    PageCopies.Failure.DAMAGED -> {
+                        val aside = File(file.parentFile, "${file.name}.broken-${System.currentTimeMillis()}")
+                        if (file.renameTo(aside)) damaged[file.path] = aside.name
+                    }
                     // Storage or memory trouble, or a newer app's page: the file is probably fine.
                     // It stays as it is and nothing is written over it (see savePageAsync).
                     PageCopies.Failure.LOCKED -> unreadable += file.path
@@ -1421,15 +1733,39 @@ class NotebookRepository(filesDir: File) {
         }
     }
 
+    /**
+     * Like [loadPage], but null when the page has a file that could not be read (it is shown
+     * empty in the editor): for exports, which must not pass such a page off as blank.
+     */
+    fun readPage(nb: Notebook, pageId: String): PageContent? = onIo {
+        val file = pageFile(nb.id, pageId)
+        if (!file.exists()) return@onIo PageContent.EMPTY
+        val content = loadPage(nb, pageId)
+        if (file.path in unreadable || !file.exists()) null else content
+    }
+
     /** Size and time of a page's file: changes whenever the page is saved ("-" when there is none). */
     fun pageStamp(nb: Notebook, pageId: String): String =
         pageFile(nb.id, pageId).let { if (it.isFile) "${it.length()}:${it.lastModified()}" else "-" }
 
+    /**
+     * Page [pageId] was found damaged when it was opened and set aside: the name of the copy
+     * kept, once (null: nothing to say). The editor says so instead of showing an empty page
+     * without a word.
+     */
+    fun takeDamaged(nb: Notebook, pageId: String): String? = damaged.remove(pageFile(nb.id, pageId).path)
+
     /** Page [pageId] could not be read and is shown empty: it must not be changed or saved. */
     fun isLocked(nb: Notebook, pageId: String) = pageFile(nb.id, pageId).path in unreadable
 
-    /** [content] must be immutable: it is encoded on the IO thread. */
-    fun savePageAsync(nb: Notebook, pageId: String, content: PageContent) {
+    /**
+     * [content] must be immutable: it is encoded on the IO thread. [onTooComplex] is told on the
+     * main thread when the page holds more than a shared page file may: what is too much, in
+     * words for the user, and whether it was saved here all the same (saved: over the shared
+     * limits only; not saved: over even this device's, nothing written, the old copy stays).
+     */
+    fun savePageAsync(nb: Notebook, pageId: String, content: PageContent, onTooComplex: ((problem: String, saved: Boolean) -> Unit)? = null) {
+        savedThisRun += nb.id
         val file = pageFile(nb.id, pageId)
         background {
             // A page shown empty because it could not be read is never written over.
@@ -1437,8 +1773,21 @@ class NotebookRepository(filesDir: File) {
                 Log.w(TAG, "page $pageId is locked, not saved")
                 return@background
             }
+            // A page over what may be shared is still saved here (this device reads it with its
+            // own, wider limits): nothing written is lost. It only can't go to another device as
+            // it is, which the editor says.
+            val overShared = PageCodec.tooComplex(content)
+            try {
+                atomicWrite(file) { out -> PageCodec.write(out, content, PageCodec.Limits.OWN) }
+                if (overShared != null && onTooComplex != null) main.post { onTooComplex(overShared, true) }
+            } catch (e: PageTooComplexException) {
+                // Nothing was written: the copy on disk is still the last one that fits.
+                Log.w(TAG, "page $pageId not saved: ${e.message}")
+                val problem = e.message.orEmpty()
+                if (onTooComplex != null) main.post { onTooComplex(problem, false) }
+                return@background
+            }
             unreadable -= file.path
-            atomicWrite(file) { out -> PageCodec.write(out, content) }
             pruneCopies(file)
         }
     }
@@ -1450,7 +1799,7 @@ class NotebookRepository(filesDir: File) {
     private fun pruneCopies(file: File) {
         val names = file.parentFile?.list().orEmpty().filter { PageCopies.pageOf(it) == file.name }
         if (names.size <= PageCopies.KEEP) return
-        val ok = runCatching { PageCodec.read(file) }.isSuccess
+        val ok = runCatching { PageCodec.read(file, PageCodec.Limits.OWN) }.isSuccess
         for (n in PageCopies.toDelete(names, file.name, ok)) File(file.parentFile, n).delete()
     }
 
@@ -1661,7 +2010,7 @@ class NotebookRepository(filesDir: File) {
         atomicWrite(file) { it.write(bytes) }
     }
 
-    private fun encodeMeta(nb: Notebook): Pair<File, ByteArray> {
+    private fun encodeMeta(nb: Notebook, into: File? = null): Pair<File, ByteArray> {
         fun bg(b: PageBackground) = JSONObject().put("kind", b.kind.name).apply {
             b.photo?.let { put("photo", it) }
             b.color?.let { put("color", it.toLong() and 0xFFFFFFFFL) }
@@ -1734,25 +2083,46 @@ class NotebookRepository(filesDir: File) {
             }
             json.put("pdf", pdf)
         }
-        val file = File(dir(nb.id).apply { mkdirs() }, META)
+        val file = File(into ?: dir(nb.id).apply { mkdirs() }, META)
         return file to json.toString().toByteArray()
     }
 
     private fun atomicWrite(target: File, body: (FileOutputStream) -> Unit) {
         val tmp = File(target.parentFile, target.name + ".tmp")
-        FileOutputStream(tmp).use { out ->
-            body(out)
-            out.flush()
-            out.fd.sync()
+        try {
+            FileOutputStream(tmp).use { out ->
+                body(out)
+                out.flush()
+                out.fd.sync()
+            }
+        } catch (t: Throwable) {
+            tmp.delete()
+            throw t
         }
         if (!tmp.renameTo(target)) throw IOException("rename failed: $tmp -> $target")
     }
 
     private companion object {
         const val TRASH_DAYS = 30
+        private const val OLD_COPY = " (старая копия)"
         const val TAG = "NotebookRepository"
         const val META = "notebook.json"
         private const val TOUCHED = "touched"
+
+        /** Marks a notebook for one note over the lock screen ([createLockNote]). */
+        private const val LOCK_NOTE = "lockscreen"
+
+        /** Beside a recording under way ([saveRecordingJournal]). */
+        private const val LIVE = ".live"
+
+        /** Less than this is a header with no sound in it. */
+        private const val MIN_RECORDING_BYTES = 2048L
+
+        /** Marks a notebook rebuilt from its pages ([recoverMeta]): its files are never swept. */
+        private const val RECOVERED = "recovered"
+
+        /** A recovered notebook that syncs as any other now; its files are still never swept. */
+        private const val RECOVERED_KEPT = "recovered-kept"
         const val FOLDERS = ".folders.json"
         const val TRASH = ".trash"
         const val DELETED_AT = "deleted-at"
