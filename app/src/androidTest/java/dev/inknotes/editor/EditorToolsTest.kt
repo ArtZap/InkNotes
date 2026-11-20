@@ -287,18 +287,6 @@ class EditorToolsTest {
         assertEquals(1, doc.strokes.size)
     }
 
-    @Test
-    fun inkColorsStayVisibleOnBothPapers() {
-        assertEquals(0xFFE8E8E8.toInt(), InkColors.forPaper(Color.BLACK, dark = true))
-        assertEquals(0xFF1A1A1A.toInt(), InkColors.forPaper(Color.WHITE, dark = false))
-        assertEquals(0xFF1E5BD8.toInt(), InkColors.forPaper(0xFF1E5BD8.toInt(), dark = true))
-        assertEquals(0x80E8E8E8.toInt(), InkColors.forPaper(0x80000000.toInt(), dark = true))
-        // Ink stored as light grey by v0.3 builds must still show up on light paper.
-        assertEquals(0xFF1A1A1A.toInt(), InkColors.forPaper(0xFFE8E8E8.toInt(), dark = false))
-        // Saturated light/dark colours keep their colour.
-        assertEquals(0x80FFEB3B.toInt(), InkColors.forPaper(0x80FFEB3B.toInt(), dark = false))
-        assertEquals(0xFF14254D.toInt(), InkColors.forPaper(0xFF14254D.toInt(), dark = true))
-    }
 
     /** Renders every background in both themes (plus a generated photo) for a visual check. */
     @Test

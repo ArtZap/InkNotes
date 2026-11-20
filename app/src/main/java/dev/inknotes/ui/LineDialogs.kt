@@ -39,7 +39,6 @@ import dev.inknotes.data.DashPattern
 import dev.inknotes.data.DashStyle
 import dev.inknotes.data.InkKind
 import dev.inknotes.data.Notebook
-import dev.inknotes.editor.InkColors
 import dev.inknotes.editor.PageEditorView
 import dev.inknotes.editor.PaperStyle
 import kotlin.math.roundToInt
@@ -81,7 +80,7 @@ private fun DrawScope.drawDashSample(style: DashStyle, width: Float, color: Int,
 @Composable
 fun DashDialog(c: EditorController, applyLabel: String, onApply: (DashStyle) -> Unit, onDismiss: () -> Unit) {
     var style by remember { mutableStateOf(c.dashStyle) }
-    val color = InkColors.forPaper(c.penColor, c.paperDark)
+    val color = c.penColor
     val width = c.penSize
     val paint = remember { Paint() }
     AlertDialog(

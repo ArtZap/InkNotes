@@ -43,7 +43,6 @@ import dev.inknotes.data.FillPattern
 import dev.inknotes.data.HatchStyle
 import dev.inknotes.data.LineType
 import dev.inknotes.editor.Hatch
-import dev.inknotes.editor.InkColors
 import dev.inknotes.editor.PaperStyle
 import kotlin.math.roundToInt
 
@@ -96,7 +95,7 @@ fun PatternSwatch(pattern: FillPattern, style: HatchStyle, color: Int, selected:
 fun HatchDialog(c: EditorController, onDismiss: () -> Unit) {
     val style = c.fillStyle
     // On the notebook's own paper, which may be dark in the light theme or the other way round.
-    val color = InkColors.forPaper(c.fillColor, c.paperDark)
+    val color = c.fillColor
     val paint = remember { Paint() }
     val set = { s: HatchStyle -> c.changeFillStyle(s) }
     AlertDialog(

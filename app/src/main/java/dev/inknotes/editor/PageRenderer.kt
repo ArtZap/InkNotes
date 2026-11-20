@@ -66,8 +66,6 @@ class PageRenderer {
     private val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { strokeWidth = 1.2f }
     private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     // One cache per paper brightness: pages of both kinds (PDF and dark paper) are drawn in the same frame.
-    private val onDarkCache = WeakHashMap<PageStroke, Stroke>()
-    private val onLightCache = WeakHashMap<PageStroke, Stroke>()
     private val neonPaths = WeakHashMap<PageStroke, Path>()
     private class NeonParts(val color: Int, val tube: Stroke, val core: Stroke)
 
@@ -326,7 +324,7 @@ class PageRenderer {
         } else if (s.dash != null) {
             drawDashed(canvas, s)
         } else {
-            ink.draw(canvas, displayStroke(s), toScreen)
+            ink.draw(canvas, s.stroke, toScreen)
         }
     }
 
@@ -348,7 +346,7 @@ class PageRenderer {
         val path = dashPaths.getOrPut(s) { polyline(s.stroke) }
         if (dashEffects.size > 64) dashEffects.clear()
         dashPaint.pathEffect = dashEffects.getOrPut(dash to width) { DashPathEffect(dash.intervals(width), 0f) }
-        dashPaint.color = InkColors.forPaper(s.stroke.brush.colorIntArgb, inkOnDark)
+        dashPaint.color = s.stroke.brush.colorIntArgb
         dashPaint.strokeWidth = width
         canvas.drawPath(path, dashPaint)
     }
@@ -385,7 +383,7 @@ class PageRenderer {
         while (i < strokes.size) {
             val s = strokes[i]
             if (s.kind != InkKind.NEON) {
-                if (s.dash != null) drawDashed(canvas, s) else if (s.kind.isInk) ink.draw(canvas, displayStroke(s), toScreen)
+                if (s.dash != null) drawDashed(canvas, s) else if (s.kind.isInk) ink.draw(canvas, s.stroke, toScreen)
                 i++
                 continue
             }
@@ -402,7 +400,7 @@ class PageRenderer {
      * to the tube (the brush size).
      */
     private fun drawNeonGlow(canvas: Canvas, s: PageStroke) {
-        val color = InkColors.forPaper(s.stroke.brush.colorIntArgb, inkOnDark)
+        val color = s.stroke.brush.colorIntArgb
         val tube = s.stroke.brush.size
         val halo = Neon.haloWidth(tube)
         val path = neonPaths.getOrPut(s) { centerline(s.stroke) }
@@ -419,7 +417,7 @@ class PageRenderer {
 
     /** The tube in the line's colour, or the light core inside it, like a lit gas tube. */
     private fun drawNeonTube(canvas: Canvas, s: PageStroke, toScreen: Matrix, core: Boolean) {
-        val color = InkColors.forPaper(s.stroke.brush.colorIntArgb, inkOnDark)
+        val color = s.stroke.brush.colorIntArgb
         val tube = s.stroke.brush.size
         val neonParts = if (inkOnDark) neonOnDark else neonOnLight
         val parts = neonParts[s]?.takeIf { it.color == color } ?: NeonParts(
@@ -464,7 +462,7 @@ class PageRenderer {
         canvas.clipPath(f.path)
         f.cutPath?.let(canvas::clipOutPath)
         // Anchored to the page, not the shape: fills of the same look line up (see Hatch).
-        Hatch.draw(canvas, f.bounds, 0f, 0f, f.pattern, f.style, InkColors.forPaper(f.color, inkOnDark), alpha, fillPaint, maxCells)
+        Hatch.draw(canvas, f.bounds, 0f, 0f, f.pattern, f.style, f.color, alpha, fillPaint, maxCells)
         canvas.restore()
     }
 
@@ -498,7 +496,7 @@ class PageRenderer {
         val first = group[0]
         val bounds = RectF(first.bounds)
         for (f in group) bounds.union(f.bounds)
-        val color = InkColors.forPaper(first.color, inkOnDark)
+        val color = first.color
         val alpha = Hatch.alphaOf(first.pattern, first.style, color, 255)
         if (alpha == 0) return
         // The pattern once over all the shapes, opaque; then kept only inside them; then faded.
@@ -528,7 +526,7 @@ class PageRenderer {
         if (img.rotation != 0f) canvas.rotate(img.rotation, r.centerX(), r.centerY())
         val text = img.text
         if (text != null) {
-            val color = InkColors.forPaper(text.color, inkOnDark)
+            val color = text.color
             val layout = textLayouts[img]?.takeIf { it.first == color }?.second
                 ?: TextBoxes.layout(text, img.w, color).also { textLayouts[img] = color to it }
             canvas.translate(img.x, img.y)
@@ -606,15 +604,6 @@ class PageRenderer {
         }
         drawInk(canvas, strokes, toScreen)
         for (s in strokes) if (s.kind == InkKind.SPOILER) drawSpoiler(canvas, s, toScreen, revealed = revealed(s))
-    }
-
-    /** Stroke recoloured for the current paper (see [InkColors.forPaper]), cached per stroke. */
-    private fun displayStroke(s: PageStroke): Stroke {
-        val color = s.stroke.brush.colorIntArgb
-        val shown = InkColors.forPaper(color, inkOnDark)
-        if (shown == color) return s.stroke
-        val cache = if (inkOnDark) onDarkCache else onLightCache
-        return cache.getOrPut(s) { s.stroke.copy(s.stroke.brush.copyWithColorIntArgb(colorIntArgb = shown)) }
     }
 
     private fun ruled(canvas: Canvas, spacing: Float, top: Float) {

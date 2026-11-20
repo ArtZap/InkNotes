@@ -45,6 +45,13 @@ private class Topic(val title: String, val entries: List<Pair<String, String>>)
 
 private val TOPICS = listOf(
     Topic(
+        tr("Новое в 0.57", "What's new in 0.57"),
+        listOf(
+            tr("Цвета не подменяются", "Colours are never swapped") to tr("Раньше белый на светлой бумаге показывался чёрным, а чёрный на тёмной — светлым. Теперь цвет всегда тот, что вы выбрали. У светлой и тёмной бумаги свои палитры со своими добавленными цветами; при смене темы ручка переходит на тот же номер в другой палитре. Записи, сделанные чёрным на светлой бумаге, на тёмной остаются чёрными.", "White on light paper used to show black, and black on dark paper light. Now a colour is always the one you chose. Light and dark paper have palettes of their own, each with its own added colours; when the theme changes the pen moves to the same place in the other palette. Notes written in black on light paper stay black on dark paper."),
+            tr("Ручки со всех сторон", "Handles on every side") to tr("У выделения — фигуры, картинки, текста — ручки на всех четырёх углах (в пропорции) и на всех четырёх сторонах (в одну сторону). Противоположный угол или сторона остаётся на месте.", "A selection — a shape, a picture, text — has handles on all four corners (in proportion) and on all four sides (one way). The opposite corner or side stays put."),
+        ),
+    ),
+    Topic(
         tr("Новое в 0.56", "What's new in 0.56"),
         listOf(
             tr("Привязка линий — по кнопке", "Binding lines — on a button") to tr("Раньше любые прямые и стрелки, касающиеся фигуры, тянулись за ней — и дублированный чертёж связывался с оригиналом. Теперь линии сами не привязываются. Где линия должна следовать за фигурой, выделите её и нажмите «Привязать»; «Отвязать» снимает. Привязанные линии в выделении отмечены кружками на концах.", "Any lines and arrows touching a shape used to follow it — and a duplicated drawing got tied to its original. Now lines are not bound by themselves. Where a line should follow a shape, select it and tap “Bind”; “Unbind” undoes it. Bound lines show rings on their ends when selected."),
@@ -293,7 +300,7 @@ private val TOPICS = listOf(
             tr("Палитра", "Palette") to tr("Кружки рядом с инструментом. Радужный кружок открывает «Спектр» (насыщенность, яркость, оттенок) или «Палитру» (15 оттенков × 5 тонов и серые).", "The circles next to the tool. The rainbow circle opens “Spectrum” (saturation, brightness, hue) or “Palette” (15 hues × 5 shades and greys)."),
             tr("Свои цвета", "Your colours") to tr("Выбранные цвета добавляются в конец палитры (до 40), её можно прокручивать. Долгое нажатие на свой цвет убирает его.", "Chosen colours are added to the end of the palette (up to 40), and it scrolls. Long press your colour to remove it."),
             tr("Пипетка", "Eyedropper") to tr("Нажмите пипетку и коснитесь страницы — цвет под точкой (чернила, бумага, фото, PDF) станет цветом инструмента. Пока ведёте — над точкой видна лупа. Повторное нажатие — отмена.", "Press the eyedropper and touch the page — the colour under the point (ink, paper, photo, PDF) becomes the tool's colour. While you move, a magnifier shows above the point. Press again to cancel."),
-            tr("Чёрное и белое", "Black and white") to tr("Чёрные и белые чернила сами становятся видимыми на любой бумаге (на тёмном листе чёрное показывается светлым). Цветные не меняются.", "Black and white ink stay visible on any paper by themselves (on a dark sheet black shows light). Colours don't change."),
+            tr("Две палитры", "Two palettes") to tr("У светлой и у тёмной бумаги своя палитра: на светлой — чёрный, синий, красный, зелёный; на тёмной — белый и светлые синий, красный, зелёный. Свои цвета добавляются в палитру той бумаги, на которой вы сейчас. При смене темы ручка берёт цвет с того же места другой палитры. Цвета никогда не подменяются: белым на светлой бумаге можно закрашивать, а чёрное, написанное на светлой, на тёмной бумаге останется чёрным.", "Light and dark paper each have their own palette: black, blue, red, green on light; white and light blue, red, green on dark. Your own colours go into the palette of the paper you are on. When the theme changes, the pen takes the colour at the same place in the other palette. Colours are never swapped: white on light paper can paint over, and black written on light paper stays black on dark paper."),
         ),
     ),
     Topic(

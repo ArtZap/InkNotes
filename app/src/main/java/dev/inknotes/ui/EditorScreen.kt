@@ -111,7 +111,6 @@ import dev.inknotes.data.InkKind
 import dev.inknotes.data.PageBackground
 import dev.inknotes.data.PaperKind
 import dev.inknotes.editor.EraserMode
-import dev.inknotes.editor.InkColors
 import dev.inknotes.editor.Neon
 import dev.inknotes.editor.PageEditorView
 import dev.inknotes.editor.PageRenderer
@@ -1236,7 +1235,7 @@ private fun ToolOptions(c: EditorController, onPickColor: () -> Unit, onHatchSet
             PatternSwatch(
                 c.fillPattern,
                 c.fillStyle,
-                InkColors.forPaper(c.fillColor, c.paperDark),
+                c.fillColor,
                 selected = true,
                 label = tr("Узор: ${c.fillPattern.title}. Выбрать узор и настроить", "Pattern: ${c.fillPattern.title}. Choose and adjust the pattern"),
                 onClick = onHatchSettings,
@@ -1886,7 +1885,7 @@ private fun ColorChoices(c: EditorController, selected: Int?, onPickColor: () ->
             val own = color in custom
             val value = if (highlighter && own) (color and 0x00FFFFFF) or 0x80000000.toInt() else color
             Swatch(
-                Color(InkColors.forPaper(value, c.paperDark) or 0xFF000000.toInt()),
+                Color(value or 0xFF000000.toInt()),
                 selected = selected != null && sameRgb(selected, value),
                 onLongClick = if (own) ({ c.removeCustomColor(color) }) else null,
             ) { c.selectColor(value) }
