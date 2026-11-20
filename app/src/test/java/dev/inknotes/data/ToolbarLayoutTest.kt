@@ -99,4 +99,12 @@ class ToolbarLayoutTest {
         assertEquals(Zone.MENU, l.zoneOf("side"))
         assertEquals(Zone.MENU, l.zoneOf("swap"))
     }
+
+    @Test
+    fun layoutOf051GetsSpelling() {
+        val old = Toolbars.ALL - setOf("spelling")
+        val l = ToolbarLayout.decode("tools=pen,eraser;top=undo;menu=help;seen=" + old.joinToString(","))
+        assertEquals(Zone.MENU, l.zoneOf("spelling"))
+        assertEquals(Zone.HIDDEN, l.zoneOf("side"))
+    }
 }

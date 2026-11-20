@@ -229,6 +229,7 @@ object InkIcons {
     // Buttons that can be put on the bars or in the menu (see Toolbars).
     val TextBox by lazy { icon("text-box", "M5,7V4.5h14V7M12,4.5V19.5M9,19.5h6") }
     val InsertSpace by lazy { icon("insert-space", "M4,4.5h16M4,19.5h16", accent = "M12,8v8M9.5,10.5L12,8l2.5,2.5M9.5,13.5L12,16l2.5,-2.5") }
+    val Spelling by lazy { icon("spelling", "M4,14l3,-9l3,9M5,11h4M13,5h2.5l1.5,1.5v1l-1.5,1.5h-2.5zM13,9.5h3l1.5,1.5v1.5l-1.5,1.5h-3z", accent = "M4,19l2,-1.5l2,1.5l2,-1.5l2,1.5l2,-1.5l2,1.5l2,-1.5l2,1.5") }
     val PageText by lazy { icon("page-text", "M6,3h12v18h-12z", accent = "M9,8h6M9,11.5h6M9,15h4") }
     val Toc by lazy { icon("toc", "M9,6h11M9,12h11M9,18h11", fill = "M4,5h2v2h-2zM4,11h2v2h-2zM4,17h2v2h-2z") }
     val Layers by lazy { icon("layers", "M12,4l9,4.5l-9,4.5l-9,-4.5z", accent = "M3,12.5l9,4.5l9,-4.5M3,16.5l9,4.5l9,-4.5") }

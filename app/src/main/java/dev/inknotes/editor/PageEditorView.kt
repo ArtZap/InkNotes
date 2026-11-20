@@ -132,6 +132,9 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         /** A finger tapped the number of a = 3 on page [page]: its scale. */
         fun onKnobTapped(page: Int, knob: Knob) {}
 
+        /** A finger tapped a word underlined as maybe misspelt. */
+        fun onTypoTapped(page: Int, typo: dev.inknotes.search.Spelling.Typo) {}
+
         /** A short message for the user (e.g. why a tap did nothing). */
         fun onHint(text: String) {}
 
@@ -192,6 +195,9 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
 
         /** Numbers of page [index] that can be turned on a scale (a = 3). */
         fun knobs(index: Int): List<Knob> = emptyList()
+
+        /** Words of page [index] that may be misspelt, from the last check. */
+        fun typos(index: Int): dev.inknotes.search.PageTypos? = null
 
         /** The key of the number being turned now, and its value; null when none is. */
         fun turning(): Pair<String, Double>? = null
@@ -731,6 +737,12 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
     }
 
     private fun doc(page: Int): PageDocument? = source?.takeIf { page < it.pageCount }?.document(page)
+
+    /** The marks of the last spelling check of [page], while its strokes have not changed. */
+    private fun typosOf(page: Int): List<dev.inknotes.search.Spelling.Typo>? {
+        val t = source?.typos(page) ?: return null
+        return t.items.takeIf { it.isNotEmpty() && doc(page)?.strokes === t.strokes }
+    }
 
     // ------------------------------------------------------------ selection
 
@@ -2131,6 +2143,10 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         val near = 8 * density / currentScale()
         source?.knobs(page)?.firstOrNull { k -> p[0] in k.left - near..k.right + near && p[1] in k.top - near..k.bottom + near }?.let {
             listener?.onKnobTapped(page, it)
+            return
+        }
+        typosOf(page)?.firstOrNull { t -> p[0] in t.left - near..t.right + near && p[1] in t.base - t.h - near..t.base + 0.6f * t.h + near }?.let {
+            listener?.onTypoTapped(page, it)
             return
         }
         pageLayer.answerAt(page, p[0], p[1], near)?.let {
@@ -3553,6 +3569,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                 drawSpoilers(canvas, doc, pageToCanvas, region, hidden)
                 drawAnswers(canvas, src.answers(page), widths[page])
                 drawKnobs(canvas, src.knobs(page), src.turning())
+                typosOf(page)?.let { drawTypos(canvas, it) }
             }
             canvas.restore()
         }
@@ -3614,6 +3631,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                 if (sel.isNotEmpty() && !dragging) drawElements(canvas, src, doc, toScreen, null, only = sel)
                 drawAnswers(canvas, src.answers(i), widths[i])
                 drawKnobs(canvas, src.knobs(i), src.turning())
+                typosOf(i)?.let { drawTypos(canvas, it) }
                 if (!(dragging && i == selectionPage)) drawOverlays(canvas, i)
                 if (i == zoomRegionPage && zoomPad != null) {
                     zoomFramePaint.strokeWidth = 2f * density / scale
@@ -3732,6 +3750,35 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                         }
                     }
                 }
+            }
+        }
+
+        private val typoPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeCap = Paint.Cap.ROUND
+            strokeJoin = Paint.Join.ROUND
+        }
+        private val typoPath = Path()
+
+        /** Words that may be misspelt: a red wavy line under each, as in a text editor. */
+        private fun drawTypos(canvas: Canvas, typos: List<dev.inknotes.search.Spelling.Typo>) {
+            typoPaint.color = if (dark) 0xFFEF5350.toInt() else 0xFFD32F2F.toInt()
+            for (t in typos) {
+                val wave = max(t.h * 0.3f, 3f)
+                val amp = wave / 3
+                val y = t.base + t.h * 0.18f
+                typoPaint.strokeWidth = max(t.h * 0.06f, 1f)
+                typoPath.rewind()
+                typoPath.moveTo(t.left, y)
+                var x = t.left
+                var up = true
+                while (x < t.right) {
+                    val nx = minOf(x + wave / 2, t.right)
+                    typoPath.lineTo(nx, if (up) y - amp else y + amp)
+                    x = nx
+                    up = !up
+                }
+                canvas.drawPath(typoPath, typoPaint)
             }
         }
 

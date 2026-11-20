@@ -1764,6 +1764,86 @@ class EditorController(
         }
     }
 
+    // --- spelling
+
+    private val typos = HashMap<String, dev.inknotes.search.PageTypos>()
+    private var spell: dev.inknotes.search.SpellCheck? = null
+
+    /** A word with a wavy line under it that a finger tapped, and its page (null: none). */
+    var tappedTypo by mutableStateOf<Pair<String, dev.inknotes.search.Spelling.Typo>?>(null)
+
+    override fun typos(index: Int): dev.inknotes.search.PageTypos? = typos[notebook.pageIds.getOrNull(index)]
+
+    override fun onTypoTapped(page: Int, typo: dev.inknotes.search.Spelling.Typo) {
+        val id = notebook.pageIds.getOrNull(page) ?: return
+        tappedTypo = id to typo
+    }
+
+    /** Spelling of the handwritten lines of the current page: maybe misspelt words underlined. */
+    fun checkSpelling() {
+        val index = pageIndex
+        val id = notebook.pageIds.getOrNull(index) ?: return
+        val context = view?.context?.applicationContext ?: return
+        if (handwriting.state != HandwritingIndex.State.Ready) {
+            return showStatus(tr("Сначала включите распознавание почерка: «Включить» под строкой поиска в библиотеке", "Turn on handwriting recognition first: “Turn on” under the search line in the library"))
+        }
+        val strokes = document(index).strokes
+        val ink = strokes.filter { it.kind.isInk }
+        if (ink.isEmpty()) return showStatus(tr("На странице нет рукописного текста", "There is no handwriting on the page"))
+        val checker = spell ?: dev.inknotes.search.SpellCheck(context).also { spell = it }
+        showStatus(tr("Проверяю орфографию…", "Checking spelling…"))
+        handwriting.recognizeLines(ink) { lines ->
+            if (lines == null) return@recognizeLines showStatus(tr("Не удалось распознать", "Could not recognise"))
+            // Every checkable word of every line of prose, where it is on the page.
+            class Spot(val word: dev.inknotes.search.Spelling.Word, val place: dev.inknotes.search.Spelling.Place, val h: Float)
+            val spots = ArrayList<Spot>()
+            for (line in lines) {
+                if (!dev.inknotes.search.Spelling.prose(line.text)) continue
+                val boxes = line.strokes.mapNotNull { i -> ink.getOrNull(i)?.let(PageEdits::bounds)?.let { dev.inknotes.search.Spelling.Box(it.left, it.top, it.right, it.bottom) } }
+                val words = dev.inknotes.search.Spelling.words(line.text)
+                val places = dev.inknotes.search.Spelling.places(line.text, words, boxes)
+                val h = boxes.map { it.bottom - it.top }.sorted().getOrNull(boxes.size / 2) ?: line.box.height()
+                for ((k, w) in words.withIndex()) if (w.checkable && k < places.size) spots += Spot(w, places[k], h)
+            }
+            if (spots.isEmpty()) return@recognizeLines showStatus(tr("Нет строк текста для проверки", "No lines of text to check"))
+            val found = ArrayList<dev.inknotes.search.Spelling.Typo>()
+            val problems = ArrayList<String>()
+            val langs = spots.mapNotNull { it.word.lang }.distinct()
+            var left = langs.size
+            for (lang in langs) {
+                checker.check(spots.filter { it.word.lang == lang }.map { it.word.text }, lang) { r ->
+                    when (r) {
+                        is dev.inknotes.search.SpellCheck.Result.Typos -> for (s in spots) {
+                            if (s.word.lang == lang) r.words[s.word.text]?.let { found += dev.inknotes.search.Spelling.Typo(s.word.text, it, s.place.left, s.place.right, s.place.base, s.h) }
+                        }
+                        dev.inknotes.search.SpellCheck.Result.NoChecker -> problems += tr("в системе нет проверки правописания (Настройки Android → Язык и ввод → Проверка правописания)", "the system has no spell checker (Android settings → Language & input → Spell checker)")
+                        dev.inknotes.search.SpellCheck.Result.NoLanguage -> problems += if (lang == dev.inknotes.search.Spelling.Lang.RU) tr("проверка правописания системы не знает русского", "the system spell checker does not know Russian") else tr("проверка правописания системы не знает английского", "the system spell checker does not know English")
+                        dev.inknotes.search.SpellCheck.Result.Silent -> problems += tr("проверка правописания не ответила", "the spell checker did not answer")
+                    }
+                    if (--left > 0) return@check
+                    // Marks only while the page is as it was checked.
+                    typos[id] = dev.inknotes.search.PageTypos(strokes, found)
+                    view?.refresh()
+                    showStatus(
+                        when {
+                            problems.isNotEmpty() && found.isEmpty() -> tr("Не проверено: ", "Not checked: ") + problems.distinct().joinToString("; ")
+                            found.isEmpty() -> tr("Ошибок не найдено", "No mistakes found")
+                            else -> tr("Возможных ошибок: ${found.size}. Коснитесь подчёркнутого слова пальцем", "Possible mistakes: ${found.size}. Tap an underlined word with a finger")
+                        },
+                    )
+                }
+            }
+        }
+    }
+
+    /** The tapped word is right: not underlined again, here or later. */
+    fun ignoreTypo(word: String) {
+        spell?.ignore(word)
+        for ((k, t) in typos.toList()) typos[k] = dev.inknotes.search.PageTypos(t.strokes, t.items.filterNot { it.word.equals(word, ignoreCase = true) })
+        tappedTypo = null
+        view?.refresh()
+    }
+
     /** The answer a finger tapped, shown with how it was found (null: none). */
     var tappedAnswer by mutableStateOf<PageAnswer?>(null)
 

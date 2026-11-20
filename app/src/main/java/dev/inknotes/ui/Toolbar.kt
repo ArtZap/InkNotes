@@ -118,6 +118,7 @@ object BarCatalog {
         "add-page" to Entry(tr("Новая страница", "New page"), { InkIcons.AddPage }, 3),
         "toc" to Entry(tr("Оглавление", "Contents"), { InkIcons.Toc }, 3),
         "page-text" to Entry(tr("Текст страницы", "Page text"), { InkIcons.PageText }, 3),
+        "spelling" to Entry(tr("Орфография", "Spelling"), { InkIcons.Spelling }, 3),
         "math" to Entry(tr("Ответы после «=»", "Answers after “=”"), { InkIcons.Calc }, 4),
         "fractions" to Entry(tr("Дроби в ответах", "Fractions in answers"), { InkIcons.Fraction }, 4),
         "units" to Entry(tr("Единицы измерения", "Units"), { InkIcons.Units }, 4),
