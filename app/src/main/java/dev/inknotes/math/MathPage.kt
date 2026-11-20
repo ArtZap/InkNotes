@@ -675,7 +675,7 @@ object MathPage {
         val holes = pieces.filterIsInstance<Piece.Hole>()
         if (holes.size > MAX_HOLES) return emptyList()
         val cands = holes.map { hole ->
-            val texts = reader.read(hole.strokes, hole.h).map(MathText::normalize).filter { it.isNotEmpty() }
+            val texts = reader.read(hole.strokes, hole.h).map(MathText::normalize).filter { it.isNotEmpty() }.map(::digitIndex)
             // A lone upright read as l or I is a 1 nine times in ten (CROHME, read by ML Kit on
             // the emulator: l 47 of 51, I 33 of 38), so 1 is tried first; not when the page has
             // that letter already (l = 2 м above: the length).
@@ -1017,6 +1017,18 @@ object MathPage {
 
     /** How much worse a reading counts for each sign taken as something else. */
     private const val SIGN_CHANGE_COST = 2
+
+    /** A lone letter with digits right after it, read in one run: x1 is x₁ (x·1 is written 1x or x·1). */
+    private val LETTER_DIGITS = Regex("(?<![\\p{L}_^{])(\\p{L})(\\d+)(?![\\d.,])")
+
+    /** [text] with each lone letter's digits right after it as its index, by [ReadOptions.digitIndex]; function words left as they are. */
+    fun digitIndex(text: String): String {
+        if (!ReadOptions.digitIndex || text.none { it.isDigit() }) return text
+        val words = ReadOptions.wordRanges(text)
+        return LETTER_DIGITS.replace(text) { m ->
+            if (words.any { m.range.first in it }) m.value else "${m.groupValues[1]}_{${m.groupValues[2]}}"
+        }
+    }
 
     /** The best choice first, then one or two runs changed to their next guesses. */
     private fun <T> combinations(cands: List<List<T>>): Sequence<List<T>> = sequence {
