@@ -573,9 +573,10 @@ class EditorController(
     /** Copies the picked picture into the notebook and places it, selected, on the current page. */
     fun insertImage(uri: Uri, resolver: ContentResolver) {
         importingImage = true
-        repo.importImageAsync(notebook, uri, resolver) { result ->
+        repo.importImageWhy(notebook, uri, resolver) { result, why ->
             importingImage = false
-            val (file, pxW, pxH) = result ?: return@importImageAsync showStatus(tr("Не удалось вставить картинку", "Could not insert the picture"))
+            // Why, as the system said it: what to send when a picture will not go in.
+            val (file, pxW, pxH) = result ?: return@importImageWhy showStatus(tr("Не удалось вставить картинку", "Could not insert the picture") + (why?.let { " ($it)" } ?: ""))
             // About 40% of the page width, smaller pictures not upscaled past 2× their pixels.
             placeNewImage(file, pxW, pxH, pageIndex)
         }

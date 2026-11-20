@@ -958,15 +958,7 @@ class NotebookRepository(filesDir: File) {
     fun importPhotoAsync(nb: Notebook, uri: Uri, resolver: ContentResolver, onDone: (String?) -> Unit) {
         transferring {
             val name = runCatching {
-                val source = ImageDecoder.createSource(resolver, uri)
-                val bitmap = ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
-                    val side = max(info.size.width, info.size.height)
-                    if (side > MAX_PHOTO_SIDE) {
-                        val k = MAX_PHOTO_SIDE.toFloat() / side
-                        decoder.setTargetSize((info.size.width * k).toInt(), (info.size.height * k).toInt())
-                    }
-                    decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
-                }
+                val bitmap = decodeUri(resolver, uri, MAX_PHOTO_SIDE)
                 val fileName = "bg-${newId()}.jpg"
                 try {
                     atomicWrite(File(dir(nb.id).apply { mkdirs() }, fileName)) { out ->
@@ -1091,26 +1083,23 @@ class NotebookRepository(filesDir: File) {
      * (PNG if it has transparency, JPEG otherwise), and calls [onDone] on the main thread
      * with the file name and pixel size, or null on failure.
      */
-    fun importImageAsync(nb: Notebook, uri: Uri, resolver: ContentResolver, onDone: (Triple<String, Int, Int>?) -> Unit) {
+    fun importImageAsync(nb: Notebook, uri: Uri, resolver: ContentResolver, onDone: (Triple<String, Int, Int>?) -> Unit) =
+        importImageWhy(nb, uri, resolver) { result, _ -> onDone(result) }
+
+    /** As [importImageAsync]; [onDone] also gets why it failed (to show), null when it did not. */
+    fun importImageWhy(nb: Notebook, uri: Uri, resolver: ContentResolver, onDone: (Triple<String, Int, Int>?, String?) -> Unit) {
         transferring {
             val result = runCatching {
-                val source = ImageDecoder.createSource(resolver, uri)
-                val bitmap = ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
-                    val side = max(info.size.width, info.size.height)
-                    if (side > MAX_IMAGE_SIDE) {
-                        val k = MAX_IMAGE_SIDE.toFloat() / side
-                        decoder.setTargetSize((info.size.width * k).toInt().coerceAtLeast(1), (info.size.height * k).toInt().coerceAtLeast(1))
-                    }
-                    decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
-                }
+                val bitmap = decodeUri(resolver, uri, MAX_IMAGE_SIDE)
                 val png = bitmap.hasAlpha()
                 val fileName = "img-${newId()}.${if (png) "png" else "jpg"}"
                 atomicWrite(File(dir(nb.id).apply { mkdirs() }, fileName)) { out ->
                     bitmap.compress(if (png) Bitmap.CompressFormat.PNG else Bitmap.CompressFormat.JPEG, 90, out)
                 }
                 Triple(fileName, bitmap.width, bitmap.height).also { bitmap.recycle() }
-            }.getOrNull()
-            main.post { onDone(result) }
+            }
+            result.exceptionOrNull()?.let { android.util.Log.w("InkNotes", "picture not inserted: $uri", it) }
+            main.post { onDone(result.getOrNull(), result.exceptionOrNull()?.let { e -> (e::class.simpleName ?: "Error") + (e.message?.let { m -> ": " + m.take(120) } ?: "") }) }
         }
     }
 
@@ -1135,17 +1124,67 @@ class NotebookRepository(filesDir: File) {
     }
 
     /** Decodes a picture from [uri] (camera or gallery), at most [MAX_IMAGE_SIDE] px, upright. Blocking. */
-    fun decodePicture(uri: Uri, resolver: ContentResolver): Bitmap? = runCatching {
-        ImageDecoder.decodeBitmap(ImageDecoder.createSource(resolver, uri)) { decoder, info, _ ->
-            val side = max(info.size.width, info.size.height)
-            if (side > MAX_IMAGE_SIDE) {
-                val k = MAX_IMAGE_SIDE.toFloat() / side
-                decoder.setTargetSize((info.size.width * k).toInt().coerceAtLeast(1), (info.size.height * k).toInt().coerceAtLeast(1))
+    fun decodePicture(uri: Uri, resolver: ContentResolver): Bitmap? = runCatching { decodeUri(resolver, uri, MAX_IMAGE_SIDE, mutable = true) }.getOrNull()
+
+    /**
+     * A picture from [uri], no larger than [maxSide] px, upright, in software memory. The
+     * system decoder first; when it refuses (on Android 9–10 it does so for some PNG files,
+     * screenshots among them: "unimplemented", a cut-off end), the older BitmapFactory, which
+     * reads them, with the EXIF turn applied by hand. Throws when neither can.
+     */
+    private fun decodeUri(resolver: ContentResolver, uri: Uri, maxSide: Int, mutable: Boolean = false): Bitmap {
+        val first = runCatching {
+            ImageDecoder.decodeBitmap(ImageDecoder.createSource(resolver, uri)) { decoder, info, _ ->
+                val side = max(info.size.width, info.size.height)
+                if (side > maxSide) {
+                    val k = maxSide.toFloat() / side
+                    decoder.setTargetSize((info.size.width * k).toInt().coerceAtLeast(1), (info.size.height * k).toInt().coerceAtLeast(1))
+                }
+                decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+                decoder.isMutableRequired = mutable
+                // A file whose end is missing still gives the part that is there.
+                decoder.setOnPartialImageListener { true }
             }
-            decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
-            decoder.isMutableRequired = true
         }
-    }.getOrNull()
+        first.getOrNull()?.let { return it }
+        android.util.Log.w("InkNotes", "ImageDecoder refused $uri, trying BitmapFactory", first.exceptionOrNull())
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+        val w = bounds.outWidth
+        val h = bounds.outHeight
+        if (w <= 0 || h <= 0 || max(w, h) > MAX_IMAGE_HEADER_SIDE) throw first.exceptionOrNull() ?: java.io.IOException("not a picture")
+        var sample = 1
+        while (max(w, h) / sample > maxSide * 2) sample *= 2
+        var bitmap = resolver.openInputStream(uri)?.use {
+            BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply {
+                inSampleSize = sample
+                inMutable = mutable
+            })
+        } ?: throw first.exceptionOrNull() ?: java.io.IOException("not a picture")
+        // Down to the size asked, then upright as the camera meant.
+        val side = max(bitmap.width, bitmap.height)
+        val k = if (side > maxSide) maxSide.toFloat() / side else 1f
+        val turn = runCatching {
+            resolver.openInputStream(uri)?.use {
+                when (android.media.ExifInterface(it).getAttributeInt(android.media.ExifInterface.TAG_ORIENTATION, android.media.ExifInterface.ORIENTATION_NORMAL)) {
+                    android.media.ExifInterface.ORIENTATION_ROTATE_90 -> 90
+                    android.media.ExifInterface.ORIENTATION_ROTATE_180 -> 180
+                    android.media.ExifInterface.ORIENTATION_ROTATE_270 -> 270
+                    else -> 0
+                }
+            } ?: 0
+        }.getOrDefault(0)
+        if (k < 1f || turn != 0) {
+            val m = android.graphics.Matrix().apply {
+                postScale(k, k)
+                postRotate(turn.toFloat())
+            }
+            val out = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, m, true)
+            if (out !== bitmap) bitmap.recycle()
+            bitmap = if (mutable && !out.isMutable) out.copy(Bitmap.Config.ARGB_8888, true).also { out.recycle() } else out
+        }
+        return bitmap
+    }
 
     /**
      * A picture placed on a page, decoded no larger than [MAX_IMAGE_SIDE] px whatever the file
