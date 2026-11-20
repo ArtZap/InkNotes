@@ -31,7 +31,15 @@ sealed class Answer {
         val segments: List<FloatArray>,
         val more: List<List<FloatArray>> = emptyList(),
         val names: List<String> = emptyList(),
+        /** The functions themselves, in the order of the curves: for the graph's own window. */
+        val fns: List<(Double) -> Double> = emptyList(),
+        /** What each curve is ("y = x²"), for the window's title; [names] is for the page's legend. */
+        val titles: List<String> = names,
+        val trig: Boolean = false,
     ) : Answer() {
+        /** The same graph with [titles] (a single curve has no legend on the page, but a title). */
+        fun titled(titles: List<String>) = Graph(variable, x0, x1, y0, y1, segments, more, names, fns, titles, trig)
+
         override fun toString() = "Graph($variable: ${Printer.number(x0.toDouble())}…${Printer.number(x1.toDouble())}, " +
             "${Printer.number(y0.toDouble())}…${Printer.number(y1.toDouble())}, ${segments.size} parts)"
     }

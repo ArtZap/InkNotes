@@ -33,7 +33,7 @@ object Plot {
         val xs = DoubleArray(SAMPLES + 1) { x0 + (x1 - x0) * it / SAMPLES }
         val ys = DoubleArray(xs.size) { safe(f, xs[it]) }
         val (y0, y1) = yWindow(ys) ?: return null
-        return Answer.Graph(variable, x0.toFloat(), x1.toFloat(), y0.toFloat(), y1.toFloat(), segments(xs, ys, x0, x1, y0, y1))
+        return Answer.Graph(variable, x0.toFloat(), x1.toFloat(), y0.toFloat(), y1.toFloat(), segments(xs, ys, x0, x1, y0, y1), fns = listOf(f), trig = trig)
     }
 
     /**
@@ -51,10 +51,10 @@ object Plot {
         val all = fs.map { f -> DoubleArray(xs.size) { safe(f, xs[it]) } }
         val (y0, y1) = yWindow(all.flatMap { it.asList() }.toDoubleArray()) ?: return null
         val curves = all.map { ys -> segments(xs, ys, x0, x1, y0, y1) }
-        return Answer.Graph(variable, x0.toFloat(), x1.toFloat(), y0.toFloat(), y1.toFloat(), curves[0], curves.drop(1), names)
+        return Answer.Graph(variable, x0.toFloat(), x1.toFloat(), y0.toFloat(), y1.toFloat(), curves[0], curves.drop(1), names, fs, names, trig)
     }
 
-    private fun safe(f: (Double) -> Double, x: Double): Double = runCatching { f(x) }.getOrDefault(Double.NaN)
+    internal fun safe(f: (Double) -> Double, x: Double): Double = runCatching { f(x) }.getOrDefault(Double.NaN)
 
     /**
      * From −5…5 out to what matters: roots, turning points and breaks within ±50, padded.
@@ -94,7 +94,7 @@ object Plot {
     }
 
     /** The middle 96% of the values, padded; 0 included when it is close. */
-    private fun yWindow(ys: DoubleArray): Pair<Double, Double>? {
+    internal fun yWindow(ys: DoubleArray): Pair<Double, Double>? {
         val finite = ys.filter { it.isFinite() }.sorted()
         if (finite.size < 2) return null
         var lo = finite[(finite.size * 0.02).toInt()]
@@ -115,7 +115,7 @@ object Plot {
      * The curve as polylines in 0…1 box coordinates (y up), clipped to the window; broken
      * where the function is undefined or jumps across the window (tan x at π/2).
      */
-    private fun segments(xs: DoubleArray, ys: DoubleArray, x0: Double, x1: Double, y0: Double, y1: Double): List<FloatArray> {
+    internal fun segments(xs: DoubleArray, ys: DoubleArray, x0: Double, x1: Double, y0: Double, y1: Double): List<FloatArray> {
         val out = ArrayList<FloatArray>()
         val cur = ArrayList<Float>()
         fun flush() {

@@ -33,6 +33,9 @@ class PageAnswer(
     val fix: Fix? = null,
 ) {
     val unsure get() = others.isNotEmpty()
+
+    /** The same answer moved by ([dx], [dy]) and [k] times the size: a graph placed by hand. */
+    fun placed(dx: Float, dy: Float, k: Float) = PageAnswer(x + dx, y + dy, size * k, answer, error, steps, others, missing, fix)
 }
 
 /**
@@ -372,7 +375,7 @@ object MathPage {
                     val fns = group.mapNotNull { g -> graphParam(g.left)?.let { p -> Calc.function(g.right, envAt(g.index), p.ifEmpty { null }) } }
                     Plot.ofMany(fns.map { it.f }, fns[0].variable, fns.any { it.trig }, group.map { curveName(it.left, it.right) })
                 }.getOrNull()
-                param != null -> runCatching { Calc.graph(d.right, envAt(d.index), param.ifEmpty { null }) }.getOrNull()
+                param != null -> runCatching { Calc.graph(d.right, envAt(d.index), param.ifEmpty { null })?.titled(listOf(curveName(d.left, d.right))) }.getOrNull()
                 // z = x² + y²: a surface.
                 isSurface -> runCatching { Calc.surface(d.right, envAt(d.index)) }.getOrNull()
                 else -> null
