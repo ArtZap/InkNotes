@@ -817,12 +817,16 @@ object MathPage {
             if (l - reach > 0.7f * eq.h) cuts += l
             reach = max(reach, r)
         }
+        // After a colon ("Ответ: 2 + 3 =") the formula starts, however close it is written.
+        val colons = colonEnds(left, eq.h)
+        cuts.removeAll { c -> colons.any { abs(it - c) < 0.7f * eq.h } }
+        cuts.addAll(0, colons)
         for (cut in cuts.take(MAX_TRIMS)) {
             val part = left.filter { it.cx >= cut }
             if (part.isEmpty()) break
             // A part that starts with a sign is the tail of the formula, not the formula after
             // some text: "7/9 + 4/3 =" with the 7 unread would answer 4/3.
-            if (startsWithSign(part, eq, shift)) continue
+            if (startsWithSign(part, eq, reader, shift)) continue
             val e = read(part, eq.h, eq.cy, reader, Prefer.NUMBERS, known, shift) ?: continue
             if (best == null || score(e) < score(best)) best = e
             if (score(e) == 0) break
@@ -830,9 +834,29 @@ object MathPage {
         return best
     }
 
-    private fun startsWithSign(part: List<Ink>, eq: Equals, shift: MathLayout.Shift): Boolean {
-        val first = runCatching { MathLayout.formula(part, eq.h, eq.cy, shift) }.getOrNull()?.firstOrNull() as? Piece.Text ?: return false
-        return first.s.trimStart().firstOrNull()?.let { it in LEADING_SIGNS } == true
+    /** Where colons among [strokes] end (two dots one over the other), left to right. */
+    private fun colonEnds(strokes: List<Ink>, h: Float): List<Float> {
+        val dots = strokes.filter { it.width < 0.3f * h && it.height < 0.3f * h }
+        val out = ArrayList<Float>()
+        for (a in dots) for (b in dots) {
+            if (b.cy <= a.cy || abs(a.cx - b.cx) > 0.25f * h) continue
+            val gap = b.cy - a.cy
+            if (gap < 0.2f * h || gap > 0.9f * h) continue
+            // Nothing else between the dots: a colon, not dots inside some symbol.
+            if (strokes.any { it !== a && it !== b && it.cx in a.left - 0.1f * h..a.right + 0.1f * h && it.cy > a.cy && it.cy < b.cy }) continue
+            out += max(a.right, b.right) + 0.01f * h
+        }
+        return out.distinct().sorted()
+    }
+
+    private fun startsWithSign(part: List<Ink>, eq: Equals, reader: RunReader, shift: MathLayout.Shift): Boolean {
+        // The sign told by its shape, or read first in the first run.
+        val text = when (val first = runCatching { MathLayout.formula(part, eq.h, eq.cy, shift) }.getOrNull()?.firstOrNull()) {
+            is Piece.Text -> first.s
+            is Piece.Hole -> runCatching { reader.read(first.strokes, first.h).firstOrNull() }.getOrNull()
+            else -> null
+        }
+        return text?.trimStart()?.firstOrNull()?.let { it in LEADING_SIGNS } == true
     }
 
     /** The reader was sure of every run of the formula left of [eq]. */
@@ -1100,6 +1124,12 @@ object MathPage {
                 trace?.invoke("  part of a symbol = at ${a.cx.toInt()},${a.cy.toInt()}")
                 continue
             }
+            // A dash another stroke runs through in its middle is part of a symbol: the bar of a
+            // crossed 7 (over a fraction bar it looked like "="), of a t, of a Z.
+            if (crossed(a, ink) || crossed(b, ink)) {
+                trace?.invoke("  crossed = at ${a.cx.toInt()},${a.cy.toInt()}")
+                continue
+            }
             if (crowded) {
                 trace?.invoke("  crowded = at ${a.cx.toInt()},${a.cy.toInt()}")
                 continue
@@ -1122,6 +1152,29 @@ object MathPage {
             out += Equals(top, bottom, listOf(z))
         }
         return out
+    }
+
+    /** Whether a stroke other than a dash crosses [d] away from its ends (the middle 70 %). */
+    private fun crossed(d: Ink, ink: List<Ink>): Boolean {
+        val from = d.left + 0.15f * d.width
+        val to = d.right - 0.15f * d.width
+        for (o in ink) {
+            if (o === d || o.isDash || o.right < from || o.left > to || o.bottom < d.top || o.top > d.bottom) continue
+            for (i in 0 until o.xs.size - 1) for (j in 0 until d.xs.size - 1) {
+                val p = intersection(o.xs[i], o.ys[i], o.xs[i + 1], o.ys[i + 1], d.xs[j], d.ys[j], d.xs[j + 1], d.ys[j + 1]) ?: continue
+                if (p in from..to) return true
+            }
+        }
+        return false
+    }
+
+    /** The x where segments (x1, y1)–(x2, y2) and (x3, y3)–(x4, y4) cross, or null. */
+    private fun intersection(x1: Float, y1: Float, x2: Float, y2: Float, x3: Float, y3: Float, x4: Float, y4: Float): Float? {
+        val den = (x2 - x1) * (y4 - y3) - (y2 - y1) * (x4 - x3)
+        if (abs(den) < 1e-6f) return null
+        val t = ((x3 - x1) * (y4 - y3) - (y3 - y1) * (x4 - x3)) / den
+        val u = ((x3 - x1) * (y2 - y1) - (y3 - y1) * (x2 - x1)) / den
+        return if (t in 0f..1f && u in 0f..1f) x1 + t * (x2 - x1) else null
     }
 
     /**
