@@ -647,4 +647,40 @@ fun FormulaFixSettings(fixes: dev.inknotes.math.FixStore) {
     OutlinedButton(enabled = !forgotten && !(fixes.learned.isEmpty() && fixes.samples.isEmpty() && fixes.placements.isEmpty()), onClick = { fixes.forget(); forgotten = true }) {
         Text(if (forgotten) tr("Почерк забыт", "Handwriting forgotten") else tr("Забыть мой почерк", "Forget my handwriting"))
     }
+    // Answers in the writer's own hand.
+    var sheet by remember { mutableStateOf(false) }
+    var inHand by remember { mutableStateOf(fixes.inHand) }
+    var written by remember { mutableStateOf(fixes.hand.count()) }
+    Row(Modifier.fillMaxWidth().clickable(enabled = written > 0) { inHand = !inHand; fixes.inHand = inHand }, verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(tr("Ответы моим почерком", "Answers in my handwriting"))
+            Text(
+                if (written == 0) tr("Сначала запишите цифры и знаки — кнопка ниже", "First write the digits and signs — the button below")
+                else tr("Записано знаков: $written из ${dev.inknotes.math.HandGlyphs.ASKED.length}. Ответ, где есть незаписанный знак, остаётся печатным", "Signs written: $written of ${dev.inknotes.math.HandGlyphs.ASKED.length}. An answer with a sign not written stays in print"),
+                fontSize = 12.sp,
+                lineHeight = 16.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        androidx.compose.material3.Switch(checked = inHand && written > 0, enabled = written > 0, onCheckedChange = { inHand = it; fixes.inHand = it })
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedButton(onClick = { sheet = true }) { Text(if (written == 0) tr("Записать мой почерк…", "Write my handwriting…") else tr("Дописать или переписать…", "Add or rewrite…")) }
+        if (written > 0) {
+            OutlinedButton(onClick = {
+                fixes.hand.clear()
+                fixes.saveHand()
+                fixes.inHand = false
+                inHand = false
+                written = 0
+            }) { Text(tr("Стереть", "Erase")) }
+        }
+    }
+    if (sheet) {
+        HandSheet(fixes) {
+            sheet = false
+            written = fixes.hand.count()
+            inHand = fixes.inHand
+        }
+    }
 }

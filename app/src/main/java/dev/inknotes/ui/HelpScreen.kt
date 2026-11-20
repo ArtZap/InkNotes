@@ -45,6 +45,12 @@ private class Topic(val title: String, val entries: List<Pair<String, String>>)
 
 private val TOPICS = listOf(
     Topic(
+        tr("Новое в 0.53", "What's new in 0.53"),
+        listOf(
+            tr("Ответы вашим почерком", "Answers in your handwriting") to tr("Настройки в библиотеке → «Формулы» → «Записать мой почерк…». Напишите по одному цифры 0–9, запятую, точку, минус, плюс, дробную черту, скобки, «=», x, √, π, °, ∞, e и знак умножения — высотой между двумя линиями. Каждый знак можно написать до трёх раз, ответы берут их по очереди, чтобы две одинаковые цифры не были копиями. После «Готово» ответы после «=» рисуются вашими штрихами. Ответ, в котором есть незаписанный знак, и сообщения об ошибках остаются печатными. Выключить — переключатель «Ответы моим почерком». Хранится только на устройстве.", "Settings in the library → “Formulas” → “Write my handwriting…”. Write the digits 0–9, comma, point, minus, plus, slash, brackets, “=”, x, √, π, °, ∞, e and the times dot one at a time, as tall as the space between the two lines. Each can be written up to three times; answers take them in turn so two equal digits are not copies. After “Done”, answers after “=” are drawn with your strokes. An answer with a sign you did not write, and error messages, stay in print. Turn it off with “Answers in my handwriting”. Kept on the device only."),
+        ),
+    ),
+    Topic(
         tr("Новое в 0.52", "What's new in 0.52"),
         listOf(
             tr("Проверка орфографии", "Spell check") to tr("Меню → «Орфография»: строки текущей страницы распознаются, а слова проверяет проверка правописания Android (словарь вашей клавиатуры, работает без интернета). Слова, похожие на ошибку, подчёркиваются красной волной. Коснитесь слова пальцем — появятся варианты; «Это верно» больше не будет подчёркивать это слово. Формулы, сокращения заглавными (МФТИ) и имена функций (sin, lim) не проверяются. Подчёркивание пропадает, как только на странице что-то изменится.", "Menu → “Spelling”: the lines of the current page are recognised and the words are checked by Android's spell checker (your keyboard's dictionary, works offline). Words that look misspelt get a red wavy line. Tap one with a finger to see suggestions; “It is right” stops marking that word. Formulas, abbreviations in capitals and function names (sin, lim) are not checked. The lines go away as soon as anything on the page changes."),
