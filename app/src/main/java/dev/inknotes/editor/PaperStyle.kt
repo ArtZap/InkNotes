@@ -58,25 +58,3 @@ class PaperStyle(
         const val MARGIN_X = 110f
     }
 }
-
-object InkColors {
-    private fun luminance(c: Int) =
-        (0.2126f * Color.red(c) + 0.7152f * Color.green(c) + 0.0722f * Color.blue(c)) / 255f
-
-    /**
-     * Neutral ink that would disappear on the paper is shown as its opposite extreme: black
-     * becomes light on dark paper and white/light grey becomes dark on light paper.
-     * Saturated colours (a yellow highlighter, a red pen) are never touched. Alpha is preserved.
-     */
-    fun forPaper(color: Int, dark: Boolean): Int {
-        val hsv = FloatArray(3).also { Color.colorToHSV(color, it) }
-        if (hsv[1] > 0.15f) return color
-        val l = luminance(color)
-        val alpha = color and 0xFF000000.toInt()
-        return when {
-            dark && l < 0.2f -> alpha or 0x00E8E8E8
-            !dark && l > 0.85f -> alpha or 0x001A1A1A
-            else -> color
-        }
-    }
-}

@@ -79,12 +79,24 @@ class EditorController(
     var dark by mutableStateOf(dark)
         private set
 
-    /** The paper is dark (theme or chosen colour): neutral ink is shown light on it. */
+    /**
+     * The paper is dark (theme or chosen colour): the palette of dark paper is offered. Colours
+     * are never changed for the paper — each paper has its own palette instead.
+     */
     val paperDark get() = notebook.background(dark).color?.let(dev.inknotes.editor.PaperStyle::isDark) ?: dark
 
-    /** Custom colours picked from the spectrum/palette, newest first. */
-    var recentColors by mutableStateOf(prefs.recentColors)
-        private set
+    // The writer's own colours, one list for light paper and one for dark, in the order added.
+    private var lightColors by mutableStateOf(prefs.colors(false))
+    private var darkColors by mutableStateOf(prefs.colors(true))
+
+    /** The custom colours of the palette in use. */
+    val recentColors: List<Int> get() = if (paperDark) darkColors else lightColors
+
+    private fun setRecentColors(value: List<Int>) {
+        if (paperDark) darkColors = value else lightColors = value
+        prefs.setColors(paperDark, value)
+    }
+
     var importingPhoto by mutableStateOf(false)
         private set
 
@@ -100,11 +112,14 @@ class EditorController(
         private set
     var tool by mutableStateOf(Tool.PEN)
         private set
-    var penColor by mutableIntStateOf(PEN_COLORS[0])
+    /** The paper whose palette the tools' colours are from (to follow a change of theme). */
+    private var paletteDark = paperDark
+
+    var penColor by mutableIntStateOf(penColors(paperDark)[0])
         private set
     var penSize by mutableFloatStateOf(prefs.toolSize("pen", PEN_RANGE.default).coerceIn(PEN_RANGE.min, PEN_RANGE.max))
         private set
-    var fountainColor by mutableIntStateOf(PEN_COLORS[0])
+    var fountainColor by mutableIntStateOf(penColors(paperDark)[0])
         private set
     var fountainSize by mutableFloatStateOf(prefs.toolSize("fountain", FOUNTAIN_RANGE.default).coerceIn(FOUNTAIN_RANGE.min, FOUNTAIN_RANGE.max))
         private set
@@ -350,7 +365,7 @@ class EditorController(
         private set
     var selectionBound by mutableStateOf<Boolean?>(null)
         private set
-    var fillColor by mutableIntStateOf(FILL_COLORS[0])
+    var fillColor by mutableIntStateOf(fillColors(paperDark)[0])
         private set
     var selectionCount by mutableIntStateOf(0)
         private set
@@ -1668,12 +1683,31 @@ class EditorController(
 
 
     /** Swatches the current tool always offers. */
-    fun presetColors(): List<Int> = if (selectionCount > 0) PEN_COLORS else when (tool) {
+    fun presetColors(): List<Int> = if (selectionCount > 0) penColors(paperDark) else when (tool) {
         Tool.HIGHLIGHTER -> HIGHLIGHTER_COLORS
         Tool.NEON -> NEON_COLORS
         Tool.SPOILER -> SPOILER_COLORS
-        Tool.AREA -> FILL_COLORS
-        else -> PEN_COLORS
+        Tool.AREA -> fillColors(paperDark)
+        else -> penColors(paperDark)
+    }
+
+    /**
+     * The theme or the paper turned dark or light: the pens and the fill take the same place
+     * in the other palette (the second swatch stays the second); a colour of the writer's own
+     * stays as it is.
+     */
+    private fun followPalette() {
+        val now = paperDark
+        if (now == paletteDark) return
+        fun swap(color: Int, from: List<Int>, to: List<Int>): Int {
+            val i = from.indexOfFirst { sameColor(it, color) }
+            return if (i >= 0) to[i] else color
+        }
+        penColor = swap(penColor, penColors(paletteDark), penColors(now))
+        fountainColor = swap(fountainColor, penColors(paletteDark), penColors(now))
+        fillColor = swap(fillColor, fillColors(paletteDark), fillColors(now))
+        paletteDark = now
+        syncView()
     }
 
     /** The user's own colours, in the order they were added, except twins of the tool's presets. */
@@ -1681,8 +1715,7 @@ class EditorController(
 
     /** Takes a custom colour out of the palette. */
     fun removeCustomColor(color: Int) {
-        recentColors = recentColors.filter { (it and 0xFFFFFF) != (color and 0xFFFFFF) }
-        prefs.recentColors = recentColors
+        setRecentColors(recentColors.filter { (it and 0xFFFFFF) != (color and 0xFFFFFF) })
     }
 
     /**
@@ -1694,8 +1727,7 @@ class EditorController(
         val existing = (presetColors() + recentColors).firstOrNull { sameColor(it, opaque) }
         if (existing == null) {
             // New colours go to the end of the palette; the oldest leave only past the limit.
-            recentColors = (recentColors + opaque).takeLast(MAX_CUSTOM)
-            prefs.recentColors = recentColors
+            setRecentColors((recentColors + opaque).takeLast(MAX_CUSTOM))
         }
         val chosen = (existing ?: opaque) or 0xFF000000.toInt()
         // A recoloured highlighter stroke keeps its own translucency (see PageEdits.recolor).
@@ -2067,6 +2099,7 @@ class EditorController(
         val bg = notebook.background(dark)
         v.paper = bg
         v.paperPhoto = if (bg.kind == PaperKind.PHOTO) photo(bg.photo) else null
+        followPalette()
     }
 
     fun selectEraserMode(m: EraserMode) {
@@ -3081,10 +3114,20 @@ class EditorController(
         private const val PDF_RENDER_SCALE = 1.25f
         private const val MAX_PDF_TEXT_PAGES = 200
         private const val MAX_PDF_WIDTH_PX = 2560
+        /** The starting palette of light paper: black, blue, red, green. */
         val PEN_COLORS = listOf(0xFF1A1A1A, 0xFF1E5BD8, 0xFFD32F2F, 0xFF2E7D32).map { it.toInt() }
+
+        /** The starting palette of dark paper: the same four, light enough to read on it. */
+        val PEN_COLORS_DARK = listOf(0xFFF5F5F5, 0xFF64B5F6, 0xFFEF5350, 0xFF81C784).map { it.toInt() }
+
+        fun penColors(dark: Boolean) = if (dark) PEN_COLORS_DARK else PEN_COLORS
         val HIGHLIGHTER_COLORS = listOf(0x80FFEB3B, 0x8076FF03, 0x80FF80AB, 0x8040C4FF).map { it.toInt() }
         val FILL_COLORS = listOf(0xFF1A1A1A, 0xFF1E5BD8, 0xFFD32F2F, 0xFF2E7D32, 0xFFF9A825, 0xFF7B1FA2)
             .map { it.toInt() }
+        val FILL_COLORS_DARK = listOf(0xFFF5F5F5, 0xFF64B5F6, 0xFFEF5350, 0xFF81C784, 0xFFFFD54F, 0xFFBA68C8)
+            .map { it.toInt() }
+
+        fun fillColors(dark: Boolean) = if (dark) FILL_COLORS_DARK else FILL_COLORS
         /** Slider range of a tool's size and its default. */
         class SizeRange(val min: Float, val max: Float, val default: Float)
 
