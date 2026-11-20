@@ -54,10 +54,12 @@ class WebDavClient(private val account: WebDavAccount, private val http: OkHttpC
             if (r.code != 207 && !r.isSuccessful) fail("PROPFIND", r.code)
             r.body?.string().orEmpty()
         }
+        // Someone else's file with an address that does not parse is passed over, not a failed sync.
         return WebDavListing.parse(xml).filter { !it.folder }.mapNotNull { e ->
-            val name = WebDavListing.nameOf(e.href)
+            val name = runCatching { WebDavListing.nameOf(e.href) }.getOrNull() ?: return@mapNotNull null
             val (id, time) = WebDavNames.parse(name) ?: return@mapNotNull null
-            DriveFile(WebDavListing.absolute(folderId, e.href), name, time, mapOf(DriveSync.PROP_ID to id, DriveSync.PROP_TIME to time.toString()))
+            val url = runCatching { WebDavListing.absolute(folderId, e.href) }.getOrNull() ?: return@mapNotNull null
+            DriveFile(url, name, time, mapOf(DriveSync.PROP_ID to id, DriveSync.PROP_TIME to time.toString()))
         }
     }
 

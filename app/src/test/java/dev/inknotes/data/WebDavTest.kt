@@ -34,4 +34,15 @@ class WebDavTest {
         assertEquals("https://webdav.yandex.ru/InkNotes/a.inknote", WebDavListing.absolute("https://webdav.yandex.ru/InkNotes/", "/InkNotes/a.inknote"))
         assertEquals("%D0%9C%D0%B0%D1%82%20%5B1%7E2%5D.inknote", WebDavListing.encode("Мат [1~2].inknote"))
     }
+
+    @Test
+    fun aPasswordNeverGoesInTheOpenOutsideHome() {
+        fun insecure(url: String) = WebDavAccount(url, "u", "p").insecure
+        assertEquals(false, insecure("https://webdav.yandex.ru"))
+        assertEquals(true, insecure("http://webdav.yandex.ru"))
+        assertEquals(true, insecure("cloud.example.com/remote.php/dav"))
+        assertEquals(false, insecure("http://192.168.1.10:8080/remote.php/dav"))
+        assertEquals(false, insecure("http://nas.local/dav"))
+        assertEquals(true, insecure("http://192.169.1.10/dav"))
+    }
 }

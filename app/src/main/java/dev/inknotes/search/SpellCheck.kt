@@ -18,8 +18,9 @@ import java.util.Locale
 class PageTypos(val strokes: List<dev.inknotes.data.PageStroke>, val items: List<Spelling.Typo>)
 
 /**
- * Words looked up by the spell checker of the system (the keyboard's): offline, with no
- * dictionary of our own in the app. Words the writer told to skip are kept in a file on the
+ * Words looked up by the spell checker of the system (the keyboard's), with no dictionary of
+ * our own in the app. Most keyboards check on the device; some check on their server — the
+ * help says so. The app itself sends nothing. Words the writer told to skip are kept in a file on the
  * device. Everything runs on the main thread.
  */
 class SpellCheck(private val context: Context) {

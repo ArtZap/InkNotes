@@ -33,6 +33,12 @@ class Placements(private val points: ArrayDeque<P> = ArrayDeque()) {
     @Synchronized
     fun clear() = points.clear()
 
+    /** Takes in what [other] holds (restored from a backup into an empty store). */
+    @Synchronized
+    fun absorb(other: Placements) {
+        for (p in other.points) add(p)
+    }
+
     /**
      * The level the writer's placements give a symbol [b] after [ref] on a line [h] high: when
      * there are enough of them, of more than one level, and the [K] nearest are all near and

@@ -277,6 +277,20 @@ object FolderTree {
  */
 class NotebookRepository(filesDir: File) {
     private val root = File(filesDir, "notebooks").apply { mkdirs() }
+
+    /**
+     * What else a backup holds besides notebooks: the writer's corrections of formulas and
+     * their handwriting ([dev.inknotes.math.FixStore]), as small text files by name.
+     */
+    interface Extras {
+        fun files(): Map<String, String>
+
+        /** Files read from a backup; taken where this device has nothing yet. */
+        fun restore(files: Map<String, String>)
+    }
+
+    @Volatile
+    var extras: Extras? = null
     @Volatile
     private var ioThread: Thread? = null
     private val io = Executors.newSingleThreadExecutor { r -> Thread(r, "notebook-io").also { ioThread = it } }
@@ -1339,6 +1353,12 @@ class NotebookRepository(filesDir: File) {
                 zip.putNextEntry(ZipEntry(BUNDLE_MANIFEST))
                 zip.write(manifest.toString(2).toByteArray())
                 zip.closeEntry()
+                // The writer's corrections and handwriting: lost with the tablet otherwise.
+                runCatching { extras?.files() }.getOrNull()?.forEach { (name, text) ->
+                    zip.putNextEntry(ZipEntry(EXTRAS_DIR + name))
+                    zip.write(text.toByteArray())
+                    zip.closeEntry()
+                }
                 // The notebooks are zips already: storing them again saves only time.
                 zip.setLevel(java.util.zip.Deflater.NO_COMPRESSION)
                 notebooks.forEachIndexed { i, nb ->
@@ -1464,6 +1484,7 @@ class NotebookRepository(filesDir: File) {
 
     private fun readBundle(open: () -> InputStream?, budget: Budget): Pair<List<Staged>, List<Folder>> {
         val staged = HashMap<String, ArchiveImport.Ready>()
+        val extraFiles = HashMap<String, String>()
         var manifest: JSONObject? = null
         var total = 0L
         var entries = 0
@@ -1472,12 +1493,17 @@ class NotebookRepository(filesDir: File) {
                 ZipInputStream(input.buffered()).use { zip ->
                     while (true) {
                         val entry = zip.nextEntry ?: break
-                        if (++entries > MAX_BUNDLE_NOTEBOOKS + 1) throw ArchiveError(tr("Слишком много тетрадей в файле", "Too many notebooks in the file"))
+                        if (++entries > MAX_BUNDLE_NOTEBOOKS + 1 + MAX_EXTRAS) throw ArchiveError(tr("Слишком много тетрадей в файле", "Too many notebooks in the file"))
                         val name = entry.name
                         when {
                             name == BUNDLE_MANIFEST && manifest == null -> {
                                 val bytes = readCapped(zip, MAX_BUNDLE_MANIFEST)
                                 manifest = JSONObject(String(bytes))
+                            }
+                            EXTRAS_ENTRY.matches(name) && extraFiles.size < MAX_EXTRAS -> {
+                                val bytes = readCapped(zip, MAX_EXTRA_BYTES)
+                                total += bytes.size
+                                extraFiles[name.removePrefix(EXTRAS_DIR)] = String(bytes)
                             }
                             BUNDLE_ENTRY.matches(name) && name !in staged -> {
                                 val counted = CountingStream(KeepOpenInput(zip))
@@ -1523,6 +1549,8 @@ class NotebookRepository(filesDir: File) {
             }
             // Notebooks in the file but not in the list still come, at the top of the import.
             for ((file, ready) in staged) if (file !in used) out += Staged(ready, null)
+            // Only into what is empty here: a new tablet, or the app installed again.
+            if (extraFiles.isNotEmpty()) runCatching { extras?.restore(extraFiles) }
             return out to folders.map { f -> if (f.parent in ids) f else f.copy(parent = null) }
         } catch (e: Throwable) {
             staged.values.forEach { deleteQuietly(it.staging) }
@@ -2172,6 +2200,10 @@ class NotebookRepository(filesDir: File) {
         const val BUNDLE_VERSION = 1
         val BUNDLE_ENTRY = Regex("notebooks/[0-9]{1,5}\\.inknote")
         const val MAX_BUNDLE_NOTEBOOKS = 1000
+        const val EXTRAS_DIR = "handwriting/"
+        val EXTRAS_ENTRY = Regex("handwriting/[a-z-]{1,40}\\.(tsv|txt)")
+        const val MAX_EXTRAS = 16
+        const val MAX_EXTRA_BYTES = 16L * 1024 * 1024
         const val MAX_BUNDLE_FOLDERS = 2000
         const val MAX_FOLDER_DEPTH = 64
         const val MAX_BUNDLE_MANIFEST = 4L * 1024 * 1024

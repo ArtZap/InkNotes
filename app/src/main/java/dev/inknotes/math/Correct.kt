@@ -352,6 +352,12 @@ class Learned(private val counts: MutableMap<String, MutableMap<String, Int>> = 
     @Synchronized
     fun clear() = counts.clear()
 
+    /** Takes in what [other] holds (restored from a backup into an empty store). */
+    @Synchronized
+    fun absorb(other: Learned) {
+        for ((k, v) in other.counts) counts.getOrPut(k) { HashMap() }.putAll(v)
+    }
+
     /** One line per pair: read, tab, chosen, tab, count. */
     @Synchronized
     fun serialize(): String = buildString {

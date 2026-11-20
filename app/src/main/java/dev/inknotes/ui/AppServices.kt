@@ -29,13 +29,21 @@ object AppServices {
             repo,
             prefs,
             HandwritingIndex(repo, { prefs.handwritingEnabled }, { prefs.handwritingEnabled = it }, Language.handwritingEnglish(app)),
-            MathNotes({ prefs.mathEnabled }, { prefs.mathEnabled = it }, dev.inknotes.math.FixStore(app.filesDir)),
+            MathNotes({ prefs.mathEnabled }, { prefs.mathEnabled = it }, dev.inknotes.math.FixStore(app.filesDir, background = true)),
             Backup(app, repo, prefs),
             CoverPreviews(repo),
             CloudSync(app, repo, prefs),
         )
             .also {
                 instance = it
+                val fixes = it.math.fixes
+                repo.extras = object : NotebookRepository.Extras {
+                    override fun files() = fixes.backupFiles()
+
+                    override fun restore(files: Map<String, String>) {
+                        fixes.restore(files)
+                    }
+                }
                 repo.purgeOldTrash()
                 // Notes written over the lock screen by a run of the app that was stopped first.
                 Thread {
