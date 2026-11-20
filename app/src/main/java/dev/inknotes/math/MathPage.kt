@@ -201,7 +201,7 @@ object MathPage {
             val surface = (l as? Expr.Sym)?.name?.equals("z", ignoreCase = true) == true
             val r = pr ?: graphParam(l)?.let { v -> readings(right, eq.h, eq.cy, reader, Prefer.GRAPH, variable = v.ifEmpty { "x" }).firstOrNull() }
                 // z = x² + y²: about letters, not the reading with fewest of them.
-                ?: (if (surface) read(right, eq.h, eq.cy, reader, Prefer.FIRST) else null)
+                ?: (if (surface) read(right, eq.h, eq.cy, reader, Prefer.SURFACE) else null)
                 ?: read(right, eq.h, eq.cy, reader, Prefer.NUMBERS)
             if (r == null) {
                 // y = … that does not read: a mark where its graph would be.
@@ -212,7 +212,7 @@ object MathPage {
             // when read the same; a side laid out the same is taken as it was).
             val again = { shift: MathLayout.Shift ->
                 val l2 = read(left, eq.h, eq.cy, reader, Prefer.FIRST, shift = shift)
-                val r2 = read(right, eq.h, eq.cy, reader, if (surface) Prefer.FIRST else Prefer.NUMBERS, shift = shift)
+                val r2 = read(right, eq.h, eq.cy, reader, if (surface) Prefer.SURFACE else Prefer.NUMBERS, shift = shift)
                 if (l2 == null && r2 == null) null else (l2 ?: l) to (r2 ?: r)
             }
             // Set by hand: read as set, not otherwise.
@@ -629,6 +629,9 @@ object MathPage {
 
         /** The formula of a graph: in its variable, and no other unknown letter. */
         GRAPH,
+
+        /** The formula of a surface z = f(x, y): in x and y, and no other unknown letter. */
+        SURFACE,
     }
 
     /**
@@ -685,14 +688,33 @@ object MathPage {
             // (1/5 · 5/1, not I/s · s/d) — there are too many to try them all.
             if (prefer == Prefer.NUMBERS) all.sortedBy { t -> if (t.all { it.isDigit() || it == ',' || it == '.' }) 0 else 1 } else all
         }
+        // Signs told by their shape may be what the reader would take them for (a prime is
+        // a 1 written short, a degree a small 0): tried after the sign, and a reading with one
+        // counts a little worse than the same reading with the sign.
+        val signs = if (ReadOptions.signAlternatives) {
+            pieces.filterIsInstance<Piece.Text>().filter { it.strokes.isNotEmpty() && (SIGN_ALTERNATIVES[it.s]?.size ?: 0) > 1 }
+        } else {
+            emptyList()
+        }
+        val slots = cands + signs.map { SIGN_ALTERNATIVES.getValue(it.s) }
         trace?.invoke("  layout: " + pieces.joinToString("") { if (it is Piece.Text) it.s else "#" } + "  reads: " + cands)
         val found = ArrayList<Pair<Expr, Int>>()
-        for (choice in combinations(cands)) {
+        for (choice in combinations(slots)) {
             var k = 0
+            var changedSigns = 0
             val text = buildString {
                 for (p in pieces) {
                     when (p) {
-                        is Piece.Text -> append(p.s)
+                        is Piece.Text -> {
+                            val at = signs.indexOfFirst { it === p }
+                            if (at < 0) {
+                                append(p.s)
+                            } else {
+                                val c = choice[holes.size + at]
+                                if (c != p.s) changedSigns++
+                                append(c)
+                            }
+                        }
                         is Piece.Hole -> append(choice[k++])
                     }
                 }
@@ -712,9 +734,11 @@ object MathPage {
                     // (x⁶ rather than t^G); 9z rather than oz (o, l, I are digits misread far more often).
                     Prefer.LETTERS -> (if (unknowns > maxLetters) 20 + unknowns else -unknowns) + 2 * names.count { it in RARE_UNKNOWNS }
                     Prefer.GRAPH -> names.count { !it.equals(variable, ignoreCase = true) } + if (names.none { it.equals(variable, ignoreCase = true) }) 1 else 0
+                    // z = x² + y² rather than z = x² + 4²: both letters of the axes, no others.
+                    Prefer.SURFACE -> names.count { it.lowercase() !in SURFACE_AXES } + SURFACE_AXES.count { a -> names.none { it.lowercase() == a } }
                 }
                 if (found.none { it.first == e }) {
-                    found += e to score
+                    found += e to score + SIGN_CHANGE_COST * changedSigns
                     trace?.invoke("  parsed: $variant -> $e")
                 }
                 break
@@ -968,6 +992,23 @@ object MathPage {
     private const val CLOSE_LIKE = "J]}>71"
 
     private const val ONE_LIKE = "lI|/"
+
+    /**
+     * A sign told by its shape, and what the same strokes are when it is not that sign: a
+     * prime or a degree sits up at the top right, so as a digit it is an exponent. Not the
+     * middle dot: as a decimal point it turned x = −2,5 wrong on the owner's pages (0.41). Not
+     * + as t: a + left hanging by a broken layout ("1+") then parses, and a formula with no
+     * answer gets a wrong one (87 more wrong on CROHME).
+     */
+    private val SIGN_ALTERNATIVES = mapOf(
+        "°" to listOf("°", "^{0}"),
+        "'" to listOf("'", "^{1}"),
+    )
+
+    private val SURFACE_AXES = setOf("x", "y")
+
+    /** How much worse a reading counts for each sign taken as something else. */
+    private const val SIGN_CHANGE_COST = 2
 
     /** The best choice first, then one or two runs changed to their next guesses. */
     private fun <T> combinations(cands: List<List<T>>): Sequence<List<T>> = sequence {

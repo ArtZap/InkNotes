@@ -54,14 +54,42 @@ class FormulaReadTest {
         val numbers = Printer.numbers
         Printer.numbers = Printer.Numbers.DECIMAL
         Tune.decimalPoint = 1f // CROHME is written the English way (8.5)
+        val lines = file.readLines()
+        val shipped = ReadOptions.get()
+        // How the reading switches (ReadOptions) change the figures: every setting on the same
+        // formulas, as the app ships first (its full report below), then the others.
+        val compared = ArrayList<String>()
+        lateinit var full: String
+        try {
+            for ((name, setting) in listOf("as shipped" to shipped) + ReadOptions.BENCH) {
+                ReadOptions.set(setting)
+                val (summary, report) = measure(lines, math)
+                compared += "  %-18s %s".format(name, summary)
+                if (name == "as shipped") full = report
+            }
+        } finally {
+            ReadOptions.set(shipped)
+            Printer.numbers = numbers
+        }
+        val report = buildString {
+            append("== переключатели чтения (ReadOptions: знаки, по глифам, от угла, паузы = ${shipped.joinToString("") { if (it) "1" else "0" }}): формула выделена | страница\n")
+            for (c in compared) append(c).append('\n')
+            append(full)
+        }
+        File(dir, "report.txt").writeText(report)
+        Log.i("FormulaReadTest", report)
+    }
+
+    /** One pass over the formulas with the reader as now set: a one-line summary and the full report. */
+    private fun measure(lines: List<String>, math: MathNotes): Pair<String, String> {
         val layout = sortedMapOf<String, Tally>()
         val page = sortedMapOf<String, Tally>()
         val wrongs = ArrayList<String>()
         class Signal(val right: Boolean, val shifts: Boolean, val top2: Boolean, val top3: Boolean, val agree: Boolean, val margin: Float?)
         val signals = ArrayList<Signal>()
         val started = System.currentTimeMillis()
-        try {
-            for (line in file.readLines()) {
+        run {
+            for (line in lines) {
                 val p = line.split('\t')
                 if (p.size < 9) continue
                 val (set, id, kind) = Triple(p[0], p[1], p[2])
@@ -117,8 +145,6 @@ class FormulaReadTest {
                 }
                 for (k in listOf("all", kind, set)) page.getOrPut(k) { Tally() }.add(po)
             }
-        } finally {
-            Printer.numbers = numbers
         }
         val report = buildString {
             append("ML Kit, формулы целиком, %.0f с\n".format((System.currentTimeMillis() - started) / 1000.0))
@@ -148,7 +174,6 @@ class FormulaReadTest {
             append("== неверные ответы (первые ${wrongs.size})\n")
             for (x in wrongs) append("  $x\n")
         }
-        File(dir, "report.txt").writeText(report)
-        Log.i("FormulaReadTest", report)
+        return "${layout["all"] ?: Tally()} | ${page["all"] ?: Tally()}" to report
     }
 }

@@ -81,4 +81,29 @@ class SamplesTest {
         val run = listOf(listOf(draw(seven, x = 70f)), glyph)
         assertEquals(listOf("7l", "71"), Voices.adjust(listOf("7l"), run, s))
     }
+
+    @Test
+    fun samplesHelpWhenTheReaderRanSymbolsTogether() {
+        val s = Samples()
+        repeat(3) { s.add("1", listOf(draw(one))) }
+        repeat(3) { s.add("7", listOf(draw(seven))) }
+        // "7l" read first as one symbol: the next reading with two still gets the writer's 1.
+        val run = listOf(listOf(draw(seven, x = 70f)), listOf(draw(one)))
+        assertEquals(listOf("T", "71", "7l"), Voices.adjust(listOf("T", "7l"), run, s))
+    }
+
+    @Test
+    fun glyphByGlyphWhenTheReaderMiscounts() {
+        val a = listOf(draw(one))
+        val b = listOf(draw(seven, x = 130f))
+        val alone = mapOf(a to listOf("1", "l"), b to listOf("7"))
+        val readOne: (List<Ink>) -> List<String> = { alone[it].orEmpty() }
+        // Two glyphs read as one symbol: their readings alone come right after the first.
+        assertEquals(listOf("T", "17", "%"), GlyphReading.extend(listOf("T", "%"), listOf(a, b), readOne))
+        // A guess near the top already has two symbols: unchanged.
+        assertEquals(listOf("T", "17"), GlyphReading.extend(listOf("T", "17"), listOf(a, b), readOne))
+        // One glyph, or one that does not read as one symbol: unchanged.
+        assertEquals(listOf("T"), GlyphReading.extend(listOf("T"), listOf(a), readOne))
+        assertEquals(listOf("T"), GlyphReading.extend(listOf("T"), listOf(a, listOf(draw(loopL))), readOne))
+    }
 }

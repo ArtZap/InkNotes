@@ -45,6 +45,13 @@ private class Topic(val title: String, val entries: List<Pair<String, String>>)
 
 private val TOPICS = listOf(
     Topic(
+        tr("Новое в 0.62", "What's new in 0.62"),
+        listOf(
+            tr("Формулы читаются внимательнее", "Formulas are read more carefully") to tr("Если программа слепила два символа в один или разрезала один на два, она читает их ещё и по одному. Выученные из исправлений замены и ваши образцы почерка теперь работают и в таких местах. Штрих и градус наверху справа могут оказаться степенью 1 или 0, если иначе формула не считается.", "When the app runs two symbols together or cuts one in two, it also reads them one by one. Replacements learned from your corrections and your own handwriting samples now work there too. A prime or a degree sign at the top right may turn out to be an exponent 1 or 0 when the formula does not compute otherwise."),
+            tr("Поверхности z = f(x, y)", "Surfaces z = f(x, y)") to tr("Из вариантов прочтения выбирается тот, где есть и x, и y: z = x + y, а не z = x + 4.", "Of the ways to read it, the one with both x and y is taken: z = x + y, not z = x + 4."),
+        ),
+    ),
+    Topic(
         tr("Новое в 0.61", "What's new in 0.61"),
         listOf(
             tr("Масштаб осей отдельно", "Each axis on its own") to tr("В окне графика двумя пальцами: разведите их по горизонтали — растягивается ось x, по вертикали — ось y, наискосок — обе. Кнопка «1:1» внизу окна делает единицу по x равной единице по y — клетки становятся квадратными, и масштаб меняется сразу по обеим осям. Так и сохраняется в тетради. «Вписать» теперь называется «Исходный вид».", "In the graph's window, with two fingers: spread them sideways to stretch x, up and down to stretch y, slantwise for both. “1:1” at the bottom of the window makes a unit on x as long as one on y — square cells — and zoom then works on both axes alike. It is kept so in the notebook. “Fit” is now called “First view”."),

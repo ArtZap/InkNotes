@@ -249,13 +249,17 @@ class MathNotes(
 
     internal val reader = object : RunReader {
         override fun read(strokes: List<Ink>, lineHeight: Float): List<String> {
-            val texts = this@MathNotes.read(strokes, lineHeight)
-            // What the writer meant by a symbol, learned from their corrections: the choices
-            // they made, then their own symbols' shapes as a second voice.
-            if (!fixes.learn || fixes.learned.isEmpty() && fixes.samples.isEmpty() || texts.isEmpty()) return texts
+            val read = this@MathNotes.read(strokes, lineHeight)
+            val learning = fixes.learn && !(fixes.learned.isEmpty() && fixes.samples.isEmpty())
+            if (read.isEmpty() || !learning && !ReadOptions.glyphByGlyph) return read
             val glyphs = runCatching {
                 MathLayout.items(strokes, lineHeight).filterIsInstance<MathLayout.G>().sortedBy { it.box.left }.map { it.glyph.strokes }
             }.getOrDefault(emptyList())
+            // Symbols run together or cut apart by the reader: the glyphs read one by one too.
+            val texts = if (ReadOptions.glyphByGlyph) GlyphReading.extend(read, glyphs) { this@MathNotes.read(it, lineHeight) } else read
+            // What the writer meant by a symbol, learned from their corrections: the choices
+            // they made, then their own symbols' shapes as a second voice.
+            if (!learning) return texts
             val counted = fixes.learned.adjust(texts, glyphs.size)
             return Voices.adjust(counted, glyphs, fixes.samples)
         }
@@ -267,20 +271,19 @@ class MathNotes(
 
     private fun read(run: List<Ink>, h: Float): List<String> {
         val key = signature(run)
-        cache[key]?.let { return it }
+        val cacheKey = key + ReadOptions.key()
+        cache[cacheKey]?.let { return it }
         val r = recognizer ?: DigitalInkRecognition.getClient(
             DigitalInkRecognizerOptions.builder(model).setMaxResultCount(CANDIDATES).build(),
         ).also { recognizer = it }
+        val input = ReadOptions.input(run, h)
         val ink = MlInk.builder()
-        var time = 0L
-        for (s in run) {
+        for (s in input.strokes) {
             val b = MlInk.Stroke.builder()
-            for (k in s.xs.indices) b.addPoint(MlInk.Point.create(s.xs[k], s.ys[k], time + (s.times?.get(k) ?: (k * 10L))))
-            time += (s.times?.last() ?: (s.xs.size * 10L)) + STROKE_PAUSE_MS
+            for (k in s.xs.indices) b.addPoint(MlInk.Point.create(s.xs[k], s.ys[k], s.ts[k]))
             ink.addStroke(b.build())
         }
-        val box = Box.of(run)
-        val area = WritingArea(max(box.width, h), max(box.height, h * 1.3f))
+        val area = WritingArea(input.width, input.height)
         val built = ink.build()
         val margins = ArrayList<Float>()
         fun recognize(pre: String): List<String> {
@@ -303,7 +306,7 @@ class MathNotes(
             plain.getOrNull(k)?.let { if (it !in texts) texts += it }
             math.getOrNull(k)?.let { if (it !in texts) texts += it }
         }
-        cache[key] = texts
+        cache[cacheKey] = texts
         return texts
     }
 
@@ -339,7 +342,6 @@ class MathNotes(
         const val MATH_CONTEXT = "12+3*4 = "
         const val CACHE_SIZE = 3000
         const val DOWNLOAD_TIMEOUT_MS = 5 * 60_000L
-        const val STROKE_PAUSE_MS = 120L
         const val TIMEOUT_S = 10L
         const val MAX_POINTS = 400
         const val MAX_STROKES = 6000

@@ -33,12 +33,41 @@ class SymbolReadTest {
             Thread.sleep(200)
         }
 
+        val lines = file.readLines().filter { it.isNotBlank() }
+        val shipped = ReadOptions.get()
+        // How the strokes are handed to ML Kit (ReadOptions: from the corner of the area,
+        // pauses by glyph): every way on the same symbols, as the app ships first.
+        val compared = ArrayList<String>()
+        lateinit var full: String
+        try {
+            val ways = listOf("as shipped" to shipped) +
+                ReadOptions.BENCH.filter { (_, v) -> !v[0] && !v[1] } + ("origin + pauses" to booleanArrayOf(false, false, true, true))
+            for ((name, setting) in ways) {
+                ReadOptions.set(setting)
+                val (summary, report) = measure(lines, math)
+                compared += "  %-18s %s".format(name, summary)
+                if (name == "as shipped") full = report
+            }
+        } finally {
+            ReadOptions.set(shipped)
+        }
+        val report = buildString {
+            append("== подача штрихов в ML Kit (от угла, паузы = ${if (shipped[2]) 1 else 0}${if (shipped[3]) 1 else 0}): верно первым, среди вариантов\n")
+            for (c in compared) append(c).append('\n')
+            append('\n').append(full)
+        }
+        File(dir, "report.txt").writeText(report)
+        Log.i("SymbolReadTest", report)
+    }
+
+    /** One pass over the symbols with the reader as now set: a one-line summary and the full report. */
+    private fun measure(lines: List<String>, math: MathNotes): Pair<String, String> {
         class Tally(var n: Int = 0, var first: Int = 0, var any: Int = 0)
         val byLabel = sortedMapOf<String, Tally>()
         val confusions = HashMap<String, Int>()
         val all = Tally()
         val started = System.currentTimeMillis()
-        for ((order, line) in file.readLines().filter { it.isNotBlank() }.withIndex()) {
+        for ((order, line) in lines.withIndex()) {
             val parts = line.split('\t')
             if (parts.size < 5) continue
             val want = parts[3]
@@ -68,8 +97,7 @@ class SymbolReadTest {
             append("\nчастые путаницы (написано → прочитано первым):\n")
             for ((k, v) in confusions.entries.sortedByDescending { it.value }.take(30)) append("  %4d  %s\n".format(v, k))
         }
-        File(dir, "report.txt").writeText(report)
-        Log.i("SymbolReadTest", report)
+        return "%5.1f%%  %5.1f%%".format(pct(all.first, all.n), pct(all.any, all.n)) to report
     }
 
     /** As the formula reader compares readings: [MathText.normalize]. */
