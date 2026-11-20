@@ -41,6 +41,9 @@ class Box(var left: Float, var top: Float, var right: Float, var bottom: Float) 
 /** Reads a run of handwriting on one level (digits, letters, operators); candidates best first. */
 fun interface RunReader {
     fun read(strokes: List<Ink>, lineHeight: Float): List<String>
+
+    /** Whether the reader was sure of its first guess for [strokes], read before: true when it cannot tell. */
+    fun sure(strokes: List<Ink>): Boolean = true
 }
 
 /** A formula as text with gaps: [Text] is structure found from the layout, [Hole] a run to read. */
@@ -510,10 +513,15 @@ object MathLayout {
                 out += Piece.Hole(run.sortedBy { it.box.left }.flatMap { g -> g.strokes.sortedBy { it.order } }, h)
                 run.clear()
             }
+            // An exponent of an exponent (e^{−x²}, a^{b^c}): the last symbol at each depth of
+            // the exponent being written, to tell when the next one is raised over it again.
+            val supRefs = ArrayList<Box>()
             // Raised and lowered parts are wrapped in ^{…} and _{…}.
             fun enter(level: Level) {
                 if (level == cur) return
                 flush()
+                if (cur == Level.SUP) repeat(supRefs.size - 1) { text("}") }
+                supRefs.clear()
                 if (cur != Level.BASE) text("}")
                 when (level) {
                     Level.SUP -> text("^{")
@@ -547,7 +555,7 @@ object MathLayout {
                 // ring or a little high: not a degree sign (those sit at the top), a prime or
                 // an exponent.
                 // A dot low beside a symbol (8.5, 0.7) is a decimal point: it stays in the run.
-                val point = tiny && r != null && !refStructure && b.cy > r.top + Tune.pointLow * r.height && b.left > r.cx
+                val point = Tune.decimalPoint > 0.5f && tiny && r != null && !refStructure && b.cy > r.top + Tune.pointLow * r.height && b.left > r.cx
                 if (tiny && !point && abs(b.cy - ax) < 0.2f * h && (r == null || b.cy > r.top + 0.15f * r.height)) {
                     enter(Level.BASE)
                     flush()
@@ -598,6 +606,23 @@ object MathLayout {
                     continue
                 }
                 enter(level)
+                if (level == Level.SUP) {
+                    // Deeper while raised over the last symbol of each depth reached so far.
+                    var depth = 1
+                    while (depth < supRefs.size + 1 && depth <= supRefs.size && raisedOver(b, supRefs[depth - 1])) depth++
+                    val now = max(supRefs.size, 1)
+                    if (depth > now) {
+                        flush()
+                        repeat(depth - now) { text("^{") }
+                    } else if (depth < now) {
+                        flush()
+                        repeat(now - depth) { text("}") }
+                    }
+                    while (supRefs.size > depth) supRefs.removeAt(supRefs.size - 1)
+                    if (!item.glyph.isDash) {
+                        if (supRefs.size < depth) supRefs += b else supRefs[depth - 1] = b
+                    }
+                }
                 run += item.glyph
                 if (level == Level.BASE && !item.glyph.isDash && b.height >= 0.35f * h) {
                     ref = b
@@ -607,6 +632,10 @@ object MathLayout {
             enter(Level.BASE)
             flush()
         }
+
+        /** [b] is an exponent of [r], a symbol of an exponent: up at its top, not taller than it. */
+        private fun raisedOver(b: Box, r: Box): Boolean =
+            b.left > r.cx && b.height < Tune.nestSize * r.height && b.bottom < r.top + Tune.nestBottom * r.height && b.cy < r.top + Tune.nestMiddle * r.height
 
         /** "+" (a short upright and a dash crossing near both middles) or "-" (a lone short dash). */
         private fun sign(g: Glyph): String? {
@@ -807,12 +836,17 @@ object MathLayout {
                 pool.removeAll(inner.toSet() + bar + tick)
                 pool += Root(Box.ofBoxes(inner.map { it.box } + bb + tick.box), inner)
             }
-            for (r in pool.filterIsInstance<G>().filter { (it.glyph.strokes.size == 1 && isRadical(it.glyph.strokes[0], h)) || radicalOfParts(it.glyph, h) }) {
+            // Narrowest first: a root inside another is whole before the outer one takes it in.
+            val radicals = pool.filterIsInstance<G>().filter { (it.glyph.strokes.size == 1 && isRadical(it.glyph.strokes[0], h)) || radicalOfParts(it.glyph, h) }
+            for (r in radicals.sortedBy { it.box.width }) {
                 if (r !in pool) continue
                 val rb = r.box
                 val degree = degreeOf(pool, r, rb)
+                // The content starts after the bottom of the tick, however wide the root: the 1
+                // of √(1 + √2) sits right after it.
+                val start = min(tickBottomX(r.glyph) ?: (rb.left + 0.25f * rb.width), rb.left + 0.25f * rb.width)
                 val inner = pool.filter {
-                    it !== r && it !in degree && it.box.cx > rb.left + 0.25f * rb.width && it.box.cx < rb.right + 0.1f * h &&
+                    it !== r && it !in degree && it.box.cx > start && it.box.cx < rb.right + 0.1f * h &&
                         it.box.cy > rb.top && it.box.cy < rb.bottom + 0.2f * h
                 }
                 if (inner.isEmpty()) continue
@@ -820,6 +854,14 @@ object MathLayout {
                 pool += Root(Box.ofBoxes(inner.map { it.box } + degree.map { it.box } + rb), inner, degree)
             }
             return pool
+        }
+
+        /** Where the tick of a √ bottoms out: the lowest point of its first stroke. */
+        private fun tickBottomX(g: Glyph): Float? {
+            val k = g.strokes.maxByOrNull { it.height } ?: return null
+            var low = 0
+            for (i in k.ys.indices) if (k.ys[i] > k.ys[low]) low = i
+            return k.xs[low]
         }
 
         private fun talls(pool: MutableList<Item>): List<Item> {
@@ -978,6 +1020,13 @@ object Tune {
     /** A dot is a decimal point, not multiplication, when its middle is this low on the symbol before it. */
     @JvmField var pointLow = 0.55f
 
+    /**
+     * 1: a dot low between digits is a decimal point (English handwriting, 8.5); 0: a dot is
+     * multiplication wherever it sits (Russian handwriting: decimals take a comma, and a low
+     * dot is a hasty ·). Set by the app from the handwriting language.
+     */
+    @JvmField var decimalPoint = 0f
+
     /** An index measured on the symbol before it: smaller than this part of it, its top this far down it, its bottom this far below its foot. */
     @JvmField var subRelSize = 0.7f
     @JvmField var subRelTop = 0.4f
@@ -992,6 +1041,13 @@ object Tune {
 
     /** …and below this part of it: in the crook, not wholly above the √ (the upper limit of an ∫ before it). */
     @JvmField var degreeTop = 0.1f
+
+    /** An exponent of an exponent, measured on the symbol of the exponent before it: smaller than this… */
+    @JvmField var nestSize = 1.0f
+
+    /** …its bottom above this part of that symbol's height, its middle above this part. */
+    @JvmField var nestBottom = 0.55f
+    @JvmField var nestMiddle = 0.2f
 
     /** An index: smaller than this, its top below the middle line by [subTop], its bottom by [subBottom]. */
     @JvmField var subSize = 1.03f

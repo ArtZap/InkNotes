@@ -191,7 +191,13 @@ class MathNotes(private val enabledPref: () -> Boolean, private val setEnabledPr
         return out
     }
 
-    internal val reader = RunReader { run, h -> read(run, h) }
+    internal val reader = object : RunReader {
+        override fun read(strokes: List<Ink>, lineHeight: Float): List<String> = this@MathNotes.read(strokes, lineHeight)
+
+        // Both readings (plain and after arithmetic) put the same text first: measured on
+        // CROHME with ML Kit, answers where they differ are wrong far more often.
+        override fun sure(strokes: List<Ink>): Boolean = doubt(strokes)?.agree ?: true
+    }
 
     private fun read(run: List<Ink>, h: Float): List<String> {
         val key = signature(run)
@@ -210,16 +216,22 @@ class MathNotes(private val enabledPref: () -> Boolean, private val setEnabledPr
         val box = Box.of(run)
         val area = WritingArea(max(box.width, h), max(box.height, h * 1.3f))
         val built = ink.build()
+        val margins = ArrayList<Float>()
         fun recognize(pre: String): List<String> {
             val context = RecognitionContext.builder().setPreContext(pre).setWritingArea(area).build()
-            return runCatching { Tasks.await(r.recognize(built, context), TIMEOUT_S, TimeUnit.SECONDS) }.getOrNull()
-                ?.candidates?.map { it.text }.orEmpty()
+            val cands = runCatching { Tasks.await(r.recognize(built, context), TIMEOUT_S, TimeUnit.SECONDS) }.getOrNull()?.candidates.orEmpty()
+            // Scores: lower is likelier; the gap between the first two says how sure the first is.
+            val a = cands.getOrNull(0)?.score
+            val b = cands.getOrNull(1)?.score
+            if (a != null && b != null) margins += b - a
+            return cands.map { it.text }
         }
         // Read twice: as is, and after a bit of arithmetic, which steers the language model
         // towards digits and operators. The guesses are interleaved, plain ones first.
         val plain = recognize("")
         val math = recognize(MATH_CONTEXT)
         if (plain.isEmpty() && math.isEmpty()) return emptyList()
+        doubts[key] = Doubt(plain.firstOrNull() == math.firstOrNull(), margins.minOrNull())
         val texts = ArrayList<String>()
         for (k in 0 until max(plain.size, math.size)) {
             plain.getOrNull(k)?.let { if (it !in texts) texts += it }
@@ -228,6 +240,21 @@ class MathNotes(private val enabledPref: () -> Boolean, private val setEnabledPr
         cache[key] = texts
         return texts
     }
+
+    /**
+     * How sure the reader was of a run it read: both readings (plain and after arithmetic) put
+     * the same text first; [margin] the smallest score gap between first and second guess
+     * (null when the model gives no scores).
+     */
+    class Doubt(val agree: Boolean, val margin: Float?)
+
+    // Math thread only, as the cache, and as large.
+    private val doubts = object : LinkedHashMap<String, Doubt>(256, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Doubt>?) = size > CACHE_SIZE
+    }
+
+    /** What the reader made of [run] when it last read it; null when it has not (math thread). */
+    internal fun doubt(run: List<Ink>): Doubt? = doubts[signature(run)]
 
     private fun signature(run: List<Ink>): String {
         var hash = 1125899906842597L

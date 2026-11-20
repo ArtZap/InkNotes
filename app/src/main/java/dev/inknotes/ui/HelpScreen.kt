@@ -45,10 +45,18 @@ private class Topic(val title: String, val entries: List<Pair<String, String>>)
 
 private val TOPICS = listOf(
     Topic(
+        tr("Новое в 0.42", "What's new in 0.42"),
+        listOf(
+            tr("Ответ под вопросом — чаще и честнее", "Answers not certain — more often, more honestly") to tr("Ответ показывается серым со знаком «?», и когда распознаватель почерка сам не уверен, что написано (прочитал по-разному). Касание по ответу покажет другие возможные прочтения. Уравнения тоже: x2 = 4 на границе между «x·2» и «x²» даст серый ответ с обоими вариантами.", "An answer is shown grey with a “?” also when the handwriting reader itself is not sure what is written (it read it in different ways). Tap the answer to see the other possible readings. Equations too: x2 = 4 on the edge between “x·2” and “x²” gives a grey answer with both."),
+            tr("Корни и показатели", "Roots and exponents") to tr("√(1 + √2): первая цифра сразу за знаком корня больше не выпадает из-под корня. Показатель в показателе тоже читается: e^(−x²), 2^(m^p).", "√(1 + √2): the first digit right after the root sign no longer falls outside the root. An exponent of an exponent reads too: e^(−x²), 2^(m^p)."),
+            tr("Если ответ неверный", "When an answer is wrong") to tr("Нажмите на него и «Неверно…»: такие примеры пополняют проверку, которая теперь гоняет каждую версию на тысячах рукописных формул.", "Tap it and “Wrong…”: such examples join the check that now runs every version on thousands of handwritten formulas."),
+        ),
+    ),
+    Topic(
         tr("Новое в 0.41", "What's new in 0.41"),
         listOf(
             tr("Ответ под вопросом", "Answers not certain") to tr("Если написанное можно прочитать по-разному (показатель это или просто цифра, индекс или нет) и ответы при этом расходятся, ответ показывается серым со знаком «?». Касание по нему покажет другие возможные ответы. Раньше в таких местах мог появиться уверенный неверный ответ.", "When what is written can be read in more than one way (an exponent or just a digit, an index or not) and the answers differ, the answer is shown grey with a “?”. Tap it to see the other possible answers. Before, such places could get a confident wrong answer."),
-            tr("Десятичная точка", "Decimal point") to tr("Точка внизу между цифрами — десятичная: 8.5 + 1 = 9,5. Точка посередине строки по-прежнему умножение: 8·5 = 40.", "A dot low between digits is a decimal point: 8.5 + 1 = 9.5. A dot in the middle of the line is still multiplication: 8·5 = 40."),
+            tr("Десятичная точка", "Decimal point") to tr("Если язык рукописи английский (настройки), точка внизу между цифрами — десятичная: 8.5 + 1 = 9.5. В русской рукописи точка — умножение, а десятичные пишутся через запятую: 2,5.", "With English handwriting (settings), a dot low between digits is a decimal point: 8.5 + 1 = 9.5. In Russian handwriting a dot is multiplication, and decimals take a comma: 2,5."),
             tr("Корни любой степени", "Roots of any degree") to tr("Маленькая цифра в изгибе знака корня — его степень: ∛8 = 2, ∜16 = 2. Кубический корень из отрицательного числа тоже считается: ∛−8 = −2.", "A small digit in the crook of the root sign is its degree: ∛8 = 2, ∜16 = 2. The cube root of a negative number works too: ∛−8 = −2."),
             tr("Показатели и индексы", "Exponents and indices") to tr("Лучше читаются индексы, написанные рядом с буквой ниже её основания (T₈₅₀, x₁), и показатели вроде 2¹⁰ и 10¹²: единица в них больше не принимается за штрих производной, а ноль — за знак градуса.", "Indices written beside a letter below its foot (T₈₅₀, x₁) read better, and so do exponents like 2¹⁰ and 10¹²: the 1 in them is no longer taken for a prime, nor the 0 for a degree sign."),
         ),

@@ -1,6 +1,7 @@
 package dev.inknotes.math
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -451,8 +452,34 @@ class MathPageTest {
         add(label, ts.map { (x + w / 2 + w / 2 * Math.sin(it)).toFloat() }, ts.map { (top + h / 2 - h / 2 * Math.cos(it)).toFloat() })
     }
 
+    /** [block] with English handwriting: a low dot between digits is a decimal point. */
+    private fun <T> englishHandwriting(block: () -> T): T {
+        val point = Tune.decimalPoint
+        Tune.decimalPoint = 1f
+        try {
+            return block()
+        } finally {
+            Tune.decimalPoint = point
+        }
+    }
+
     @Test
-    fun lowDotIsADecimalPoint() {
+    fun lowDotIsMultiplicationInRussianHandwriting() {
+        // Russian handwriting: decimals take a comma; a dot a little below the middle is a
+        // hasty · (8·5 + 1), as on real pages. English handwriting reads it as 8.5.
+        val s = Sheet()
+        s.glyph("8", 100f, 100f)
+        s.dot(119f, 116f)
+        s.glyph("5", 124f, 100f)
+        s.glyph("+", 144f, 106f, 12f, 12f)
+        s.glyph("1", 162f, 100f)
+        s.equals(184f, 112f)
+        assertEquals("41", text(s.answers().single()))
+        assertTrue(englishHandwriting { text(s.answers().single()) } in setOf("9,5", "9.5", "19/2"))
+    }
+
+    @Test
+    fun lowDotIsADecimalPoint() = englishHandwriting {
         val s = Sheet()
         s.glyph("8", 100f, 100f)
         s.dot(119f, 121f)
@@ -522,5 +549,45 @@ class MathPageTest {
     fun rootOfDegreeParses() {
         assertEquals("2", (Calc.evaluate(Parser.parse("\\sqrt[3]{8}"), Env()) as Answer.Text).lines.single())
         assertEquals(Printer.MINUS + "2", (Calc.evaluate(Parser.parse("\\sqrt[3]{-8}"), Env()) as Answer.Text).lines.single())
+    }
+
+    @Test
+    fun equationOnTheEdgeOfAnExponentIsUnsure() {
+        // x2 = 4 with the 2 moved up step by step: low it is x·2 = 4 (x = 2), high x² = 4
+        // (x = ±2); in between, where the layout is in doubt, the answer is unsure.
+        fun answerAt(top: Float): PageAnswer {
+            val s = Sheet()
+            s.glyph("x", 100f, 100f)
+            s.add("2", listOf(117f, 124.2f, 117f, 124.2f), listOf(top, top + 4f, top + 8f, top + 12f))
+            s.equals(140f, 112f)
+            s.glyph("4", 164f, 100f)
+            return s.answers().single()
+        }
+        val answers = (0..40).map { answerAt(112f - it * 0.5f) }
+        assertTrue(answers.joinToString { text(it) + if (it.unsure) "?" else "" }, answers.any { it.unsure && it.others.isNotEmpty() })
+        assertTrue("low: plain", !answers.first().unsure)
+    }
+
+    @Test
+    fun unsureWhenTheReaderIsUnsure() {
+        // 7+1 = : the reader reads the 7 also as 1 and is not sure: 8, grey, 2 offered.
+        val s = Sheet()
+        s.glyph("7", 100f, 100f)
+        s.glyph("+", 118f, 106f, 12f, 12f)
+        s.glyph("1", 134f, 100f)
+        s.equals(156f, 112f)
+        val base = s.reader(mapOf("7+1" to listOf("7+1", "1+1")))
+        fun answer(sure: Boolean) = MathPage.analyze(
+            s.strokes,
+            object : RunReader {
+                override fun read(strokes: List<Ink>, lineHeight: Float) = base.read(strokes, lineHeight)
+                override fun sure(strokes: List<Ink>) = sure
+            },
+        ).single()
+        val unsure = answer(false)
+        assertEquals("8", text(unsure))
+        assertTrue(unsure.unsure)
+        assertEquals(listOf("2"), unsure.others)
+        assertTrue(!answer(true).unsure)
     }
 }

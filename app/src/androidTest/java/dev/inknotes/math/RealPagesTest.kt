@@ -18,6 +18,14 @@ import java.io.File
 class RealPagesTest {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
 
+    // For tracking a change: thresholds of the layout set from the command line,
+    // -e tune pointLow=99,subRelBelow=99 (none by default).
+    init {
+        InstrumentationRegistry.getArguments().getString("tune")?.split(',')?.filter { '=' in it }?.forEach {
+            Tune.set(it.substringBefore('='), it.substringAfter('=').toFloat())
+        }
+    }
+
     private fun answers(asset: String): List<String> {
         val file = File(instrumentation.targetContext.cacheDir, asset.substringAfter('/'))
         instrumentation.context.assets.open(asset).use { input -> file.outputStream().use { input.copyTo(it) } }
@@ -41,9 +49,13 @@ class RealPagesTest {
             }
     }
 
+    /** The same answers in either interface language: 2,5 in Russian is 2.5 in English. */
+    private fun assertAnswers(expected: List<String>, actual: List<String>) =
+        assertEquals(expected.map { it.replace(',', '.') }, actual.map { it.replace(',', '.') })
+
     @Test
     fun firstPage() {
-        assertEquals(
+        assertAnswers(
             listOf("10", "x = −2,5", "x = −2,5", "x = −2,5", "8", "−46", "0,16", "1", "1", "1122", "3344", "graph"),
             answers("pages/math-check-1.ink"),
         )
@@ -51,7 +63,7 @@ class RealPagesTest {
 
     @Test
     fun secondPage() {
-        assertEquals(
+        assertAnswers(
             listOf(
                 "x = −2,5", "x = 0", "x = 0,0598802", "15x²/2 + C", "10x² + C", "2x + C", "2x + C", "x = 2", "1,456·10⁴¹",
                 "15x²/2 + 19x + C", "12x² + 19x + C", "3x²/2 + C", "2x² + C", "12x² − 13x + C", "5", "x = 0", "0,766044", "0,927295 = 53,1301°",

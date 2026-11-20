@@ -19,13 +19,21 @@ android {
     namespace = "dev.inknotes"
     compileSdk = 37
 
+    // Test helpers used both on the JVM and on a device (the formula bench and its device run).
+    sourceSets {
+        // Kotlin sources: with the built-in Kotlin support they are compiled from the kotlin set.
+        getByName("test").kotlin.srcDir("src/sharedTest/java")
+        getByName("androidTest").kotlin.srcDir("src/sharedTest/java")
+    }
+
     defaultConfig {
         applicationId = "dev.inknotes"
         minSdk = 29
         targetSdk = 36
-        versionCode = 20
-        versionName = "0.41"
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        versionCode = 21
+        versionName = "0.42"
+        // The device tests in a set language (dev.inknotes.InkTestRunner).
+        testInstrumentationRunner = "dev.inknotes.InkTestRunner"
         buildConfigField("String", "GOOGLE_CLIENT_ID", "\"${googleProp("clientId")}\"")
         buildConfigField("String", "GOOGLE_CLIENT_SECRET", "\"${googleProp("clientSecret")}\"")
     }

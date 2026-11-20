@@ -20,6 +20,8 @@ object AppServices {
         val app = context.applicationContext
         // Before any text is made: the interface language of this run.
         Language.init(app)
+        // A dot low between digits: a decimal point in English handwriting, multiplication in Russian.
+        dev.inknotes.math.Tune.decimalPoint = if (Language.handwritingEnglish(app)) 1f else 0f
         InkTextures.store = androidx.ink.brush.StockTextureBitmapStore(app.resources)
         val repo = NotebookRepository(app.filesDir)
         val prefs = AppPrefs(app)

@@ -207,7 +207,7 @@ if [ "$SKIP_TESTS" = 0 ]; then
     [ "$("$ADB" devices | awk 'NR>1 && $2=="device"' | wc -l)" -ge 1 ] || die "Планшет не подключён (adb devices пуст)"
     # Как в README: ставим поверх, не удаляя приложение, чтобы тетради остались.
     gradle :app:installDebug :app:installDebugAndroidTest || die "Не удалось установить на планшет"
-    OUT=$("$ADB" shell am instrument -w dev.inknotes.test/androidx.test.runner.AndroidJUnitRunner 2>&1 | tee -a "$LOG")
+    OUT=$("$ADB" shell am instrument -w dev.inknotes.test/dev.inknotes.InkTestRunner 2>&1 | tee -a "$LOG")
     echo "$OUT" | tail -5
     echo "$OUT" | grep -q "^OK (" || die "Тесты на планшете не прошли, подробности в $LOG"
     ok "тесты на планшете прошли"
