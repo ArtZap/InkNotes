@@ -78,9 +78,14 @@ jobs:
             adb pull /sdcard/Android/data/dev.inknotes/files/level0/report.txt level0-report.txt || true
             adb pull /sdcard/Android/data/dev.inknotes/files/level1/report.txt level1-report.txt || true
             cat level0-report.txt level1-report.txt || adb logcat -d | grep -i "SymbolReadTest\|FormulaReadTest\|mlkit\|digitalink" | tail -60
+            # What ML Kit read, for ReplayBenchTest on a computer (artifacts may be out of reach): in the log, gzip + base64.
+            adb pull /sdcard/Android/data/dev.inknotes/files/level1/reads.tsv reads.tsv || true
+            echo "== reads.tsv.gz.b64 begin" && gzip -9c reads.tsv | base64 -w 1000 && echo "== reads.tsv.gz.b64 end" || true
             grep -q "^OK (" math-ru.txt && grep -q "^OK (" math-en.txt
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: formulas-device-report
-          path: level*-report.txt
+          path: |
+            level*-report.txt
+            reads.tsv

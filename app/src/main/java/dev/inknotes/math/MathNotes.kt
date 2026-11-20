@@ -301,6 +301,7 @@ class MathNotes(
         val math = recognize(MATH_CONTEXT)
         if (plain.isEmpty() && math.isEmpty()) return emptyList()
         doubts[key] = Doubt(plain.firstOrNull() == math.firstOrNull(), margins.minOrNull())
+        onRecognized?.invoke(run, plain, math)
         val texts = ArrayList<String>()
         for (k in 0 until max(plain.size, math.size)) {
             plain.getOrNull(k)?.let { if (it !in texts) texts += it }
@@ -316,6 +317,10 @@ class MathNotes(
      * (null when the model gives no scores).
      */
     class Doubt(val agree: Boolean, val margin: Float?)
+
+    /** Every run ML Kit reads (not from the cache), with its guesses as is and after arithmetic: the device bench records them to replay on a computer. */
+    @Volatile
+    internal var onRecognized: ((run: List<Ink>, plain: List<String>, math: List<String>) -> Unit)? = null
 
     // Math thread only, as the cache, and as large.
     private val doubts = object : LinkedHashMap<String, Doubt>(256, 0.75f, true) {
