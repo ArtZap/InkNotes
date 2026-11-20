@@ -36,6 +36,24 @@ object Plot {
         return Answer.Graph(variable, x0.toFloat(), x1.toFloat(), y0.toFloat(), y1.toFloat(), segments(xs, ys, x0, x1, y0, y1))
     }
 
+    /**
+     * Several functions of one letter in one window, the first as the graph's own curve and
+     * the rest as [Answer.Graph.more]: the window spans what matters in all of them.
+     */
+    fun ofMany(fs: List<(Double) -> Double>, variable: String, trig: Boolean, names: List<String>): Answer.Graph? {
+        if (fs.isEmpty()) return null
+        if (fs.size == 1) return of(fs[0], variable, trig)
+        val windows = fs.mapNotNull { xWindow(it, trig) }
+        if (windows.isEmpty()) return null
+        val x0 = windows.minOf { it.first }
+        val x1 = windows.maxOf { it.second }
+        val xs = DoubleArray(SAMPLES + 1) { x0 + (x1 - x0) * it / SAMPLES }
+        val all = fs.map { f -> DoubleArray(xs.size) { safe(f, xs[it]) } }
+        val (y0, y1) = yWindow(all.flatMap { it.asList() }.toDoubleArray()) ?: return null
+        val curves = all.map { ys -> segments(xs, ys, x0, x1, y0, y1) }
+        return Answer.Graph(variable, x0.toFloat(), x1.toFloat(), y0.toFloat(), y1.toFloat(), curves[0], curves.drop(1), names)
+    }
+
     private fun safe(f: (Double) -> Double, x: Double): Double = runCatching { f(x) }.getOrDefault(Double.NaN)
 
     /**

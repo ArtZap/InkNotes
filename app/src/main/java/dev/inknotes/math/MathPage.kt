@@ -266,12 +266,53 @@ object MathPage {
         // under it; never over the ink or another graph.
         class Area(val left: Float, val top: Float, val right: Float, val bottom: Float)
         val graphs = ArrayList<Area>()
+        // Functions with different names written on lines right under one another, in the same
+        // letter, share one graph (f(x) = x², then g(x) = 2x + 1): drawn by the first, the
+        // others in it. A list of y = … lines keeps a graph each: that is how they are written
+        // to be looked at one by one.
+        fun side(e: Expr): String = when (e) {
+            is Expr.Apply -> e.name + "'".repeat(e.primes) + e.args.joinToString(", ", "(", ")") { side(it) }
+            else -> runCatching { Printer.expr(e) }.getOrDefault("?")
+        }
+        fun curveName(left: Expr, right: Expr) = side(left) + " = " + side(right)
+        val joined = HashMap<Def, List<Def>>()
+        val inOthers = HashSet<Def>()
+        run {
+            fun fn(d: Def) = graphParam(d.left)?.let { p -> runCatching { Calc.function(d.right, envAt(d.index), p.ifEmpty { null }) }.getOrNull() }
+            val plain = defs.filter { graphParam(it.left) != null }.sortedBy { ordered[it.index].cy }
+            var k = 0
+            while (k < plain.size) {
+                val group = arrayListOf(plain[k])
+                val letter = fn(plain[k])?.variable
+                var j = k + 1
+                while (letter != null && j < plain.size && group.size < MAX_CURVES) {
+                    val prev = ordered[group.last().index]
+                    val next = ordered[plain[j].index]
+                    val near = next.cy - prev.cy < 2.6f * max(prev.h, next.h) && abs(next.left - prev.left) < 6f * max(prev.h, next.h)
+                    val named = group.none { it.left == plain[j].left }
+                    if (!near || !named || fn(plain[j])?.variable != letter) break
+                    group += plain[j]
+                    j++
+                }
+                if (group.size > 1) {
+                    joined[group[0]] = group.drop(1)
+                    inOthers += group.drop(1)
+                }
+                k = if (group.size > 1) j else k + 1
+            }
+        }
         for (d in defs) {
+            if (d in inOthers) continue
             val param = graphParam(d.left)
             val isSurface = (d.left as? Expr.Sym)?.name?.equals("z", ignoreCase = true) == true
             val eq = ordered[d.index]
             val fix = Fix(d.leftInk, d.rightInk, listOf(eq.top, eq.bottom) + eq.extra, eq.h, eq.cy, envAt(d.index), graph = true, leftRead = d.left, rightRead = d.right)
             val graph: Answer = when {
+                param != null && d in joined -> runCatching {
+                    val group = listOf(d) + joined.getValue(d)
+                    val fns = group.mapNotNull { g -> graphParam(g.left)?.let { p -> Calc.function(g.right, envAt(g.index), p.ifEmpty { null }) } }
+                    Plot.ofMany(fns.map { it.f }, fns[0].variable, fns.any { it.trig }, group.map { curveName(it.left, it.right) })
+                }.getOrNull()
                 param != null -> runCatching { Calc.graph(d.right, envAt(d.index), param.ifEmpty { null }) }.getOrNull()
                 // z = x² + y²: a surface.
                 isSurface -> runCatching { Calc.surface(d.right, envAt(d.index)) }.getOrNull()
@@ -284,7 +325,11 @@ object MathPage {
                 }
                 null
             } ?: continue
-            val lineInk = side(eq, -1, eqs, rest, limit = null) + side(eq, 1, eqs, rest, limit = null)
+            // The lines of the functions it shows: beside all of them.
+            val lineInk = (listOf(d) + joined[d].orEmpty()).flatMap { g ->
+                val e = ordered[g.index]
+                side(e, -1, eqs, rest, limit = null) + side(e, 1, eqs, rest, limit = null) + listOf(e.top, e.bottom)
+            }
             val lineLeft = lineInk.minOfOrNull { it.left } ?: eq.left
             val lineRight = max(eq.right, lineInk.maxOfOrNull { it.right } ?: eq.right)
             val lineTop = min(eq.top.top, lineInk.minOfOrNull { it.top } ?: eq.cy)
@@ -1180,6 +1225,9 @@ object MathPage {
 
     /** A system answer squeezed above the next line is still at least this part of its size. */
     private const val MIN_UNDER = 0.6f
+
+    /** At most this many functions share one graph. */
+    private const val MAX_CURVES = 4
 
     /** Graph sizes (line heights, see [Plot.WIDTH]) in units of a 1000-wide page. */
     private const val GRAPH_MIN = 22f

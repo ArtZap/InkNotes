@@ -3659,17 +3659,22 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                 }
             }
 
-            /** The curve as one path: the GPU keeps it between frames while the page only moves. */
-            val curve = Path().apply {
-                for (seg in g.segments) {
-                    moveTo(a.x + seg[0] * w, a.y + h - seg[1] * h)
+            private fun pathOf(segments: List<FloatArray>) = Path().apply {
+                for (seg in segments) {
+                    moveTo(left + seg[0] * w, top + h - seg[1] * h)
                     var i = 2
                     while (i < seg.size) {
-                        lineTo(a.x + seg[i] * w, a.y + h - seg[i + 1] * h)
+                        lineTo(left + seg[i] * w, top + h - seg[i + 1] * h)
                         i += 2
                     }
                 }
             }
+
+            /** The curve as one path: the GPU keeps it between frames while the page only moves. */
+            val curve = pathOf(g.segments)
+
+            /** The other functions' curves (written on the lines under it), each its own colour. */
+            val others = g.more.map(::pathOf)
         }
 
         private val graphShapes = java.util.WeakHashMap<PageAnswer, GraphShape>()
@@ -3686,6 +3691,14 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             source?.answers(page)?.firstOrNull { a ->
                 answerBounds[a]?.let { r -> x in r.left - slop..r.right + slop && y in r.top - slop..r.bottom + slop } == true
             }
+
+        /** The colour of curve [k] of a graph: the answer colour first, then amber, green, magenta. */
+        private fun curveColor(k: Int, first: Int): Int = when (k) {
+            0 -> first
+            1 -> if (dark) 0xFFF0A23A.toInt() else 0xFFC77700.toInt()
+            2 -> if (dark) 0xFF5BC98A.toInt() else 0xFF2E8B57.toInt()
+            else -> if (dark) 0xFFE57AB0.toInt() else 0xFFB0306E.toInt()
+        }
 
         /** A graph: a light box, grid, axes with a few numbers, and the curve. */
         private fun drawGraph(canvas: Canvas, a: PageAnswer, g: Answer.Graph, color: Int) {
@@ -3712,6 +3725,24 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             graphPaint.color = color
             graphPaint.strokeWidth = a.size * 0.07f
             canvas.drawPath(shape.curve, graphPaint)
+            for ((k, path) in shape.others.withIndex()) {
+                graphPaint.color = curveColor(k + 1, color)
+                canvas.drawPath(path, graphPaint)
+            }
+            // Which curve is which: a short line of its colour and the formula, top left.
+            if (g.names.size > 1) {
+                answerPaint.textAlign = Paint.Align.LEFT
+                answerPaint.textSize = shape.labelSize * 1.05f
+                val ts = answerPaint.textSize
+                for ((k, name) in g.names.withIndex()) {
+                    val y = box.top + ts * (1.3f + 1.25f * k)
+                    graphPaint.color = curveColor(k, color)
+                    canvas.drawLine(box.left + ts * 0.5f, y - ts * 0.33f, box.left + ts * 1.6f, y - ts * 0.33f, graphPaint)
+                    answerPaint.color = curveColor(k, color)
+                    canvas.drawText(name, box.left + ts * 2f, y, answerPaint)
+                }
+                answerPaint.color = (color and 0x00FFFFFF) or 0xAA000000.toInt()
+            }
             canvas.restore()
             // The axis letters, outside the clip so they are never cut.
             answerPaint.textAlign = Paint.Align.LEFT

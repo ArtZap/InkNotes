@@ -18,7 +18,20 @@ sealed class Answer {
     data class Grid(val rows: List<List<String>>) : Answer()
 
     /** y = f(x) drawn in a box: the window and the curve in 0…1 box coordinates. */
-    class Graph(val variable: String, val x0: Float, val x1: Float, val y0: Float, val y1: Float, val segments: List<FloatArray>) : Answer() {
+    /**
+     * A graph: the curve [segments] in a window; [more]: other curves drawn in the same window
+     * (functions written on the lines under it), and [names] of all the curves when there are several.
+     */
+    class Graph(
+        val variable: String,
+        val x0: Float,
+        val x1: Float,
+        val y0: Float,
+        val y1: Float,
+        val segments: List<FloatArray>,
+        val more: List<List<FloatArray>> = emptyList(),
+        val names: List<String> = emptyList(),
+    ) : Answer() {
         override fun toString() = "Graph($variable: ${Printer.number(x0.toDouble())}…${Printer.number(x1.toDouble())}, " +
             "${Printer.number(y0.toDouble())}…${Printer.number(y1.toDouble())}, ${segments.size} parts)"
     }
@@ -124,12 +137,21 @@ object Calc {
      * it is a formula in one letter (x²−3, sin x, a·x with a defined); null otherwise.
      */
     fun graph(right: Expr, env: Env, param: String? = null): Answer.Graph? {
+        val f = function(right, env, param) ?: return null
+        return Plot.of(f.f, f.variable, f.trig)
+    }
+
+    /** A function of one letter to plot: how to compute it, its letter, periodic or not. */
+    class Plotted(val f: (Double) -> Double, val variable: String, val trig: Boolean)
+
+    /** `y = [right]` as a function to plot (see [graph]); null when it is not one of one letter. */
+    fun function(right: Expr, env: Env, param: String? = null): Plotted? {
         // f(x) = …: its own x, whatever x is defined as on the page.
         val r = runCatching { Algebra.simplify(resolve(right, env, setOfNotNull(param), Flags())) }.getOrNull() ?: return null
         if (containsMatrix(r)) return null
         val x = Algebra.freeVars(r).singleOrNull()?.takeIf { param == null || it == param } ?: return null
         val trig = TRIG.containsMatchIn(runCatching { Printer.expr(r) }.getOrDefault(""))
-        return Plot.of({ v -> Numeric.scalar(r, mapOf(x to v)) }, x, trig)
+        return Plotted({ v -> Numeric.scalar(r, mapOf(x to v)) }, x, trig)
     }
 
     private val TRIG = Regex("sin|cos|tg|ctg")
