@@ -662,7 +662,10 @@ object MathLayout {
                 val next = items.getOrNull(items.indexOf(item) + 1)
                 val exponentGoesOn = next is G && r != null && next.box.left - b.right < 0.6f * h && next.box.bottom < r.top + Tune.supBottom * r.height &&
                     next.box.height < 1.2f * max(b.height, 0.3f * h)
-                if (level == Level.SUP && !exponentGoesOn && item.glyph.strokes.size == 1 && b.height < 0.6f * h && b.width < 0.6f * b.height && straight(item.glyph.strokes[0], 0.12f)) {
+                // Nor after a minus or plus: the 1 of x⁻¹, 2ᵖ⁻¹.
+                val prev = items.getOrNull(items.indexOf(item) - 1)
+                val afterSign = Tune.primeAfterSign > 0f && prev is G && (prev.box.width >= 2.2f * max(prev.box.height, 0.5f) || sign(prev.glyph) != null)
+                if (level == Level.SUP && !exponentGoesOn && !afterSign && item.glyph.strokes.size == 1 && b.height < 0.6f * h && b.width < 0.6f * b.height && straight(item.glyph.strokes[0], 0.12f)) {
                     enter(Level.BASE)
                     flush()
                     signText("'", item.glyph, Level.BASE)
@@ -1126,6 +1129,9 @@ object Tune {
     /** The writer's placements (null: none, as in tests and stands); see [Placements]. */
     @Volatile
     var personal: Placements? = null
+
+    /** Above 0: an upright right after a minus or plus is a 1, not a prime. */
+    @JvmField var primeAfterSign = 1f
 
     /** Above 0: a sign level with the bar of the fraction before it is on the line, not an index. */
     @JvmField var signByBar = 1f
