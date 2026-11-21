@@ -158,7 +158,20 @@ private fun FixContent(c: EditorController, answer: PageAnswer, d: MathNotes.Dra
             if (same) null else texts.joinToString("\n") { (l, r) -> l + (r?.let { " = $it" } ?: "") }
         }
     }
-    var typed by remember(d) { mutableStateOf(pinnedTyped) }
+    // No wheels at all (the writing could not be taken apart into symbols): straight to the
+    // formula keyboard, started from what the page read where it reads back.
+    val noWheels = slots.isEmpty()
+    val readTyped = remember(d) {
+        if (!noWheels) {
+            null
+        } else {
+            fun text(e: dev.inknotes.math.Expr?): String = e?.let { x ->
+                runCatching { dev.inknotes.math.Printer.expr(x) }.getOrNull()?.takeIf { MathPage.parseText(it) == x }
+            }.orEmpty()
+            d.rows.joinToString("\n") { row -> text(row.fix.leftRead) + (if (row.fix.right != null) " = " + text(row.fix.rightRead) else "") }
+        }
+    }
+    var typed by remember(d) { mutableStateOf(pinnedTyped ?: readTyped) }
     var learn by remember { mutableStateOf(c.math.fixes.learn) }
 
     // Every formula as text: left, and right (null for `expr =`).
@@ -289,7 +302,7 @@ private fun FixContent(c: EditorController, answer: PageAnswer, d: MathNotes.Dra
     }
 
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            OutlinedButton(onClick = {
+            if (!noWheels) OutlinedButton(onClick = {
                 typed = if (typed == null) shown.joinToString("\n") { (l, r) -> l + (r?.let { " = $it" } ?: "") } else null
             }) {
                 Text(if (typed == null) tr("Нет нужного — набрать формулу", "Not there — type the formula") else tr("Назад к барабанам", "Back to the wheels"))
