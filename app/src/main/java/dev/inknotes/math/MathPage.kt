@@ -796,6 +796,39 @@ object MathPage {
         return null
     }
 
+    /** A written equality "left = right" whose two sides are numbers: what they read as ([left], [right]: null when not a number). */
+    class Equality(val x: Float, val y: Float, val left: Double?, val right: Double?, val leftText: String, val rightText: String)
+
+    /**
+     * Every "=" on the page with what is written on both sides read as numbers: for checking
+     * the reading on pages of worked solutions (68·51 = 3468: the written result says what the
+     * left side is). Units after a number (cm², kN) and letters are left as they read.
+     */
+    fun equalities(strokes: List<Ink>, reader: RunReader): List<Equality> {
+        val ink = strokes.filter { it.height < MAX_STROKE && it.width < MAX_STROKE }
+        val eqs = findEquals(ink).take(MAX_EQUALS)
+        if (eqs.isEmpty()) return emptyList()
+        val rest = ink.filter { s -> eqs.none { s === it.top || s === it.bottom || s in it.extra } }
+        for (eq in eqs) eq.h = lineHeight(eq, rest)
+        val out = ArrayList<Equality>()
+        for (eq in eqs) {
+            val left = side(eq, -1, eqs, rest, limit = null)
+            val right = side(eq, 1, eqs, rest, limit = null)
+            if (left.isEmpty() || right.isEmpty()) continue
+            fun value(side: List<Ink>): Pair<Double?, String> {
+                val e = runCatching { read(side, eq.h, eq.cy, reader, Prefer.NUMBERS) }.getOrNull() ?: return null to "?"
+                val text = runCatching { Printer.expr(e) }.getOrDefault("?")
+                if (Algebra.freeVars(e).any { it !in Algebra.CONSTANTS }) return null to text
+                val v = (runCatching { Numeric.eval(e) }.getOrNull() as? Scalar)?.v?.takeIf { it.isFinite() }
+                return v to text
+            }
+            val (lv, lt) = value(left)
+            val (rv, rt) = value(right)
+            out += Equality(eq.left, eq.cy, lv, rv, lt, rt)
+        }
+        return out
+    }
+
     /** The texts a run is read as, best first, for [readings]; empty when the reader saw nothing. */
     private fun holeTexts(hole: Piece.Hole, reader: RunReader, prefer: Prefer, known: (String) -> Boolean): List<String> {
         val texts = reader.read(hole.strokes, hole.h).map(MathText::normalize).filter { it.isNotEmpty() }.map(::digitIndex)
