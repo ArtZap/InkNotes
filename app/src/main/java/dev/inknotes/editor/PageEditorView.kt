@@ -16,6 +16,7 @@ import android.graphics.RectF
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.view.HapticFeedbackConstants
 import android.view.InputDevice
 import android.view.MotionEvent
@@ -364,8 +365,13 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         return set
     }
 
-    /** The ruler lying over the pages (world coordinates). */
-    val ruler = Ruler()
+    /** The ruler and the protractor lying over the pages (world coordinates); both can lie at once. */
+    private val straightRuler = Ruler()
+    private val protractorTool = Ruler().apply { protractor = true }
+
+    /** The one being moved or drawn along now (the last touched). */
+    var ruler = straightRuler
+        private set
     var highlighterColor = 0x80FFEB3B.toInt()
     var highlighterSize = 22f
     var fillPattern = FillPattern.LINES
@@ -379,7 +385,18 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
     private val pageLayer = PageLayer(context)
     private val laser = Laser(resources.displayMetrics.density)
     private val inProgressView = InProgressStrokesView(context).apply { textureBitmapStore = InkTextures.delegate }
-    private val predictor = MotionEventPredictor.newInstance(this)
+    // Made again for each line: what it learnt from another line (or a palm) does not carry over.
+    private var predictor = MotionEventPredictor.newInstance(this)
+
+    /** When the pen last left the screen ([MotionEvent.getEventTime]); a palm comes down right after. */
+    private var penUpAt = Long.MIN_VALUE / 2
+
+    /** Fingers (a palm) on the screen now, and when the drawing pen last reported a sample. */
+    private var fingersDown = 0
+    private var penSampleAt = 0L
+    private var penLastX = 0f
+    private var penLastY = 0f
+    private var penLastP = 0f
     private val worldToView = Matrix()
     private val viewToWorld = Matrix()
     private var tops = FloatArray(0)
@@ -1230,19 +1247,23 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
 
     /** Shows or hides the ruler (or the [protractor]); it appears level in the middle of the screen. */
     fun toggleRuler(protractor: Boolean = false): Boolean {
-        if (ruler.shown && ruler.protractor == protractor) {
-            ruler.shown = false
+        val r = if (protractor) protractorTool else straightRuler
+        if (r.shown) {
+            r.shown = false
         } else {
-            ruler.protractor = protractor
             val c = floatArrayOf(width / 2f, height / 2f).also(viewToWorld::mapPoints)
-            ruler.cx = c[0]
-            // The half disc stands on its centre: lower, so all of it is in sight.
-            ruler.cy = c[1] + if (protractor) Ruler.RADIUS * 0.45f else 0f
-            ruler.angle = 0f
-            ruler.shown = true
+            r.cx = c[0]
+            // The half disc stands on its centre: lower, so all of it is in sight; with the
+            // ruler on the page too, the two do not cover each other.
+            val other = if (protractor) straightRuler else protractorTool
+            val apart = if (other.shown) Ruler.RADIUS * 0.6f else 0f
+            r.cy = c[1] + if (protractor) Ruler.RADIUS * 0.45f + apart else -apart
+            r.angle = 0f
+            r.shown = true
+            ruler = r
         }
         pageLayer.invalidate()
-        return ruler.shown
+        return r.shown
     }
 
     /** The one selected stroke if it is a shape of straight pieces: its corners can be dragged. */
@@ -1355,6 +1376,10 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         }
         if (pickingColor && mode == Mode.NONE) return pick(e)
         val index = e.actionIndex
+        if ((e.actionMasked == MotionEvent.ACTION_UP || e.actionMasked == MotionEvent.ACTION_POINTER_UP) && isPen(e, index)) penUpAt = e.eventTime
+        val lifting = e.actionMasked == MotionEvent.ACTION_UP || e.actionMasked == MotionEvent.ACTION_POINTER_UP
+        fingersDown = if (e.actionMasked == MotionEvent.ACTION_CANCEL) 0 else
+            (0 until e.pointerCount).count { e.getToolType(it) == MotionEvent.TOOL_TYPE_FINGER && !(lifting && it == index) }
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN -> begin(e, index)
 
@@ -1568,13 +1593,24 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                 return Mode.NONE
             }
         }
+        // A hand laid on the screen while writing (between letters, the pen just lifted) is a
+        // palm, not a finger: it does not move the page, undo or touch the ruler. The pen landing
+        // after it writes as usual.
+        if (toolType == MotionEvent.TOOL_TYPE_FINGER && e.eventTime - penUpAt < palmAfterPenMs) return Mode.NONE
         if (insertingSpace && (pen || toolType == MotionEvent.TOOL_TYPE_FINGER)) {
             activePage = pageAt(e.getX(index), e.getY(index))
             return Mode.SPACE
         }
 
         // Fingers on the ruler move it.
-        if (!pen && !eraserEnd && ruler.hit(world[0], world[1])) return Mode.RULER
+        if (!pen && !eraserEnd) {
+            // The ruler is drawn over the protractor: it is hit first.
+            val hitTool = listOf(straightRuler, protractorTool).firstOrNull { it.hit(world[0], world[1]) }
+            if (hitTool != null) {
+                ruler = hitTool
+                return Mode.RULER
+            }
+        }
 
         // Fingers move the selection in any tool, the pen only with the lasso: with a pen or
         // marker it writes, also next to a line just tapped.
@@ -1618,7 +1654,14 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         }
         activePage = pageAt(e.getX(index), e.getY(index))
         val drawing = tool == Tool.PEN || tool == Tool.FOUNTAIN || tool == Tool.HIGHLIGHTER || tool == Tool.NEON || tool == Tool.SPOILER
-        if (pen && !penButton && drawing && ruler.edgeNear(world[0], world[1], RULER_REACH_DP * density / currentScale()) != 0) return Mode.RULER_DRAW
+        if (pen && !penButton && drawing) {
+            val reach = RULER_REACH_DP * density / currentScale()
+            val edgeTool = listOf(straightRuler, protractorTool).firstOrNull { it.edgeNear(world[0], world[1], reach) != 0 }
+            if (edgeTool != null) {
+                ruler = edgeTool
+                return Mode.RULER_DRAW
+            }
+        }
         return when {
             eraserEnd || (pen && penButton) -> Mode.ERASE
             !pen -> Mode.GESTURE
@@ -1752,7 +1795,8 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
     private fun startDraw(e: MotionEvent, index: Int) {
         if (doc(activePage) == null) return
         requestUnbufferedDispatch(e)
-        predictor.record(e)
+        predictor = MotionEventPredictor.newInstance(this)
+        if (e.pointerCount == 1) predictor.record(e)
         val (brush, wet) = newWet(activePage)
         activePointerId = e.getPointerId(index)
         val id = inProgressView.startStroke(e, activePointerId, brush, viewToPageMatrix(activePage), Matrix())
@@ -1767,6 +1811,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         strokePressures += e.getPressure(index)
         holdAnchorX = e.getX(index)
         holdAnchorY = e.getY(index)
+        penSampleAt = SystemClock.uptimeMillis()
         holdHandler.removeCallbacks(holdRunnable)
         holdHandler.postDelayed(holdRunnable, HOLD_MS)
     }
@@ -1828,13 +1873,26 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         val id = drawStrokeId ?: return
         val index = e.findPointerIndex(activePointerId)
         if (index < 0) return
-        predictor.record(e)
-        val predicted = predictor.predict()
+        // With a palm (or any finger) on the screen too, the line goes on without the guess
+        // ahead: the predictor takes all pointers of an event and its guess for the pen could
+        // jump towards the hand: the line jerked and left a stray vertical piece.
+        val predicted = if (e.pointerCount == 1) {
+            predictor.record(e)
+            predictor.predict()?.let { p -> if (plausible(p, e, index)) p else { p.recycle(); null } }
+        } else null
         try {
             inProgressView.addToStroke(e, activePointerId, id, predicted)
         } finally {
             predicted?.recycle()
         }
+        // Events of a moving palm carry the pen too, unchanged: only a change is the pen's own.
+        val px = e.getX(index)
+        val py = e.getY(index)
+        val pp = e.getPressure(index)
+        if (e.pointerCount == 1 || px != penLastX || py != penLastY || pp != penLastP) penSampleAt = SystemClock.uptimeMillis()
+        penLastX = px
+        penLastY = py
+        penLastP = pp
         forEachSample(e) { x, y, pressure ->
             strokeSamples += ShapeRecognizer.P(x, y)
             strokePressures += pressure
@@ -1846,6 +1904,13 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             holdHandler.removeCallbacks(holdRunnable)
             holdHandler.postDelayed(holdRunnable, HOLD_MS)
         }
+    }
+
+    /** A guess ahead that has the pen and stays near it (a few millimetres on screen). */
+    private fun plausible(p: MotionEvent, e: MotionEvent, index: Int): Boolean {
+        val i = p.findPointerIndex(activePointerId)
+        if (i < 0 || p.pointerCount != 1) return false
+        return hypot(p.getX(i) - e.getX(index), p.getY(i) - e.getY(index)) < PREDICT_REACH_DP * density
     }
 
     private fun endDraw(e: MotionEvent, index: Int) {
@@ -1957,6 +2022,13 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
     private fun snapToShape() {
         val id = drawStrokeId ?: return
         if (mode != Mode.DRAW) return
+        // A palm on the screen while the pen has gone quiet: the tablet holds back the pen's
+        // samples under a palm, so it only looks held. It used to turn a letter into a straight
+        // line stuck to the nearest line (a stray, shifted vertical stroke). Wait for the pen.
+        if (fingersDown > 0 && SystemClock.uptimeMillis() - penSampleAt > PEN_QUIET_MS) {
+            holdHandler.postDelayed(holdRunnable, HOLD_MS)
+            return
+        }
         // A shape with a point that is not a number would be refused by the ink library: none then.
         val shape = runCatching { ShapeRecognizer.recognize(strokeSamples) }.getOrNull()
             ?.takeIf { sh -> sh.paths.all { path -> path.all { it.x.isFinite() && it.y.isFinite() } } } ?: return
@@ -4277,11 +4349,13 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
 
         /** The ruler, a line being drawn along it, and the ruler's angle while it turns. */
         private fun drawRuler(canvas: Canvas, scale: Float) {
-            if (!ruler.shown) return
+            if (!straightRuler.shown && !protractorTool.shown) return
             canvas.save()
             canvas.concat(worldToView)
             val pointer = if (!cursorX.isNaN() && cursorPage in tops.indices) floatArrayOf(cursorX + lefts[cursorPage], cursorY + tops[cursorPage]) else null
-            ruler.draw(canvas, dark, 1f / scale, showAngle = mode == Mode.RULER, pointer = pointer)
+            // The protractor under the ruler; the angle shows on the one being turned.
+            protractorTool.draw(canvas, dark, 1f / scale, showAngle = mode == Mode.RULER && ruler === protractorTool, pointer = pointer)
+            straightRuler.draw(canvas, dark, 1f / scale, showAngle = mode == Mode.RULER && ruler === straightRuler)
             if (mode == Mode.RULER_DRAW && rulerEdge == Ruler.ARC && rulerTo > rulerFrom) {
                 val (_, color, size) = rulerInk()
                 previewPaint.color = color
@@ -4529,6 +4603,18 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
 
         /** Hold-to-snap: pen still (within the slop) for this long at the end of a stroke. */
         const val HOLD_MS = 550L
+
+        /**
+         * A finger this soon after the pen lifted is the writing hand's palm. The device tests
+         * tap with a finger right after a pen line, so their runner sets it to 0.
+         */
+        var palmAfterPenMs = 700L
+
+        /** How far ahead of the pen (on screen) a predicted piece of line may reach. */
+        const val PREDICT_REACH_DP = 40f
+
+        /** No pen sample for this long while a palm is down: the pen is held back, not held still. */
+        const val PEN_QUIET_MS = 120L
         private const val HOLD_SLOP_DP = 6f
 
         /** Spacing of generated inputs along snapped shapes, in page units. */

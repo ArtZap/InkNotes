@@ -154,7 +154,7 @@ class Ruler {
         }
         if (showAngle) {
             labels.textSize = 4.5f * mm
-            canvas.drawText("${Math.round(((angle % 360f) + 360f) % 360f)}°", 0f, -width / 2 - 2.5f * mm, labels)
+            canvas.drawText("${unitCircle(angle)}°", 0f, -width / 2 - 2.5f * mm, labels)
         }
         canvas.restore()
     }
@@ -210,7 +210,7 @@ class Ruler {
         canvas.drawCircle(0f, 0f, 1f * mm, ticks)
         if (showAngle) {
             labels.textSize = 4.5f * mm
-            canvas.drawText("${Math.round(((angle % 360f) + 360f) % 360f)}°", 0f, BASE + 6f * mm, labels)
+            canvas.drawText("${unitCircle(angle)}°", 0f, BASE + 6f * mm, labels)
         }
         canvas.restore()
         // The pen over the protractor: a ray from the centre and the angle it makes with the base.
@@ -231,6 +231,16 @@ class Ruler {
     }
 
     companion object {
+        /**
+         * The turn as on the unit circle: counter-clockwise from level is 0…180, clockwise
+         * 0…−180 ([angle] itself is clockwise on screen).
+         */
+        fun unitCircle(angle: Float): Int {
+            val a = Math.round(-angle)
+            val n = ((a % 360) + 360) % 360
+            return if (n > 180) n - 360 else n
+        }
+
         /** The round edge of the protractor: radius and the strip under the base line. */
         val RADIUS = 55f / Notebook.MM_PER_UNIT
         val BASE = 8f / Notebook.MM_PER_UNIT

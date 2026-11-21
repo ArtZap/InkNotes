@@ -285,6 +285,59 @@ class NewToolsTest {
         save("ruler.png")
     }
 
+    // ---------------------------------------------------------- palm
+
+    @Test
+    fun aPalmLaidDownDuringALineDoesNotMoveIt() = onMain {
+        view.tool = Tool.PEN
+        view.penSize = 3f
+        val before = view.pageToViewPoint(0, 300f, 500f)
+        val p = (0..30).map { view.pageToViewPoint(0, 300f + 10f * it, 500f) }
+        val palm0 = view.pageToViewPoint(0, 650f, 900f)
+        val t0 = SystemClock.uptimeMillis()
+        var t = t0
+        send(MotionEvent.ACTION_DOWN, p[0][0], p[0][1], t0, t)
+        for (k in 1..10) send(MotionEvent.ACTION_MOVE, p[k][0], p[k][1], t0, (t + 4L * k).also { t = it })
+        sendWithPalm(MotionEvent.ACTION_POINTER_DOWN or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT), p[10], palm0[0], palm0[1], t0, t)
+        // The palm slides down a long way while the pen goes on.
+        for (k in 11..20) sendWithPalm(MotionEvent.ACTION_MOVE, p[k], palm0[0], palm0[1] + 25f * (k - 10), t0, (t + 4).also { t = it })
+        sendWithPalm(MotionEvent.ACTION_POINTER_UP or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT), p[20], palm0[0], palm0[1] + 250f, t0, (t + 4).also { t = it })
+        for (k in 21..30) send(MotionEvent.ACTION_MOVE, p[k][0], p[k][1], t0, (t + 4).also { t = it })
+        send(MotionEvent.ACTION_UP, p[30][0], p[30][1], t0, t + 4)
+        assertEquals(1, doc.strokes.size)
+        val b = PageEdits.bounds(doc.strokes[0])!!
+        assertEquals(300f, b.left, 4f)
+        assertEquals(600f, b.right, 4f)
+        assertTrue("no jump across: ${b.height()}", b.height() < 10f)
+        assertEquals(500f, b.centerY(), 4f)
+        val after = view.pageToViewPoint(0, 300f, 500f)
+        assertEquals(before[0], after[0], 0.5f)
+        assertEquals(before[1], after[1], 0.5f)
+    }
+
+    @Test
+    fun aPalmRightAfterThePenDoesNotMoveThePage() {
+        val was = PageEditorView.palmAfterPenMs
+        PageEditorView.palmAfterPenMs = 700L
+        try {
+            onMain {
+                view.tool = Tool.PEN
+                trace(listOf(300f to 500f, 500f to 520f))
+                val before = view.pageToViewPoint(0, 300f, 500f)
+                val t0 = SystemClock.uptimeMillis()
+                val c = view.pageToViewPoint(0, 600f, 900f)
+                send(MotionEvent.ACTION_DOWN, c[0], c[1], t0, t0, MotionEvent.TOOL_TYPE_FINGER)
+                for (k in 1..10) send(MotionEvent.ACTION_MOVE, c[0], c[1] - 30f * k, t0, t0 + 8L * k, MotionEvent.TOOL_TYPE_FINGER)
+                send(MotionEvent.ACTION_UP, c[0], c[1] - 300f, t0, t0 + 90, MotionEvent.TOOL_TYPE_FINGER)
+                val after = view.pageToViewPoint(0, 300f, 500f)
+                assertEquals(before[1], after[1], 0.5f)
+                assertEquals(1, doc.strokes.size)
+            }
+        } finally {
+            PageEditorView.palmAfterPenMs = was
+        }
+    }
+
     // ---------------------------------------------------------- corners
 
     @Test
@@ -749,6 +802,21 @@ class NewToolsTest {
         }
         val last = pts.last()
         send(MotionEvent.ACTION_UP, last[0], last[1], t0, t + 4)
+    }
+
+    /** An event with the pen (id 0) and a palm (id 1, a finger) on the screen. */
+    private fun sendWithPalm(action: Int, pen: FloatArray, palmX: Float, palmY: Float, downTime: Long, time: Long) {
+        val props = arrayOf(
+            MotionEvent.PointerProperties().apply { id = 0; toolType = MotionEvent.TOOL_TYPE_STYLUS },
+            MotionEvent.PointerProperties().apply { id = 1; toolType = MotionEvent.TOOL_TYPE_FINGER },
+        )
+        val coords = arrayOf(
+            MotionEvent.PointerCoords().apply { x = pen[0]; y = pen[1]; pressure = 0.6f },
+            MotionEvent.PointerCoords().apply { x = palmX; y = palmY; pressure = 0.9f },
+        )
+        val e = MotionEvent.obtain(downTime, time, action, 2, props, coords, 0, 0, 1f, 1f, 0, 0, InputDevice.SOURCE_TOUCHSCREEN or InputDevice.SOURCE_STYLUS, 0)
+        view.dispatchTouchEvent(e)
+        e.recycle()
     }
 
     private fun send(action: Int, x: Float, y: Float, downTime: Long, time: Long, tool: Int = MotionEvent.TOOL_TYPE_STYLUS) {
