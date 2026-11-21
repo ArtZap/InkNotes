@@ -582,8 +582,14 @@ object MathPage {
         var bottom = brace.bottom
         var right = brace.right
         var h = 0f
+        // The brace itself (one stroke or its two halves) is no part of a side.
+        val withoutBrace = rest.filter { st ->
+            !(st.height > 0.4f * brace.height && st.left >= brace.left - 1 && st.right <= brace.right + 1 && st.top >= brace.top - 1 && st.bottom <= brace.bottom + 1)
+        }
         val sides = members.map { eq ->
-            val l = side(eq, -1, eqs, rest, limit = brace.right)
+            // Bounded by the brace where the equation is: its hooks at the top and bottom
+            // reach farther right, over the first letters (a/b of the top line).
+            val l = side(eq, -1, eqs, withoutBrace, limit = braceAt(brace, eq.cy, eq.h))
             val r = side(eq, 1, eqs, rest, limit = null)
             if (l.isEmpty() || r.isEmpty() || l.size > MAX_SIDE || r.size > MAX_SIDE) return null
             Triple(eq, l, r)
@@ -794,6 +800,20 @@ object MathPage {
             return Triple(l, r, why)
         }
         return null
+    }
+
+    /** How far right [brace] reaches level with [y] (within half a line [h]); its whole width where it does not pass that level. */
+    private fun braceAt(brace: Ink, y: Float, h: Float): Float {
+        var x = -Float.MAX_VALUE
+        for (i in brace.xs.indices) {
+            if (abs(brace.ys[i] - y) < 0.5f * h) x = max(x, brace.xs[i])
+            // Where the stroke passes the line between two points.
+            if (i > 0 && (brace.ys[i - 1] - y) * (brace.ys[i] - y) <= 0f && brace.ys[i] != brace.ys[i - 1]) {
+                val t = (y - brace.ys[i - 1]) / (brace.ys[i] - brace.ys[i - 1])
+                x = max(x, brace.xs[i - 1] + t * (brace.xs[i] - brace.xs[i - 1]))
+            }
+        }
+        return if (x == -Float.MAX_VALUE) brace.right else x
     }
 
     /** A written equality "left = right" whose two sides are numbers: what they read as ([left], [right]: null when not a number). */

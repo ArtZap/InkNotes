@@ -276,6 +276,27 @@ class MathPageTest {
     }
 
     @Test
+    fun braceHooksOverTheFirstLettersKeepThem() {
+        // { a/b + 1 = 3
+        //   a + b = 6     the brace's hooks curl right over the a/b and the a below.
+        val s = Sheet()
+        s.add(null, listOf(128f, 110f, 100f, 100f, 100f, 88f, 100f, 100f, 100f, 112f, 132f), listOf(52f, 54f, 62f, 80f, 112f, 120f, 128f, 160f, 178f, 186f, 188f))
+        s.glyph("a", 112f, 70f, 14f, 16f)
+        s.dash(108f, 91f, 22f)
+        s.glyph("b", 112f, 96f, 14f, 20f)
+        s.glyph("+", 136f, 86f, 12f, 12f)
+        s.glyph("1", 156f, 80f, 8f)
+        s.equals(172f, 92f)
+        s.glyph("3", 198f, 80f)
+        s.glyph("a", 110f, 140f, 14f, 16f)
+        s.glyph("+", 130f, 142f, 12f, 12f)
+        s.glyph("b", 150f, 134f, 14f, 22f)
+        s.equals(172f, 148f)
+        s.glyph("6", 198f, 136f)
+        assertEquals("a = 4; b = 2", text(s.answers().single()))
+    }
+
+    @Test
     fun aSystemCanBeCorrectedEquationByEquation() {
         val s = Sheet()
         s.tall(null, 90f, 66f, 100f, 12f) { t -> if (t < 0.5f) 1 - 2 * t * (1 - 0.0f) else 2 * t - 1 }
