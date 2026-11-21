@@ -33,7 +33,6 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -41,6 +40,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -77,6 +77,7 @@ import dev.inknotes.data.tr
 import dev.inknotes.math.Answer
 import dev.inknotes.math.Box as InkBox
 import dev.inknotes.math.Correct
+import dev.inknotes.math.MathPage
 import dev.inknotes.math.MathNotes
 import dev.inknotes.math.PageAnswer
 import kotlinx.coroutines.Dispatchers
@@ -139,7 +140,25 @@ private fun FixContent(c: EditorController, answer: PageAnswer, d: MathNotes.Dra
     fun sym(s: Slot) = side(s).syms[s.index]
     fun picks(s: Slot): SnapshotStateList<Correct.Pick> = if (s.right) rightPicks[s.row] else leftPicks[s.row]
     var focus by remember(d) { mutableIntStateOf(slots.indexOfFirst { sym(it).unsure }.coerceAtLeast(0)) }
-    var typed by remember(d) { mutableStateOf<String?>(null) }
+    // A formula typed by hand before (pinned) that the wheels cannot show: opened as typed,
+    // so the window shows what the page computes.
+    val pinnedTyped = remember(d) {
+        val pins = c.math.fixes.pins()
+        val rows = d.rows.map { row ->
+            pins[Correct.fingerprint(row.fix.left)] to row.fix.right?.let { pins[Correct.fingerprint(it)] }
+        }
+        if (rows.all { (l, r) -> l == null && r == null }) {
+            null
+        } else {
+            val wheels = d.rows.map { row -> Correct.text(row.left, row.left.initial) to row.right?.let { Correct.text(it, it.initial) } }
+            val texts = rows.zip(wheels) { (pl, pr), (wl, wr) -> (pl ?: wl) to (pr ?: wr) }
+            val same = texts.zip(wheels).all { (t, w) ->
+                MathPage.parseText(t.first) == MathPage.parseText(w.first) && (t.second == null || MathPage.parseText(t.second!!) == w.second?.let { MathPage.parseText(it) })
+            }
+            if (same) null else texts.joinToString("\n") { (l, r) -> l + (r?.let { " = $it" } ?: "") }
+        }
+    }
+    var typed by remember(d) { mutableStateOf(pinnedTyped) }
     var learn by remember { mutableStateOf(c.math.fixes.learn) }
 
     // Every formula as text: left, and right (null for `expr =`).
@@ -254,20 +273,18 @@ private fun FixContent(c: EditorController, answer: PageAnswer, d: MathNotes.Dra
             // The formula keyboard, started from what was read.
             Calculator(typed ?: "") { typed = it }
         } else {
-            OutlinedTextField(
-                value = typed ?: "",
-                onValueChange = { typed = it },
-                singleLine = !system,
-                minLines = if (system) d.rows.size else 1,
-                textStyle = MaterialTheme.typography.titleMedium.copy(fontFamily = FontFamily.Monospace),
-                label = { Text(if (system) tr("Уравнения, по одному в строке", "Equations, one per line") else tr("Формула", "Formula")) },
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Text(
-                tr("Как в LaTeX: x^{2}, x_{1}, \\frac{a}{b}, \\sqrt{x}, \\int x dx, \\pi. Картинка выше меняется сразу.", "As in LaTeX: x^{2}, x_{1}, \\frac{a}{b}, \\sqrt{x}, \\int x dx, \\pi. The picture above follows at once."),
-                fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            // A system: the formula keyboard for one equation at a time, "left = right".
+            var eq by remember(d) { mutableIntStateOf(0) }
+            val lines = (typed ?: "").lines().let { l -> List(d.rows.size) { l.getOrElse(it) { "" } } }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(tr("Уравнение:", "Equation:"), fontSize = 14.sp)
+                for (r in d.rows.indices) {
+                    if (r == eq) Button(onClick = {}) { Text("${r + 1}") } else OutlinedButton(onClick = { eq = r }) { Text("${r + 1}") }
+                }
+            }
+            key(eq) {
+                Calculator(lines[eq]) { v -> typed = lines.toMutableList().also { it[eq] = v.replace('\n', ' ') }.joinToString("\n") }
+            }
         }
     }
 

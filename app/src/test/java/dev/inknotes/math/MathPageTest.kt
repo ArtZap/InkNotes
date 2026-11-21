@@ -347,6 +347,29 @@ class MathPageTest {
         assertEquals("x = 3; y = 2", (Correct.outcomeSystem(listOf("x+y" to "5", "x-y" to "1"), Env()).answer as Answer.Text).lines.joinToString("; "))
     }
 
+    @Test
+    fun aSystemTypedByHandIsTaken() {
+        val s = Sheet()
+        s.tall(null, 90f, 66f, 100f, 12f) { t -> if (t < 0.5f) 1 - 2 * t * (1 - 0.0f) else 2 * t - 1 }
+        s.glyph("x", 110f, 80f, 14f, 16f)
+        s.glyph("+", 128f, 80f, 12f, 12f)
+        s.glyph("y", 146f, 80f, 14f, 22f)
+        s.equals(166f, 88f)
+        s.glyph("3", 190f, 76f)
+        s.glyph("x", 110f, 136f, 14f, 16f)
+        s.dash(128f, 143f, 12f)
+        s.glyph("y", 146f, 136f, 14f, 22f)
+        s.equals(166f, 144f)
+        s.glyph("1", 190f, 132f, 8f)
+        val fix = s.answers().single().fix!!
+        // Typed in the window, as LaTeX: \frac{x}{2}+y = 3 and x − y = 0.
+        val pinned = mapOf(
+            Correct.fingerprint(fix.rows[0].left) to "\\frac{x}{2}+y", Correct.fingerprint(fix.rows[0].right!!) to "3",
+            Correct.fingerprint(fix.rows[1].left) to "x-y", Correct.fingerprint(fix.rows[1].right!!) to "0",
+        )
+        assertEquals("x = 2; y = 2", text(MathPage.analyze(s.strokes, s.reader(emptyMap()), pinned = pinned).single()))
+    }
+
     /** A Russian б reads as 6 first: in a system whose unknowns are a and б, 3б is 3·b, not 36. */
     @Test
     fun systemWithCyrillicB() {
