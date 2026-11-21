@@ -596,6 +596,8 @@ object MathLayout {
             // An exponent of an exponent (e^{−x²}, a^{b^c}): the last symbol at each depth of
             // the exponent being written, to tell when the next one is raised over it again.
             val supRefs = ArrayList<Box>()
+            // The bar of the fraction just written (null: the last item was not one).
+            var barAfter: Float? = null
             // Raised and lowered parts are wrapped in ^{…} and _{…}.
             fun enter(level: Level) {
                 if (level == cur) return
@@ -624,6 +626,7 @@ object MathLayout {
                     emit(item)
                     ref = item.box
                     refStructure = true
+                    barAfter = (item as? Frac)?.bar?.cy
                     continue
                 }
                 val b = item.box
@@ -669,7 +672,14 @@ object MathLayout {
                 if (sign != null) {
                     // Plus and minus by shape: among letters the reader takes + for t. A sign is
                     // in an exponent only when written wholly above the symbol before it.
-                    val signLevel = if (level == Level.SUP && !refStructure && ref != null && b.bottom > ref.top + 0.1f * ref.height) Level.BASE else level
+                    val signLevel = when {
+                        level == Level.SUP && !refStructure && ref != null && b.bottom > ref.top + 0.1f * ref.height -> Level.BASE
+                        // Right after a fraction, a sign level with its bar is on the line, not an
+                        // index of the fraction (a/b + 1 read a/b₊1): the line's middle, taken
+                        // from the numbers over and under bars, can be far from the bars.
+                        level == Level.SUB && Tune.signByBar > 0f && refStructure && barAfter?.let { abs(b.cy - it) < 0.35f * h } == true -> Level.BASE
+                        else -> level
+                    }
                     enter(signLevel)
                     flush()
                     signText(sign, item.glyph, signLevel)
@@ -1116,6 +1126,9 @@ object Tune {
     /** The writer's placements (null: none, as in tests and stands); see [Placements]. */
     @Volatile
     var personal: Placements? = null
+
+    /** Above 0: a sign level with the bar of the fraction before it is on the line, not an index. */
+    @JvmField var signByBar = 1f
 
     /** Above 0: an x drawn as two arcs ")(" is one symbol (MathLayout.arcsOfX). */
     @JvmField var xArcs = 1f
