@@ -288,31 +288,38 @@ class NewToolsTest {
     // ---------------------------------------------------------- palm
 
     @Test
-    fun aPalmLaidDownDuringALineDoesNotMoveIt() = onMain {
-        view.tool = Tool.PEN
-        view.penSize = 3f
-        val before = view.pageToViewPoint(0, 300f, 500f)
-        val p = (0..30).map { view.pageToViewPoint(0, 300f + 10f * it, 500f) }
-        val palm0 = view.pageToViewPoint(0, 650f, 900f)
-        val t0 = SystemClock.uptimeMillis()
-        var t = t0
-        send(MotionEvent.ACTION_DOWN, p[0][0], p[0][1], t0, t)
-        for (k in 1..10) send(MotionEvent.ACTION_MOVE, p[k][0], p[k][1], t0, (t + 4L * k).also { t = it })
-        sendWithPalm(MotionEvent.ACTION_POINTER_DOWN or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT), p[10], palm0[0], palm0[1], t0, t)
-        // The palm slides down a long way while the pen goes on.
-        for (k in 11..20) sendWithPalm(MotionEvent.ACTION_MOVE, p[k], palm0[0], palm0[1] + 25f * (k - 10), t0, (t + 4).also { t = it })
-        sendWithPalm(MotionEvent.ACTION_POINTER_UP or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT), p[20], palm0[0], palm0[1] + 250f, t0, (t + 4).also { t = it })
-        for (k in 21..30) send(MotionEvent.ACTION_MOVE, p[k][0], p[k][1], t0, (t + 4).also { t = it })
-        send(MotionEvent.ACTION_UP, p[30][0], p[30][1], t0, t + 4)
-        assertEquals(1, doc.strokes.size)
-        val b = PageEdits.bounds(doc.strokes[0])!!
-        assertEquals(300f, b.left, 4f)
-        assertEquals(600f, b.right, 4f)
-        assertTrue("no jump across: ${b.height()}", b.height() < 10f)
-        assertEquals(500f, b.centerY(), 4f)
-        val after = view.pageToViewPoint(0, 300f, 500f)
-        assertEquals(before[0], after[0], 0.5f)
-        assertEquals(before[1], after[1], 0.5f)
+    fun aPalmLaidDownDuringALineDoesNotMoveIt() {
+        lateinit var before: FloatArray
+        onMain {
+            view.tool = Tool.PEN
+            view.penSize = 3f
+            before = view.pageToViewPoint(0, 300f, 500f)
+            val p = (0..30).map { view.pageToViewPoint(0, 300f + 10f * it, 500f) }
+            val palm0 = view.pageToViewPoint(0, 650f, 900f)
+            val t0 = SystemClock.uptimeMillis()
+            var t = t0
+            send(MotionEvent.ACTION_DOWN, p[0][0], p[0][1], t0, t)
+            for (k in 1..10) send(MotionEvent.ACTION_MOVE, p[k][0], p[k][1], t0, (t + 4).also { t = it })
+            sendWithPalm(MotionEvent.ACTION_POINTER_DOWN or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT), p[10], palm0[0], palm0[1], t0, t)
+            // The palm slides down a long way while the pen goes on.
+            for (k in 11..20) sendWithPalm(MotionEvent.ACTION_MOVE, p[k], palm0[0], palm0[1] + 25f * (k - 10), t0, (t + 4).also { t = it })
+            sendWithPalm(MotionEvent.ACTION_POINTER_UP or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT), p[20], palm0[0], palm0[1] + 250f, t0, (t + 4).also { t = it })
+            for (k in 21..30) send(MotionEvent.ACTION_MOVE, p[k][0], p[k][1], t0, (t + 4).also { t = it })
+            send(MotionEvent.ACTION_UP, p[30][0], p[30][1], t0, t + 4)
+        }
+        // A pen line comes into the page when the ink library has finished it, a moment later.
+        waitForStrokes(1)
+        onMain {
+            assertEquals(1, doc.strokes.size)
+            val b = PageEdits.bounds(doc.strokes[0])!!
+            assertEquals(300f, b.left, 4f)
+            assertEquals(600f, b.right, 4f)
+            assertTrue("no jump across: ${b.height()}", b.height() < 10f)
+            assertEquals(500f, b.centerY(), 4f)
+            val after = view.pageToViewPoint(0, 300f, 500f)
+            assertEquals(before[0], after[0], 0.5f)
+            assertEquals(before[1], after[1], 0.5f)
+        }
     }
 
     @Test
@@ -322,8 +329,10 @@ class NewToolsTest {
         try {
             onMain {
                 view.tool = Tool.PEN
+                val before0 = view.pageToViewPoint(0, 300f, 500f)
                 trace(listOf(300f to 500f, 500f to 520f))
                 val before = view.pageToViewPoint(0, 300f, 500f)
+                assertEquals(before0[1], before[1], 0.5f)
                 val t0 = SystemClock.uptimeMillis()
                 val c = view.pageToViewPoint(0, 600f, 900f)
                 send(MotionEvent.ACTION_DOWN, c[0], c[1], t0, t0, MotionEvent.TOOL_TYPE_FINGER)
@@ -331,8 +340,11 @@ class NewToolsTest {
                 send(MotionEvent.ACTION_UP, c[0], c[1] - 300f, t0, t0 + 90, MotionEvent.TOOL_TYPE_FINGER)
                 val after = view.pageToViewPoint(0, 300f, 500f)
                 assertEquals(before[1], after[1], 0.5f)
-                assertEquals(1, doc.strokes.size)
             }
+            // The pen line is there and the palm did not undo it.
+            waitForStrokes(1)
+            Thread.sleep(300)
+            onMain { assertEquals(1, doc.strokes.size) }
         } finally {
             PageEditorView.palmAfterPenMs = was
         }
@@ -772,6 +784,17 @@ class NewToolsTest {
     }
 
     /** Called off the main thread: lets the page picture render and arrive. */
+    /** Waits (off the main thread) until the page holds [n] lines, at most 3 s. */
+    private fun waitForStrokes(n: Int) {
+        val until = SystemClock.uptimeMillis() + 3000
+        while (SystemClock.uptimeMillis() < until) {
+            var count = 0
+            onMain { count = doc.strokes.size }
+            if (count >= n) return
+            Thread.sleep(50)
+        }
+    }
+
     private fun waitForPicture() {
         val b = Bitmap.createBitmap(1600, 2200, Bitmap.Config.ARGB_8888)
         repeat(30) {
