@@ -75,7 +75,8 @@ class ReplayBenchTest {
         }
 
         /** One pass, everything as the app is now set (ReadOptions, MathPage). */
-        fun measure(formulas: List<FormulaJudge.Formula>, reads: Map<String, Map<List<Int>, Pair<List<String>, List<String>>>>): Result {
+        /** [wrap]: a voice put over what ML Kit read (a classifier to measure), none by default. */
+        fun measure(formulas: List<FormulaJudge.Formula>, reads: Map<String, Map<List<Int>, Pair<List<String>, List<String>>>>, wrap: (RunReader) -> RunReader = { it }): Result {
             val numbers = Printer.numbers
             val point = Tune.decimalPoint
             Printer.numbers = Printer.Numbers.DECIMAL
@@ -88,7 +89,7 @@ class ReplayBenchTest {
                 for (f in formulas) {
                     // Nothing recorded: nothing was read on the device either (no "=" found, say).
                     val r = reads["${f.set}/${f.id}"] ?: reads[f.id] ?: emptyMap<List<Int>, Pair<List<String>, List<String>>>().also { missing++ }
-                    val reader = RecordedReader(r)
+                    val reader = wrap(RecordedReader(r))
                     val o = if (FormulaJudge.hasSelected(f)) FormulaJudge.selected(f, reader).first else "SKIP"
                     // "all" stays CROHME, as on the emulator.
                     val keys = if (f.set == "synthetic") listOf(f.set, "${f.set}/${f.kind}") else listOf("all", f.kind, f.set)

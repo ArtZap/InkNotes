@@ -207,10 +207,58 @@ object MathLayout {
                 // the dot of i or j, the dots of ÷
                 (dot && yGap < Tune.dotGap * h && (b.cx in a.left - 0.1f * h..a.right + 0.1f * h || a.cx in b.left - 0.1f * h..b.right + 0.1f * h)) ||
                 // a big dot well over a short stem: an i written with a thick pen, dotted high
-                iDot(a, b, h) || iDot(b, a, h)
+                iDot(a, b, h) || iDot(b, a, h) ||
+                // an x written as two arcs back to back, ")(" touching in the middle
+                arcsOfX(a, b, h) || arcsOfX(b, a, h)
             if (joined) parent[find(i)] = find(j)
         }
         return strokes.indices.groupBy(::find).values.map { idx -> G(Glyph(idx.map { strokes[it] })) }
+    }
+
+    /**
+     * [l] and [r] are the halves of an x drawn as two arcs, ")" then "(": side by side over the
+     * same height, [l] bulging right and [r] bulging left, nearest each other about half way
+     * down and touching there. (In CROHME Train one x in twenty is written so, and was taken
+     * for two symbols, the second an index.) Two letters side by side ("cc", "()", "oc")
+     * are nearest at their ends, or do not bulge towards each other.
+     */
+    private fun arcsOfX(l: Ink, r: Ink, h: Float): Boolean {
+        if (Tune.xArcs <= 0f || l.cx >= r.cx || l.isDash || r.isDash) return false
+        val lo = max(l.top, r.top)
+        val hi = min(l.bottom, r.bottom)
+        if (hi - lo < 0.7f * min(l.height, r.height) || max(l.height, r.height) < 0.25f * h) return false
+        if (bulge(l, right = true) < 0.15f || bulge(r, right = false) < 0.15f) return false
+        // Nearest points of the two strokes.
+        var best = Float.MAX_VALUE
+        var at = 0f
+        for (i in l.xs.indices) for (j in r.xs.indices) {
+            val d = hypot(l.xs[i] - r.xs[j], l.ys[i] - r.ys[j])
+            if (d < best) {
+                best = d
+                at = (l.ys[i] + r.ys[j]) / 2
+            }
+        }
+        val top = min(l.top, r.top)
+        val tall = max(l.bottom, r.bottom) - top
+        return best < 0.12f * h && (at - top) / tall in 0.2f..0.8f
+    }
+
+    /**
+     * How far an open stroke bows out past both its ends, to the right ([right]) or the left,
+     * in its widths: its farthest point that way must lie between the ends, one above the
+     * other (")" and "ɔ" bow right, "(" and "c" left). 0 when it does not.
+     */
+    private fun bulge(s: Ink, right: Boolean): Float {
+        val n = s.xs.size
+        if (n < 3 || s.width <= 0f) return 0f
+        val y0 = min(s.ys[0], s.ys[n - 1])
+        val y1 = max(s.ys[0], s.ys[n - 1])
+        if (y1 - y0 < 0.3f * s.height) return 0f
+        val k = if (right) s.xs.indices.maxByOrNull { s.xs[it] }!! else s.xs.indices.minByOrNull { s.xs[it] }!!
+        val margin = 0.15f * (y1 - y0)
+        if (s.ys[k] < y0 + margin || s.ys[k] > y1 - margin) return 0f
+        val out = if (right) s.xs[k] - max(s.xs[0], s.xs[n - 1]) else min(s.xs[0], s.xs[n - 1]) - s.xs[k]
+        return out / s.width
     }
 
     /**
@@ -1068,6 +1116,9 @@ object Tune {
     /** The writer's placements (null: none, as in tests and stands); see [Placements]. */
     @Volatile
     var personal: Placements? = null
+
+    /** Above 0: an x drawn as two arcs ")(" is one symbol (MathLayout.arcsOfX). */
+    @JvmField var xArcs = 1f
 
     /** Strokes overlapping by this part of the narrower one are parts of one symbol… */
     @JvmField var joinOverlap = 0.35f
