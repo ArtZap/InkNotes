@@ -45,6 +45,13 @@ private class Topic(val title: String, val entries: List<Pair<String, String>>)
 
 private val TOPICS = listOf(
     Topic(
+        tr("Новое в 0.68", "What's new in 0.68"),
+        listOf(
+            tr("x из двух дуг", "An x of two arcs") to tr("x, написанный двумя дугами «)(», читается как одна буква: раньше половинка могла уйти в индекс или степень.", "An x written as two arcs \")(\" reads as one letter: before, a half could go into an index or an exponent."),
+            tr("Знак после дроби", "A sign after a fraction") to tr("Плюс или минус сразу после дроби на уровне её черты — на строке, а не индекс дроби: a/b + 1 больше не читается как a/b₊1.", "A plus or minus right after a fraction, level with its bar, is on the line, not an index of the fraction: a/b + 1 no longer reads as a/b₊1."),
+        ),
+    ),
+    Topic(
         tr("Новое в 0.67", "What's new in 0.67"),
         listOf(
             tr("Итоги таблицы", "Table totals") to tr("Выделите таблицу лассо и нажмите «Итоги»: под каждым столбцом и справа от каждой строки, где хотя бы два числа, появятся сумма (Σ) и среднее. Слова и пустые клетки не считаются. Это обычный текст: его можно сдвинуть, изменить или удалить, «Отменить» убирает всё сразу.", "Select a table with the lasso and press “Totals”: under every column and to the right of every row with at least two numbers, the sum (Σ) and the average appear. Words and empty cells are left out. It is ordinary text: move, edit or delete it; Undo removes it all at once."),

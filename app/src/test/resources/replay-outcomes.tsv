@@ -236,7 +236,7 @@ CROHME2012_data/testDataGT/KME2G3_7_sub_15	WRONG
 CROHME2012_data/testDataGT/KME2G3_7_sub_3	NONE	
 CROHME2012_data/testDataGT/KME2G3_7_sub_39	NONE	
 CROHME2012_data/testDataGT/KME2G3_7_sub_42	NONE	
-CROHME2012_data/testDataGT/KME2G3_7_sub_61	NONE	NONE
+CROHME2012_data/testDataGT/KME2G3_7_sub_61	NONE	UNSURE
 CROHME2012_data/testDataGT/KME2G3_7_sub_63	WRONG	
 CROHME2012_data/testDataGT/KME2G3_8_sub_15	RIGHT	
 CROHME2012_data/testDataGT/KME2G3_8_sub_3	WRONG	
@@ -520,7 +520,7 @@ synthetic/equation-linear-14	SKIP	RIGHT
 synthetic/equation-linear-15	SKIP	WRONG
 synthetic/equation-linear-16	SKIP	RIGHT
 synthetic/equation-linear-17	SKIP	RIGHT
-synthetic/equation-linear-18	SKIP	RIGHT
+synthetic/equation-linear-18	SKIP	UNSURE
 synthetic/equation-linear-19	SKIP	UNSURE
 synthetic/equation-linear-20	SKIP	RIGHT
 synthetic/equation-linear-21	SKIP	NONE
@@ -592,7 +592,7 @@ synthetic/equation-quadratic-6	SKIP	NONE
 synthetic/equation-quadratic-7	SKIP	UNSURE
 synthetic/equation-quadratic-8	SKIP	NONE
 synthetic/equation-quadratic-9	SKIP	WRONG
-synthetic/equation-quadratic-10	SKIP	NONE
+synthetic/equation-quadratic-10	SKIP	RIGHT
 synthetic/equation-quadratic-11	SKIP	RIGHT
 synthetic/equation-quadratic-12	SKIP	RIGHT
 synthetic/equation-quadratic-13	SKIP	NONE
