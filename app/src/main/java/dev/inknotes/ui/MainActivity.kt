@@ -10,6 +10,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
@@ -103,6 +104,9 @@ class MainActivity : ComponentActivity() {
         quickNoteSeen = prefs.quickNoteUsedAt
         // The name of the app greets a fresh start only (not a rotation or a theme change).
         var splash by mutableStateOf(savedInstanceState == null)
+        // Edge to edge from the very first frame: the splash then covers the whole window, like
+        // the logo of the start window, and its pen lands on the same spot.
+        enableEdgeToEdge()
 
         setContent {
             val dark = when (themeMode) {
@@ -237,6 +241,12 @@ class MainActivity : ComponentActivity() {
                 pendingImport?.let { (set, into) -> ImportConflictDialog(set, into) }
                 TabDropOverlay()
                 if (splash) Splash(onDone = { splash = false })
+                // Once the start is over the window keeps only the paper of the chosen style
+                // (no logo behind the app; nothing dark either).
+                val paper = androidx.compose.material3.MaterialTheme.colorScheme.background
+                LaunchedEffect(splash, paper) {
+                    if (!splash) window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(paper.toArgb()))
+                }
             }
         }
     }

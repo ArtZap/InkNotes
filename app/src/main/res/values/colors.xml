@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The start window, before the app draws: the paper and ink of the classic style.
+         Splash.kt starts from exactly these and fades to the chosen style. -->
+    <color name="splash_bg">#FFF4F5F7</color>
+    <color name="splash_ink">#FF111111</color>
+</resources>

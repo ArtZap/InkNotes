@@ -45,6 +45,12 @@ private class Topic(val title: String, val entries: List<Pair<String, String>>)
 
 private val TOPICS = listOf(
     Topic(
+        tr("Новое в 0.71", "What's new in 0.71"),
+        listOf(
+            tr("Запуск без чёрного экрана", "Start without a black screen") to tr("С первого мгновения запуска — бумага и перо логотипа, а не тёмный экран. Затем перо плавно поднимается, под ним появляется название, и всё растворяется в библиотеке. Касание пропускает заставку.", "From the very first moment of the start: paper and the pen of the logo, not a dark screen. Then the pen rises smoothly, the name comes in under it, and it all fades into the library. A tap skips it."),
+        ),
+    ),
+    Topic(
         tr("Новое в 0.70", "What's new in 0.70"),
         listOf(
             tr("Ластик «Обрезка»", "The “Trim” eraser") to tr("Ластик → «Обрезка»: коснитесь линии — уйдёт её кусок до ближайших мест, где она пересекает или касается других линий и фигур. Свободный конец уходит до первого пересечения, линия ни с чем не пересекающаяся — целиком. Можно провести по нескольким линиям сразу; «Отменить» возвращает всё.", "Eraser → “Trim”: touch a line and its piece up to the nearest places where it crosses or touches other lines and shapes goes. A free end goes up to the first crossing, a line that meets nothing goes whole. Sweep over several lines at once; Undo brings it all back."),

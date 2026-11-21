@@ -1,11 +1,13 @@
 package dev.inknotes.ui
 
+import dev.inknotes.R
 import dev.inknotes.data.tr
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -25,12 +27,16 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.res.colorResource
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
@@ -39,23 +45,32 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 
+/** A long, soft settle: quick start, very gentle landing (no visible stop). */
+private val Smooth = CubicBezierEasing(0.2f, 0f, 0f, 1f)
+
 /**
- * The name of the app over the start: "InkNotes" set in a serif with a gleam running across
- * it, a rule with a star and a line under it; fades away by itself (a tap skips it). Drawn in
- * the colours of the chosen style, over the library that loads underneath.
+ * The start of the app. The system window already shows the pen of the icon in the middle of
+ * the paper (themes.xml, splash_window.xml); the first frame here is exactly that picture, so
+ * nothing jumps. Then the paper turns to the chosen style, the pen rises and shrinks, and the
+ * name "InkNotes" comes in under it with a gleam running across; all of it fades away by itself
+ * (a tap skips it), over the library that loads underneath.
  */
 @Composable
 fun Splash(onDone: () -> Unit) {
     val style = LocalUiStyle.current
     val colors = MaterialTheme.colorScheme
-    val shown = remember { Animatable(0f) }
+    val startBg = colorResource(R.color.splash_bg)
+    val startInk = colorResource(R.color.splash_ink)
+    val rise = remember { Animatable(0f) }
+    val words = remember { Animatable(0f) }
     val gleam = remember { Animatable(-0.4f) }
     val gone = remember { Animatable(0f) }
     LaunchedEffect(Unit) {
-        launch { gleam.animateTo(1.4f, tween(1300, delayMillis = 250, easing = LinearEasing)) }
-        shown.animateTo(1f, tween(650, easing = FastOutSlowInEasing))
-        kotlinx.coroutines.delay(900)
-        gone.animateTo(1f, tween(450, easing = FastOutSlowInEasing))
+        launch { rise.animateTo(1f, tween(850, delayMillis = 150, easing = Smooth)) }
+        launch { words.animateTo(1f, tween(650, delayMillis = 420, easing = Smooth)) }
+        launch { gleam.animateTo(1.4f, tween(1200, delayMillis = 650, easing = FastOutSlowInEasing)) }
+        kotlinx.coroutines.delay(1750)
+        gone.animateTo(1f, tween(520, easing = FastOutSlowInEasing))
         onDone()
     }
     // Gold in the gilded styles, the accent in the classic one, graphite in the minimal.
@@ -67,22 +82,39 @@ fun Splash(onDone: () -> Unit) {
         UiStyle.GLASS -> colors.primary to Color.White
         UiStyle.NOTEBOOK -> colors.primary to Color(0xFFFFD6E8)
     }
+    val paper = colors.background
     Box(
         Modifier
             .fillMaxSize()
-            .graphicsLayer { alpha = 1f - gone.value }
-            .background(colors.background)
+            .graphicsLayer {
+                alpha = 1f - gone.value
+                val s = 1f + 0.03f * gone.value
+                scaleX = s
+                scaleY = s
+            }
+            .drawBehind { drawRect(lerp(startBg, paper, rise.value)) }
             .clickable(remember { MutableInteractionSource() }, indication = null) { onDone() },
         contentAlignment = Alignment.Center,
     ) {
+        // The pen: 240dp in the middle, as in the start window, then up and smaller.
+        Image(
+            painterResource(R.drawable.splash_logo),
+            contentDescription = null,
+            colorFilter = ColorFilter.tint(lerp(startInk, ink, rise.value)),
+            modifier = Modifier
+                .size(240.dp)
+                .graphicsLayer {
+                    val s = 1f - 0.42f * rise.value
+                    scaleX = s
+                    scaleY = s
+                    translationY = -78.dp.toPx() * rise.value
+                },
+        )
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.graphicsLayer {
-                alpha = shown.value
-                val s = 0.94f + 0.06f * shown.value
-                scaleX = s
-                scaleY = s
-                translationY = (1f - shown.value) * 18.dp.toPx()
+                alpha = words.value
+                translationY = (62f + 16f * (1f - words.value)).dp.toPx()
             },
         ) {
             val brush = Brush.linearGradient(
