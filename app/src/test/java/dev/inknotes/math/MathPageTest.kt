@@ -198,6 +198,21 @@ class MathPageTest {
     }
 
     @Test
+    fun aDecimalCommaInANumeratorIsNoIndex() {
+        // 327,2 over 24,54: the comma starts low on the 7 before it and hangs a little below
+        // it; taken for an index (327₍,₎2) the numerator could not be read.
+        val s = Sheet()
+        s.glyph("327", 100f, 72f, 26f, 15f)
+        s.add(",", listOf(128f, 128f, 127.5f), listOf(84f, 87f, 89f))
+        s.glyph("2", 135f, 74f, 10f, 14f)
+        s.dash(98f, 93f, 50f)
+        s.glyph("24,54", 100f, 97f, 36f, 19f)
+        s.equals(156f, 93f)
+        // 327,2 / 24,54 = 40/3
+        assertTrue(text(s.answers().single()).startsWith("40/3"))
+    }
+
+    @Test
     fun aDecimalCommaUnderADenominatorIsKept() {
         // 1/2,5 = 0,4: the comma hangs under the foot of the denominator's digits.
         val s = Sheet()

@@ -23,7 +23,7 @@ class NotesReplayTest {
         for (page in dir.listFiles { f -> f.name.endsWith(".json") }.orEmpty().sortedBy { it.name }) {
             val id = page.name.removeSuffix(".json")
             val ink = load(page)
-            val reader = RecordedReader(reads["notes/$id"].orEmpty())
+            val reader = RecordedReader(reads["notes/$id"].orEmpty(), compose = true)
             val r = NotesJudge.measure(ink, reader)
             report.append("== $id: $r\n")
             // What is really written, where it has been transcribed (truth/<id>.tsv).

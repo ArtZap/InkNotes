@@ -47,6 +47,7 @@ private val TOPICS = listOf(
     Topic(
         tr("Новое в 0.72", "What's new in 0.72"),
         listOf(
+            tr("Десятичная запятая в дроби", "A decimal comma in a fraction") to tr("Запятая в числителе или знаменателе (327,2 / 24,54) больше не принимается за нижний индекс.", "A comma in a numerator or denominator (327,2 / 24,54) is no longer taken for an index."),
             tr("Меньше лишних ответов", "Fewer stray answers") to tr("Перекладины буквы F больше не принимаются за «=», стрелка оси — за знак «>», строки значений друг под другом — за систему. Неравенство, после которого уже написано «= …», не решается: результат у вас есть.", "The bars of an F are no longer taken for \"=\", the arrowhead of an axis for \">\", or lines of values under each other for a system. An inequality already followed by \"= …\" is not solved: you have the result."),
         ),
     ),
