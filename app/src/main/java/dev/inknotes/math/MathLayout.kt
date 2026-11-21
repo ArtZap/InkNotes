@@ -1134,6 +1134,15 @@ object Tune {
     /** Above 0: an equation with another "=" close on its line is a link of a chain of working, not solved. */
     @JvmField var chains = 1f
 
+    /** Above 0: two dashes whose left ends start on one upright are the bars of an F (or E), not "=". */
+    @JvmField var letterBars = 1f
+
+    /** Above 0: a "<" or ">" at the end of a long line is an arrowhead (of an axis), not a sign. */
+    @JvmField var arrowHeads = 1f
+
+    /** Above 0: an inequality worked on with "=" after it (D ≥ ∛… = 6,2) is not solved; nor is a system with ∞ solutions shown. */
+    @JvmField var workedInequalities = 1f
+
     /** A dash at least this long (and three times as long as high) is a minus, not a dot (0: off). */
     @JvmField var shortMinus = 0.1f
 

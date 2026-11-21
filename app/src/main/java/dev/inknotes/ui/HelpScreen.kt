@@ -45,6 +45,12 @@ private class Topic(val title: String, val entries: List<Pair<String, String>>)
 
 private val TOPICS = listOf(
     Topic(
+        tr("Новое в 0.72", "What's new in 0.72"),
+        listOf(
+            tr("Меньше лишних ответов", "Fewer stray answers") to tr("Перекладины буквы F больше не принимаются за «=», стрелка оси — за знак «>», строки значений друг под другом — за систему. Неравенство, после которого уже написано «= …», не решается: результат у вас есть.", "The bars of an F are no longer taken for \"=\", the arrowhead of an axis for \">\", or lines of values under each other for a system. An inequality already followed by \"= …\" is not solved: you have the result."),
+        ),
+    ),
+    Topic(
         tr("Новое в 0.71", "What's new in 0.71"),
         listOf(
             tr("Ладонь при письме", "A palm while writing") to tr("Если положить руку на экран во время письма, линия больше не дёргается и не превращается в прямую, прилипшую к соседней линии. Касание сразу после того, как перо поднято (до 0,7 с), считается ладонью: страница не сдвигается, ничего не отменяется.", "Laying a hand on the screen while writing no longer jerks the line or turns it into a straight line stuck to a nearby one. A touch right after the pen lifts (within 0.7 s) is taken as the palm: the page does not move and nothing is undone."),
