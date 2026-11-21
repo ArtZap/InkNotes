@@ -2154,6 +2154,37 @@ class EditorController(
     var graphWin by mutableStateOf<GraphWin?>(null)
         private set
 
+    /** The page's answer a graph window shows: its own, or for a picture, the graph it was made from. */
+    fun graphAnswer(w: GraphWin): PageAnswer? =
+        w.answer?.takeIf { it.fix != null } ?: w.spec.key?.let { key -> mathRaw[w.pageId]?.firstOrNull { graphKey(it) == key && it.fix != null } }
+
+    /** A picture to redraw once its graph is read again: page, graph key, the picture, its old view. */
+    private var redrawAfterFix: GraphWin? = null
+
+    /** "How it was read" for the function of a graph: the correction window over the graph's formula. */
+    fun fixGraph(w: GraphWin) {
+        val a = graphAnswer(w) ?: return showStatus(tr("Формула этого графика не найдена на странице", "The formula of this graph is not on the page"))
+        graphWin = null
+        // A picture keeps the graph as it was drawn: redrawn when the formula is corrected.
+        redrawAfterFix = w.takeIf { it.image != null }
+        startFix(a)
+    }
+
+    /** After the page is read again: a graph picture whose formula was corrected, redrawn in its place with its view. */
+    private fun redrawCorrectedGraph(id: String, answers: List<PageAnswer>) {
+        val w = redrawAfterFix ?: return
+        if (w.pageId != id || fixing != null) return
+        val key = w.spec.key ?: return
+        val a = answers.firstOrNull { graphKey(it) == key } ?: return
+        redrawAfterFix = null
+        val fresh = (a.answer as? dev.inknotes.math.Answer.Graph)?.spec(key)?.let { if (it.isSurface) it else it.with(w.spec.x0, w.spec.x1, w.spec.y0, w.spec.y1, w.spec.points, w.spec.square) }
+            ?: (a.answer as? dev.inknotes.math.Answer.Surface)?.spec(key)
+            ?: return
+        if (fresh.encode() == w.spec.encode()) return
+        val img = w.image ?: return
+        saveGraph(GraphWin(fresh, id, a, img), fresh, img.w / img.h.coerceAtLeast(1f))
+    }
+
     fun closeGraph() {
         graphWin = null
     }
@@ -3053,6 +3084,7 @@ class EditorController(
             mathRevision[id] = doc.revision
             math.analyze("${notebook.id}/$id", doc.strokes, notebook.pageWidthUnits(id), onKnobs = { k -> if (k.isEmpty()) mathKnobs.remove(id) else mathKnobs[id] = k }) { answers ->
                 if (answers.isEmpty()) mathRaw.remove(id) else mathRaw[id] = answers
+                redrawCorrectedGraph(id, answers)
                 placeAnswers(id)
                 if (id == notebook.pageIds.getOrNull(pageIndex)) offerCheck(id, answers)
                 view?.refresh()

@@ -230,6 +230,10 @@ fun GraphWindow(c: EditorController, win: EditorController.GraphWin, modifier: M
                         picked = -1
                     }) { Text(tr("Готово", "Done"), fontSize = 13.sp) }
                 }
+                // The function read wrong: correct how it was read (the formula keyboard included).
+                if (c.graphAnswer(win) != null) {
+                    TextButton(onClick = { c.fixGraph(win) }) { Text(tr("Как прочитано", "How it was read"), fontSize = 13.sp) }
+                }
                 TextButton(onClick = {
                     view = if (square) squared(start) else start
                     probe = null
