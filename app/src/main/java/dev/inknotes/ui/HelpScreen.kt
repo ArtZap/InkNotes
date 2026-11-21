@@ -45,6 +45,13 @@ private class Topic(val title: String, val entries: List<Pair<String, String>>)
 
 private val TOPICS = listOf(
     Topic(
+        tr("Новое в 0.70", "What's new in 0.70"),
+        listOf(
+            tr("Ластик «Обрезка»", "The “Trim” eraser") to tr("Ластик → «Обрезка»: коснитесь линии — уйдёт её кусок до ближайших мест, где она пересекает или касается других линий и фигур. Свободный конец уходит до первого пересечения, линия ни с чем не пересекающаяся — целиком. Можно провести по нескольким линиям сразу; «Отменить» возвращает всё.", "Eraser → “Trim”: touch a line and its piece up to the nearest places where it crosses or touches other lines and shapes goes. A free end goes up to the first crossing, a line that meets nothing goes whole. Sweep over several lines at once; Undo brings it all back."),
+            tr("Страницы с решениями", "Pages of worked solutions") to tr("Цепочки вычислений (F = 8a·6a = 68·51 = 3468) больше не решаются как уравнения — раньше на таких страницах появлялись бессмысленные серые ответы. Десятичная запятая под знаменателем (393378/2446,59) больше не теряется.", "Chains of working (F = 8a·6a = 68·51 = 3468) are no longer solved as equations: such pages used to get nonsense grey answers. A decimal comma under a denominator (393378/2446.59) is no longer lost."),
+        ),
+    ),
+    Topic(
         tr("Новое в 0.69", "What's new in 0.69"),
         listOf(
             tr("Системы с широкой скобкой", "Systems with a wide brace") to tr("Если концы фигурной скобки загибаются над первыми буквами (a/b в первой строке, a во второй), эти буквы больше не теряются: система читается целиком.", "When the ends of the curly brace curl over the first letters (a/b on the first line, a on the second), those letters are no longer lost: the whole system is read."),

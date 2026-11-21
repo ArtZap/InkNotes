@@ -1224,6 +1224,11 @@ private fun ToolOptions(c: EditorController, onPickColor: () -> Unit, onHatchSet
                 onClick = { c.selectEraserMode(EraserMode.PARTIAL) },
                 label = { Text(tr("Частично", "Partly")) },
             )
+            FilterChip(
+                selected = c.eraserMode == EraserMode.TRIM,
+                onClick = { c.selectEraserMode(EraserMode.TRIM) },
+                label = { Text(tr("Обрезка", "Trim")) },
+            )
             EraserTargetButton(c)
         }
         Tool.LASSO -> Text(
