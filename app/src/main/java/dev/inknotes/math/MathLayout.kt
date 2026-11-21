@@ -1131,6 +1131,9 @@ object Tune {
     @Volatile
     var personal: Placements? = null
 
+    /** Above 0: an equation with another "=" close on its line is a link of a chain of working, not solved. */
+    @JvmField var chains = 1f
+
     /** A dash at least this long (and three times as long as high) is a minus, not a dot (0: off). */
     @JvmField var shortMinus = 0.1f
 

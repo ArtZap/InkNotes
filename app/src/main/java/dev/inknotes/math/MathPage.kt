@@ -438,6 +438,13 @@ object MathPage {
         }
         for (d0 in single) {
             if (d0 in asked) continue
+            // A link of a chain of working (F₁ = 8a·6a = 68·51 = 3468): another "=" right
+            // before or after it on the line. Not an equation to solve: its sides are the same
+            // value written two ways, and solving a misreading of them gives nonsense.
+            if (chained(ordered[d0.index], eqs)) {
+                trace?.invoke("chained: ${d0.left} = ${d0.right}")
+                continue
+            }
             // Two unknowns as read (ga + 6 = 2: g and a): the readings with one letter, as for a
             // system (9a + 6 = 2), shown unsure with why.
             var rescued: List<String> = emptyList()
@@ -802,6 +809,12 @@ object MathPage {
         return null
     }
 
+    /** Another "=" on the line of [eq], close before or after it (within [CHAIN_GAP] lines): a chain of working. */
+    private fun chained(eq: Equals, eqs: List<Equals>): Boolean = Tune.chains > 0f && eqs.any { o ->
+        o !== eq && abs(o.cy - eq.cy) < 0.6f * max(eq.h, o.h) &&
+            (o.left - eq.right in 0f..CHAIN_GAP * eq.h || eq.left - o.right in 0f..CHAIN_GAP * eq.h)
+    }
+
     /** How far right [brace] reaches level with [y] (within half a line [h]); its whole width where it does not pass that level. */
     private fun braceAt(brace: Ink, y: Float, h: Float): Float {
         var x = -Float.MAX_VALUE
@@ -835,15 +848,19 @@ object MathPage {
             val left = side(eq, -1, eqs, rest, limit = null)
             val right = side(eq, 1, eqs, rest, limit = null)
             if (left.isEmpty() || right.isEmpty()) continue
-            fun value(side: List<Ink>): Pair<Double?, String> {
-                val e = runCatching { read(side, eq.h, eq.cy, reader, Prefer.NUMBERS) }.getOrNull() ?: return null to "?"
-                val text = runCatching { Printer.expr(e) }.getOrDefault("?")
+            fun value(side: List<Ink>, unitsAfter: Boolean): Pair<Double?, String> {
+                val e0 = runCatching { read(side, eq.h, eq.cy, reader, Prefer.NUMBERS) }.getOrNull() ?: return null to "?"
+                val text = runCatching { Printer.expr(e0) }.getOrDefault("?")
+                // A result with its unit (3468 см², 52,92 кН): the number before the letters.
+                val e = if (unitsAfter && e0 is Expr.Mul && e0.factors.first() is Expr.Num &&
+                    e0.factors.drop(1).all { it is Expr.Sym || (it is Expr.Pow && it.base is Expr.Sym) }
+                ) e0.factors.first() else e0
                 if (Algebra.freeVars(e).any { it !in Algebra.CONSTANTS }) return null to text
                 val v = (runCatching { Numeric.eval(e) }.getOrNull() as? Scalar)?.v?.takeIf { it.isFinite() }
                 return v to text
             }
-            val (lv, lt) = value(left)
-            val (rv, rt) = value(right)
+            val (lv, lt) = value(left, unitsAfter = false)
+            val (rv, rt) = value(right, unitsAfter = true)
             out += Equality(eq.left, eq.cy, lv, rv, lt, rt)
         }
         return out
@@ -1519,9 +1536,10 @@ object MathPage {
                         c !in otherLine && MathLayout.tallShape(MathLayout.Glyph(listOf(m)), h).let { it != null && it != '}' }) ||
                         (m.isDash && m.width > 0.45f * h && c.cx in m.left - 0.15f * h..m.right + 0.15f * h &&
                             max(c.top - m.bottom, m.top - c.bottom) < 0.8f * h && c !in otherLine) ||
-                        (c.left in m.right - 0.3f * h..m.right + 0.8f * h && c.bottom in m.top - 0.5f * h..m.cy + 0.25f * h && c.height < 1.3f * h) ||
+                        // an exponent; not the foot of the line above (dense notes: its denominators)
+                        (c.left in m.right - 0.3f * h..m.right + 0.8f * h && c.bottom in m.top - 0.5f * h..m.cy + 0.25f * h && c.height < 1.3f * h && c !in otherLine) ||
                         // the next or previous symbol of an exponent already taken (the − and 1 of ⁻¹)
-                        (m !in chain && (c.left - m.right in -0.2f * h..0.6f * h || m.left - c.right in -0.2f * h..0.6f * h) &&
+                        (m !in chain && c !in otherLine && (c.left - m.right in -0.2f * h..0.6f * h || m.left - c.right in -0.2f * h..0.6f * h) &&
                             min(c.bottom, m.bottom) - max(c.top, m.top) >= 0.3f * min(c.height, m.height))
                 }
                 // A sign between two symbols already taken on its row (the − of 5x³ − x over a
@@ -1529,7 +1547,13 @@ object MathPage {
                 val between = !attached && c.height < 1.3f * h && c !in otherLine &&
                     members.any { c.cy in it.top..it.bottom && it.right <= c.left + 0.1f * h && c.left - it.right < 3 * h } &&
                     members.any { c.cy in it.top..it.bottom && it.left >= c.right - 0.1f * h && it.left - c.right < 1.5f * h }
-                if (attached || between) {
+                // A decimal comma between two digits taken, hanging just under their foot
+                // (2446,59 in a denominator): small, below the line the band follows.
+                fun foot(m: Ink) = c.top in m.bottom - 0.4f * m.height..m.bottom + 0.3f * h
+                val comma = !attached && !between && max(c.width, c.height) < 0.4f * h && c !in otherLine &&
+                    members.any { foot(it) && it.right <= c.left + 0.15f * h && c.left - it.right < 0.5f * h } &&
+                    members.any { foot(it) && it.left >= c.right - 0.15f * h && it.left - c.right < 0.6f * h }
+                if (attached || between || comma) {
                     members += c
                     grew = true
                 }
@@ -1559,6 +1583,7 @@ object MathPage {
     private const val MAX_READINGS = 6
     private const val MAX_TRIMS = 4
     private const val MAX_CHOICE_TRIES = 2000
+    private const val CHAIN_GAP = 12f
     private const val RESCUE_READINGS = 6
 
     /** Signs a formula does not start with: a part read from one is the tail of a formula. */

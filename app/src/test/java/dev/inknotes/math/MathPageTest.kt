@@ -116,6 +116,33 @@ class MathPageTest {
     }
 
     @Test
+    fun aLinkOfAChainOfWorkingIsNotSolved() {
+        // a + 1 = 5 = 5: the written working of a value, not an equation in a.
+        val s = Sheet()
+        s.glyph("a", 100f, 106f, 12f, 18f)
+        s.glyph("+", 118f, 106f, 12f, 12f)
+        s.glyph("1", 138f, 100f, 8f)
+        s.equals(154f, 112f)
+        s.glyph("5", 180f, 100f)
+        s.equals(200f, 112f)
+        s.glyph("5", 226f, 100f)
+        assertTrue(s.answers().none { !it.missing })
+    }
+
+    @Test
+    fun aDecimalCommaUnderADenominatorIsKept() {
+        // 1/2,5 = 0,4: the comma hangs under the foot of the denominator's digits.
+        val s = Sheet()
+        s.glyph("1", 112f, 80f, 8f)
+        s.dash(100f, 106f, 40f)
+        s.glyph("2", 102f, 112f)
+        s.add(",", listOf(118f, 117f, 116f), listOf(135f, 139f, 142f))
+        s.glyph("5", 122f, 112f)
+        s.equals(150f, 106f)
+        assertEquals("0,4", text(s.answers().single()))
+    }
+
+    @Test
     fun simpleSum() {
         val s = Sheet()
         s.glyph("2", 100f, 100f)
