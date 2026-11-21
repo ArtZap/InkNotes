@@ -632,7 +632,8 @@ object MathLayout {
                 val b = item.box
                 val ax = axisAt(b.cx)
                 val level = level(b, ref, ax)
-                val tiny = max(b.width, b.height) < 0.22f * h
+                // A short dash is a minus, not a dot (the − of f⁻¹ read f·1).
+                val tiny = max(b.width, b.height) < 0.22f * h && !(Tune.shortMinus > 0f && b.width >= 3f * max(b.height, 0.5f) && b.width >= Tune.shortMinus * h)
                 val r = ref
                 // A dot about the middle of the line is multiplication, even drawn as a tiny
                 // ring or a little high: not a degree sign (those sit at the top), a prime or
@@ -1129,6 +1130,9 @@ object Tune {
     /** The writer's placements (null: none, as in tests and stands); see [Placements]. */
     @Volatile
     var personal: Placements? = null
+
+    /** A dash at least this long (and three times as long as high) is a minus, not a dot (0: off). */
+    @JvmField var shortMinus = 0.1f
 
     /** Above 0: an upright right after a minus or plus is a 1, not a prime. */
     @JvmField var primeAfterSign = 1f
