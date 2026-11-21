@@ -287,38 +287,41 @@ class NewToolsTest {
 
     // ---------------------------------------------------------- palm
 
+    // A free pen line reaches the page only through the ink library's window, which these
+    // tests do not have; what they can see is what lands at once: a shape made by holding the
+    // pen still, a line along the ruler.
+
     @Test
-    fun aPalmLaidDownDuringALineDoesNotMoveIt() {
+    fun aPalmWithThePenHeldBackDoesNotTurnTheLineIntoAShape() {
         lateinit var before: FloatArray
+        lateinit var p: List<FloatArray>
+        lateinit var palm0: FloatArray
+        val t0 = SystemClock.uptimeMillis()
+        var t = t0
         onMain {
             view.tool = Tool.PEN
             view.penSize = 3f
             before = view.pageToViewPoint(0, 300f, 500f)
-            val p = (0..30).map { view.pageToViewPoint(0, 300f + 10f * it, 500f) }
-            val palm0 = view.pageToViewPoint(0, 650f, 900f)
-            val t0 = SystemClock.uptimeMillis()
-            var t = t0
+            p = (0..30).map { view.pageToViewPoint(0, 300f + 10f * it, 500f) }
+            palm0 = view.pageToViewPoint(0, 650f, 900f)
             send(MotionEvent.ACTION_DOWN, p[0][0], p[0][1], t0, t)
             for (k in 1..10) send(MotionEvent.ACTION_MOVE, p[k][0], p[k][1], t0, (t + 4).also { t = it })
-            sendWithPalm(MotionEvent.ACTION_POINTER_DOWN or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT), p[10], palm0[0], palm0[1], t0, t)
-            // The palm slides down a long way while the pen goes on.
-            for (k in 11..20) sendWithPalm(MotionEvent.ACTION_MOVE, p[k], palm0[0], palm0[1] + 25f * (k - 10), t0, (t + 4).also { t = it })
-            sendWithPalm(MotionEvent.ACTION_POINTER_UP or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT), p[20], palm0[0], palm0[1] + 250f, t0, (t + 4).also { t = it })
-            for (k in 21..30) send(MotionEvent.ACTION_MOVE, p[k][0], p[k][1], t0, (t + 4).also { t = it })
-            send(MotionEvent.ACTION_UP, p[30][0], p[30][1], t0, t + 4)
+            // The palm comes down and slides; the tablet holds the pen's samples back meanwhile.
+            sendWithPalm(MotionEvent.ACTION_POINTER_DOWN or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT), p[10], palm0[0], palm0[1], t0, (t + 4).also { t = it })
+            for (k in 1..5) sendWithPalm(MotionEvent.ACTION_MOVE, p[10], palm0[0], palm0[1] + 25f * k, t0, (t + 4).also { t = it })
         }
-        // A pen line comes into the page when the ink library has finished it, a moment later.
-        waitForStrokes(1)
+        // Longer than the hold that makes a shape: the straight start would have become a line.
+        Thread.sleep(PageEditorView.HOLD_MS + 500)
         onMain {
-            assertEquals(1, doc.strokes.size)
-            val b = PageEdits.bounds(doc.strokes[0])!!
-            assertEquals(300f, b.left, 4f)
-            assertEquals(600f, b.right, 4f)
-            assertTrue("no jump across: ${b.height()}", b.height() < 10f)
-            assertEquals(500f, b.centerY(), 4f)
+            assertEquals("no shape under the palm", 0, doc.strokes.size)
             val after = view.pageToViewPoint(0, 300f, 500f)
             assertEquals(before[0], after[0], 0.5f)
             assertEquals(before[1], after[1], 0.5f)
+            // The pen goes on and ends the line as usual.
+            sendWithPalm(MotionEvent.ACTION_POINTER_UP or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT), p[11], palm0[0], palm0[1] + 125f, t0, (t + 4).also { t = it })
+            for (k in 12..30) send(MotionEvent.ACTION_MOVE, p[k][0], p[k][1], t0, (t + 4).also { t = it })
+            send(MotionEvent.ACTION_UP, p[30][0], p[30][1], t0, t + 4)
+            assertEquals("still no shape", 0, doc.strokes.size)
         }
     }
 
@@ -328,11 +331,10 @@ class NewToolsTest {
         PageEditorView.palmAfterPenMs = 700L
         try {
             onMain {
+                doc.edit(strokes = listOf(Magnet.restroke(template(), floatArrayOf(200f, 300f, 600f, 300f))))
                 view.tool = Tool.PEN
-                val before0 = view.pageToViewPoint(0, 300f, 500f)
                 trace(listOf(300f to 500f, 500f to 520f))
                 val before = view.pageToViewPoint(0, 300f, 500f)
-                assertEquals(before0[1], before[1], 0.5f)
                 val t0 = SystemClock.uptimeMillis()
                 val c = view.pageToViewPoint(0, 600f, 900f)
                 send(MotionEvent.ACTION_DOWN, c[0], c[1], t0, t0, MotionEvent.TOOL_TYPE_FINGER)
@@ -340,11 +342,9 @@ class NewToolsTest {
                 send(MotionEvent.ACTION_UP, c[0], c[1] - 300f, t0, t0 + 90, MotionEvent.TOOL_TYPE_FINGER)
                 val after = view.pageToViewPoint(0, 300f, 500f)
                 assertEquals(before[1], after[1], 0.5f)
+                assertEquals("nothing undone or selected", 1, doc.strokes.size)
+                assertEquals(0, selectionCount)
             }
-            // The pen line is there and the palm did not undo it.
-            waitForStrokes(1)
-            Thread.sleep(300)
-            onMain { assertEquals(1, doc.strokes.size) }
         } finally {
             PageEditorView.palmAfterPenMs = was
         }
@@ -784,17 +784,6 @@ class NewToolsTest {
     }
 
     /** Called off the main thread: lets the page picture render and arrive. */
-    /** Waits (off the main thread) until the page holds [n] lines, at most 3 s. */
-    private fun waitForStrokes(n: Int) {
-        val until = SystemClock.uptimeMillis() + 3000
-        while (SystemClock.uptimeMillis() < until) {
-            var count = 0
-            onMain { count = doc.strokes.size }
-            if (count >= n) return
-            Thread.sleep(50)
-        }
-    }
-
     private fun waitForPicture() {
         val b = Bitmap.createBitmap(1600, 2200, Bitmap.Config.ARGB_8888)
         repeat(30) {
