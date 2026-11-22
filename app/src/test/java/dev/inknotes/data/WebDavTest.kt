@@ -44,5 +44,21 @@ class WebDavTest {
         assertEquals(false, insecure("http://192.168.1.10:8080/remote.php/dav"))
         assertEquals(false, insecure("http://nas.local/dav"))
         assertEquals(true, insecure("http://192.169.1.10/dav"))
+        // Numbers at the start of someone else's name are not a home address.
+        assertEquals(true, insecure("http://192.168.1.1.evil.com/dav"))
+        assertEquals(true, insecure("http://10.1.2.3.example.com"))
+        assertEquals(true, insecure("http://192.168.1.300/dav"))
+        assertEquals(true, insecure("http://user@evil.com/dav"))
+    }
+
+    @Test
+    fun thePasswordGoesOnlyToItsServer() {
+        val base = "https://webdav.yandex.ru/"
+        assertEquals(true, WebDavListing.sameServer(base, "https://webdav.yandex.ru/InkNotes/a.inknote"))
+        assertEquals(true, WebDavListing.sameServer(base, "https://WEBDAV.yandex.ru:443/InkNotes/a.inknote"))
+        assertEquals(false, WebDavListing.sameServer(base, "https://evil.com/InkNotes/a.inknote"))
+        assertEquals(false, WebDavListing.sameServer(base, "http://webdav.yandex.ru/InkNotes/a.inknote"))
+        assertEquals(false, WebDavListing.sameServer(base, "https://webdav.yandex.ru:8443/a.inknote"))
+        assertEquals(false, WebDavListing.sameServer(base, "https://webdav.yandex.ru.evil.com/a.inknote"))
     }
 }

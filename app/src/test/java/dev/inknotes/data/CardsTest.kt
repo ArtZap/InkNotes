@@ -10,6 +10,22 @@ class CardsTest {
     private fun days(s: Cards.State, today: Long) = s.due - today
 
     @Test
+    fun cardsOfUnreadPagesAreKept() {
+        val s = Cards.State(3, 10)
+        val states = mapOf("p1:1:2:3:4" to s, "p2:1:2:3:4" to s, "p3:5:6:7:8" to s)
+        // p1's card is still there, p2 could not be read, p3's band was erased.
+        assertEquals(setOf("p1:1:2:3:4", "p2:1:2:3:4"), Cards.kept(states, setOf("p1:1:2:3:4"), setOf("p2")).keys)
+    }
+
+    @Test
+    fun aLongRunIsReadBack() {
+        var s: Cards.State? = Cards.State(Cards.MAX_BOX, 10)
+        s = Cards.grade(s, Cards.Grade.GOOD, 20)
+        assertEquals(Cards.MAX_BOX, s.box)
+        assertEquals(s.box, Cards.decode(Cards.encode(mapOf("k" to s)))["k"]?.box)
+    }
+
+    @Test
     fun newCardIsDue() = assertTrue(Cards.isDue(null, 100))
 
     @Test

@@ -63,6 +63,13 @@ object Typeset {
     private class Reader(val s: String) {
         var i = 0
 
+        /**
+         * Brackets found unbalanced: read as plain signs at once the next time. Whether one is
+         * closed does not depend on where it is read from, and trying again from every outer
+         * bracket took 2ⁿ steps for n unclosed ones (a hang with a few dozen).
+         */
+        private val unbalanced = HashSet<Int>()
+
         fun row(stop: Set<Char>?, stopCommand: Set<String> = emptySet()): Row {
             val out = ArrayList<Node>()
             while (i < s.length) {
@@ -83,6 +90,10 @@ object Typeset {
                         i++
                         out += row(setOf('}')).also { if (i < s.length) i++ }
                     }
+                    c in "([|" && i in unbalanced -> {
+                        i++
+                        out += Sym(c.toString())
+                    }
                     c in "([|" -> {
                         val close = when (c) {
                             '(' -> ')'
@@ -97,6 +108,7 @@ object Typeset {
                             out += Fenced(c.toString(), close.toString(), inner)
                         } else {
                             // Unbalanced: the bracket as a plain sign.
+                            unbalanced += save
                             i = save + 1
                             out += Sym(c.toString())
                         }

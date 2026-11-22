@@ -85,6 +85,9 @@ class QuickNoteActivity : ComponentActivity() {
     /** The note written over the lock screen (null: the quick notes notebook itself is open). */
     private var lockNote: Notebook? = null
 
+    /** What is open here, for the sync (held here: the sync keeps it only weakly). */
+    private val openForSync: () -> Set<String> = { setOfNotNull(controller?.notebook?.id) }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // The language was changed in the system settings of the app while it ran: start anew in it.
@@ -95,6 +98,8 @@ class QuickNoteActivity : ComponentActivity() {
         setTurnScreenOn(true)
         val services = AppServices.get(this)
         val prefs = services.prefs
+        // The quick notes notebook is not replaced by a sync while it is written in here.
+        services.cloud.watchOpen(SYNC_KEY, openForSync)
         penButton = PenButtonBinding(this)
         val locked = getSystemService(KeyguardManager::class.java)?.isKeyguardLocked == true
         lifecycleScope.launch {
@@ -127,6 +132,7 @@ class QuickNoteActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        AppServices.get(this).cloud.unwatchOpen(SYNC_KEY)
         controller?.let {
             it.flush()
             it.close()
@@ -143,6 +149,10 @@ class QuickNoteActivity : ComponentActivity() {
     @android.annotation.SuppressLint("RestrictedApi")
     override fun dispatchKeyEvent(event: KeyEvent): Boolean =
         controller?.handleKey(event) == true || super.dispatchKeyEvent(event) || controller?.handleShortcut(event) == true
+
+    private companion object {
+        const val SYNC_KEY = "quick"
+    }
 }
 
 /** A tile in the quick settings: a quick note, over the lock screen too. */

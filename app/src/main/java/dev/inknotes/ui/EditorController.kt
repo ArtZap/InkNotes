@@ -2754,6 +2754,8 @@ class EditorController(
     var cardStates by mutableStateOf<Map<String, dev.inknotes.data.Cards.State>>(emptyMap())
         private set
     private val cardPages = HashMap<String, PageContent>()
+    /** Pages whose file could not be read when the review opened: their cards are kept as they were. */
+    private var cardUnreadPages: Set<String> = emptySet()
     private val cardExec = dev.inknotes.data.idleExecutor("cards")
     private val cardRenderer by lazy { PageRenderer() }
 
@@ -2768,8 +2770,13 @@ class EditorController(
             cardExec.execute {
                 val pages = HashMap<String, PageContent>()
                 val cards = ArrayList<StudyCard>()
+                val unread = HashSet<String>()
                 for ((index, pageId) in nb.pageIds.withIndex()) {
-                    val content = open[pageId] ?: runCatching { repo.loadPage(nb, pageId) }.getOrNull() ?: continue
+                    val content = open[pageId] ?: runCatching { repo.loadPage(nb, pageId) }.getOrNull()
+                    if (content == null) {
+                        unread += pageId
+                        continue
+                    }
                     val w = nb.pageWidthUnits(pageId)
                     val h = nb.pageHeightUnits(pageId)
                     val bands = content.strokes.filter { it.kind == InkKind.SPOILER }
@@ -2788,6 +2795,7 @@ class EditorController(
                     cardPages.clear()
                     cardPages.putAll(pages)
                     cardStates = states
+                    cardUnreadPages = unread
                     studyCards = cards
                 }
             }
@@ -2840,11 +2848,13 @@ class EditorController(
     }
 
     fun gradeCard(card: StudyCard, grade: dev.inknotes.data.Cards.Grade) {
+        val cards = studyCards ?: return
         val today = dev.inknotes.data.Cards.today()
         cardStates = cardStates + (card.key to dev.inknotes.data.Cards.grade(cardStates[card.key], grade, today))
-        // Cards of bands no longer on the pages are dropped from the file.
-        val keys = studyCards.orEmpty().map { it.key }.toSet()
-        repo.saveCardsAsync(notebook.id, cardStates.filterKeys { it in keys })
+        // Cards of bands no longer on the pages are dropped from the file; those of pages that
+        // could not be read are kept.
+        val keys = cards.map { it.key }.toSet()
+        repo.saveCardsAsync(notebook.id, dev.inknotes.data.Cards.kept(cardStates, keys, cardUnreadPages))
     }
 
     /** Leaves the review at the card's page. */

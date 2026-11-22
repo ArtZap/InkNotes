@@ -317,7 +317,8 @@ class HandwritingIndex(
                 h = 31 * h + (input.y * 10).toInt()
             }
         }
-        return "${pen.size}:${java.lang.Long.toHexString(h)}"
+        // With the handwriting language: the same ink read by the other model is read again.
+        return "${pen.size}:${java.lang.Long.toHexString(h)}$langMark"
     }
 
     private fun load(nbId: String): MutableMap<String, PageText> = cache.getOrPut(nbId) {

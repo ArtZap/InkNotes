@@ -777,6 +777,10 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         AppServices.get(this).cloud.unwatchOpen(SYNC_KEY)
+        // Closed for good (swiped away, finished): a recording under way is stopped and saved,
+        // the microphone and its notification are let go, the tabs' threads end. The tabs to
+        // open again were remembered in onPause.
+        if (!isChangingConfigurations) for (t in tabs + sideTabs) runCatching { t.close() }
         super.onDestroy()
     }
 

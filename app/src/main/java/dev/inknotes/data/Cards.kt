@@ -33,6 +33,15 @@ object Cards {
     fun key(pageId: String, left: Float, top: Float, right: Float, bottom: Float): String =
         "$pageId:${(left / 4).roundToInt()}:${(top / 4).roundToInt()}:${(right / 4).roundToInt()}:${(bottom / 4).roundToInt()}"
 
+    /**
+     * What of [states] goes to the file: cards of bands still on the pages ([current]), and every
+     * card of a page that could not be read this time ([unreadPages]): its band may well be there.
+     */
+    fun kept(states: Map<String, State>, current: Set<String>, unreadPages: Set<String>): Map<String, State> =
+        states.filterKeys { it in current || it.substringBefore(':') in unreadPages }
+
+    const val MAX_BOX = 100
+
     /** A card never reviewed is due today. */
     fun isDue(state: State?, today: Long) = state == null || state.due <= today
 
@@ -61,7 +70,8 @@ object Cards {
         }
         val stability = s.coerceIn(MIN_STABILITY, MAX_DAYS.toDouble())
         val days = if (g == 1) 0L else interval(stability)
-        return State(if (g == 1) 0 else (state?.box ?: 0) + 1, today + days, stability, d, today)
+        // Capped: a longer run is read back as damaged ([decode]) and the card would start over.
+        return State(if (g == 1) 0 else ((state?.box ?: 0) + 1).coerceAtMost(MAX_BOX), today + days, stability, d, today)
     }
 
     /** Stability, difficulty and last review of [state]; one saved before FSRS is estimated from its box. */
@@ -125,7 +135,7 @@ object Cards {
             if (p.size != 3 && p.size != 6) continue
             val box = p[1].toIntOrNull() ?: continue
             val due = p[2].toLongOrNull() ?: continue
-            if (p[0].length > 200 || box !in 0..100) continue
+            if (p[0].length > 200 || box !in 0..MAX_BOX) continue
             out[p[0]] = if (p.size == 6) {
                 val s = p[3].toDoubleOrNull()?.takeIf { it.isFinite() && it > 0 } ?: continue
                 val d = p[4].toDoubleOrNull()?.takeIf { it.isFinite() } ?: continue

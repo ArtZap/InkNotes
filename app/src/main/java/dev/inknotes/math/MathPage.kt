@@ -162,9 +162,14 @@ object MathPage {
         }
 
         // Writing order: by line, then left to right.
-        val ordered = eqs.sortedWith { a, b ->
-            if (abs(a.cy - b.cy) < 0.5f * max(a.h, b.h)) a.left.compareTo(b.left) else a.cy.compareTo(b.cy)
-        }.take(MAX_EQUALS)
+        // Lines first, then each line in order: a comparator mixing both is not transitive, and
+        // TimSort throws on a crowded page (all its answers were lost).
+        val lines = ArrayList<MutableList<Equals>>()
+        for (e in eqs.sortedBy { it.cy }) {
+            val first = lines.lastOrNull()?.first()
+            if (first != null && abs(e.cy - first.cy) < 0.5f * max(e.h, first.h)) lines.last() += e else lines += mutableListOf(e)
+        }
+        val ordered = lines.flatMap { line -> line.sortedBy { it.left } }.take(MAX_EQUALS)
         // First the definitions (a = 5, f(x) = …): they hold for the whole page. A line uses
         // the nearest definition above it, or else the first one below (a = 2 written later).
         /** An equation read off the page; [again] reads it anew with moved thresholds (null: same layout). */

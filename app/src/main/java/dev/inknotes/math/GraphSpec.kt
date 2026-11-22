@@ -269,7 +269,8 @@ object PngText {
         val key = keyword.toByteArray(Charsets.ISO_8859_1)
         while (at + 12 <= png.size) {
             val len = u32(png, at)
-            if (len < 0 || at + 12 + len > png.size) return null
+            // In Long: a damaged length near 2³¹ wrapped round and the reading went on forever.
+            if (len < 0 || at.toLong() + 12 + len > png.size) return null
             val type = String(png, at + 4, 4, Charsets.ISO_8859_1)
             if (type == "iTXt" && len >= key.size + 5) {
                 val body = png.copyOfRange(at + 8, at + 8 + len)
@@ -289,11 +290,47 @@ object PngText {
         return null
     }
 
+    /**
+     * [read] from a file, reading only the chunk heads and the text chunks: the picture's data
+     * is skipped over, so asking costs a few small reads, not the whole file.
+     */
+    fun read(file: java.io.File, keyword: String, maxText: Int = 1 shl 20): String? = runCatching {
+        java.io.RandomAccessFile(file, "r").use { f ->
+            val size = f.length()
+            val head = ByteArray(8)
+            f.readFully(head)
+            if (!head.contentEquals(SIGNATURE)) return null
+            var at = 8L
+            while (at + 12 <= size) {
+                f.seek(at)
+                f.readFully(head)
+                val len = u32(head, 0)
+                if (len < 0 || at + 12 + len > size) return null
+                val type = String(head, 4, 4, Charsets.ISO_8859_1)
+                if (type == "IEND") return null
+                if (type == "iTXt" && len <= maxText) {
+                    val body = ByteArray(len)
+                    f.readFully(body)
+                    // The chunk alone, as a tiny PNG, through the same parsing as [read].
+                    val one = ByteArrayOutputStream().apply {
+                        write(SIGNATURE)
+                        write(head)
+                        write(body)
+                        write(int(0))
+                    }.toByteArray()
+                    read(one, keyword)?.let { return it }
+                }
+                at += 12 + len
+            }
+            null
+        }
+    }.getOrNull()
+
     private fun iendAt(png: ByteArray): Int? {
         var at = 8
         while (at + 12 <= png.size) {
             val len = u32(png, at)
-            if (len < 0) return null
+            if (len < 0 || at.toLong() + 12 + len > png.size) return null
             if (String(png, at + 4, 4, Charsets.ISO_8859_1) == "IEND") return at
             at += 12 + len
         }

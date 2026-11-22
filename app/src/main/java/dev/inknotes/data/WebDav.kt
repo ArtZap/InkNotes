@@ -60,6 +60,18 @@ object WebDavListing {
     /** [href] (absolute, or a path on the server of [base]) as a full URL. */
     fun absolute(base: String, href: String): String = if (href.startsWith("http://") || href.startsWith("https://")) href else URI(base).resolve(href).toString()
 
+    /**
+     * Whether [url] is on the server of [base]: the same scheme, host and port. A listing may
+     * name any address; the password goes only to the server it was given for.
+     */
+    fun sameServer(base: String, url: String): Boolean {
+        val a = runCatching { URI(base) }.getOrNull() ?: return false
+        val b = runCatching { URI(url) }.getOrNull() ?: return false
+        fun port(u: URI) = if (u.port != -1) u.port else if (u.scheme.equals("https", true)) 443 else 80
+        return a.scheme != null && a.scheme.equals(b.scheme, ignoreCase = true) &&
+            a.host != null && a.host.equals(b.host, ignoreCase = true) && port(a) == port(b)
+    }
+
     /** [name] as one part of a URL path. */
     fun encode(name: String): String = URLEncoder.encode(name, "UTF-8").replace("+", "%20")
 
@@ -79,10 +91,13 @@ data class WebDavAccount(val url: String, val user: String, val password: String
         get() {
             val u = url.trim().lowercase()
             if (u.startsWith("https://")) return false
-            val host = u.removePrefix("http://").substringBefore('/').substringBefore(':')
-            val parts = host.split('.').mapNotNull { it.toIntOrNull() }
+            val host = u.removePrefix("http://").substringBefore('/').substringBefore('?').substringAfterLast('@').substringBefore(':')
+            // An address of four numbers, the whole host: 192.168.1.1.example.com is not at home.
+            val parts = host.split('.').map { it.toIntOrNull()?.takeIf { n -> n in 0..255 } }
+            val ip = parts.size == 4 && parts.all { it != null }
+            val p = parts.map { it ?: -1 }
             val private = host == "localhost" || host.endsWith(".local") || host.endsWith(".lan") ||
-                parts.size == 4 && (parts[0] == 10 || parts[0] == 127 || parts[0] == 192 && parts[1] == 168 || parts[0] == 172 && parts[1] in 16..31)
+                ip && (p[0] == 10 || p[0] == 127 || p[0] == 192 && p[1] == 168 || p[0] == 172 && p[1] in 16..31)
             return !private
         }
 

@@ -140,12 +140,17 @@ object Plot {
     }
 
     /** Tick values for an axis: 1, 2 or 5 × 10ⁿ apart, about [count] of them. */
+    private const val MAX_TICKS = 200
+
     fun ticks(lo: Float, hi: Float, count: Int = 5): List<Float> {
         val raw = (hi - lo) / count
         if (raw <= 0f || !raw.isFinite()) return emptyList()
         val mag = 10.0.pow(floor(log10(raw.toDouble())))
         val step = listOf(1.0, 2.0, 5.0, 10.0).map { it * mag }.first { it >= raw }
-        val first = ceil(lo / step) * step
-        return generateSequence(first) { it + step }.takeWhile { it <= hi + 1e-9 }.map { (if (abs(it) < step * 1e-6) 0.0 else it).toFloat() }.toList()
+        // By index, not by adding: far from zero first + step == first, and the list never ended.
+        val first = ceil(lo / step)
+        val n = floor((hi + 1e-9) / step) - first
+        if (!n.isFinite() || n < 0 || n > MAX_TICKS) return emptyList()
+        return (0..n.toInt()).map { k -> ((first + k) * step).let { if (abs(it) < step * 1e-6) 0.0 else it }.toFloat() }
     }
 }

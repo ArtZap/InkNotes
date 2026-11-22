@@ -18,8 +18,12 @@ import javax.crypto.spec.GCMParameterSpec
 object Secrets {
     private const val KEY = "inknotes-secrets"
     private const val PREFIX = "k1:"
+    /** Kept as it is (no Keystore): marked, so a password that itself starts with [PREFIX] is not taken for sealed. */
+    private const val PLAIN = "p0:"
     private const val TRANSFORM = "AES/GCM/NoPadding"
 
+    // One at a time: two first calls at once each made a key, and what the first sealed could not be opened.
+    @Synchronized
     private fun key(): SecretKey {
         val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
         (store.getKey(KEY, null) as? SecretKey)?.let { return it }
@@ -43,10 +47,11 @@ object Secrets {
         // Without a working Keystore the key stays as before (in the app's private storage):
         // better than no sign-in at all.
         android.util.Log.w("Secrets", "Keystore unavailable, kept unencrypted", it)
-    }.getOrDefault(plain)
+    }.getOrDefault(PLAIN + plain)
 
     /** What [seal] stored; null if it can no longer be read (the key is gone: sign in again). */
     fun open(stored: String): String? {
+        if (stored.startsWith(PLAIN)) return stored.removePrefix(PLAIN)
         if (!stored.startsWith(PREFIX)) return stored
         return runCatching {
             val data = Base64.decode(stored.removePrefix(PREFIX), Base64.NO_WRAP)

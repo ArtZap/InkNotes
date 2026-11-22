@@ -75,6 +75,11 @@ internal class PageCache(private val invalidate: () -> Unit) {
         var rendering = false
         var again = false
         var lastUse = 0L
+        /** The scale a picture could not be made at (out of memory); 0: none failed. */
+        var failedScale = 0f
+
+        /** [s], or half of what failed: the same picture is not tried again on every frame. */
+        fun cap(s: Float) = if (failedScale > 0f) min(s, failedScale / 2) else s
     }
 
     private val entries = IdentityHashMap<PageDocument, Entry>()
@@ -116,8 +121,8 @@ internal class PageCache(private val invalidate: () -> Unit) {
         pdfRegion: PdfRegion? = null,
         picture: (String) -> Bitmap?,
     ): Result {
-        val target = targetScale(look, viewScale)
         val e = entries.getOrPut(doc) { Entry(look) }
+        val target = e.cap(targetScale(look, viewScale))
         e.lastUse = frame
         if (pdfRegion != null && visible != null && look.pdf != null &&
             drawDetail(canvas, doc, look, viewScale, visible, excluded, pdfRegion, picture)
@@ -417,6 +422,8 @@ internal class PageCache(private val invalidate: () -> Unit) {
     }
 
     private fun render(doc: PageDocument, e: Entry, look: Look, scale: Float, excluded: Set<Any>, picture: (String) -> Bitmap?) {
+        // Even a small picture did not fit in memory: nothing more is tried for this page.
+        if (scale < MIN_RENDER_SCALE) return
         if (e.rendering) {
             e.again = true
             return
@@ -450,7 +457,11 @@ internal class PageCache(private val invalidate: () -> Unit) {
                 main.post {
                     e.rendering = false
                     if (entries[doc] !== e) return@post
-                    if (bitmap != null) {
+                    if (bitmap == null) {
+                        // Out of memory: tried again at half the size, not at this one every frame.
+                        e.failedScale = scale
+                        if (scale / 2 < MIN_RENDER_SCALE) return@post
+                    } else {
                         e.bitmap = bitmap
                         e.scale = scale
                         e.strokes = strokes
@@ -539,6 +550,8 @@ internal class PageCache(private val invalidate: () -> Unit) {
         private const val MAX_PIXELS = 7_000_000f
         private const val MAX_SIDE = 4096f
         private const val RESCALE = 1.4f
+        /** Below this a page picture is not worth making (a page about 100 px wide). */
+        private const val MIN_RENDER_SCALE = 0.1f
         private const val MAX_BLUR = 1.6f
         private const val MAX_PATCH = 400
         private const val MAX_PATCH_AREA = 0.35f

@@ -45,6 +45,18 @@ class SyncPlanTest {
     }
 
     @Test
+    fun aChangeWinsOverADeletionOnTheOtherSide() {
+        val s = mapOf("a" to Synced("f", 10, 3))
+        // Written in here after the last sync, deleted there: it goes up again.
+        assertEquals(listOf(Action.Upload("a", null)), plan(local = listOf(Local("a", "A", 20)), synced = s))
+        // Even when it is open in the editor.
+        assertEquals(listOf(Action.Upload("a", null)), plan(local = listOf(Local("a", "A", 20)), synced = s, busy = setOf("a")))
+        // Changed there after the last sync, deleted here: it comes back.
+        assertEquals(listOf(Action.Download("a", "f")), plan(remote = listOf(Remote("f", "a", 4, 30)), synced = s))
+        assertEquals(listOf(Action.Download("a", "g")), plan(remote = listOf(Remote("g", "a", 3, 30)), synced = s))
+    }
+
+    @Test
     fun openNotebooksAreNotReplacedButStillGoUp() {
         val s = mapOf("a" to Synced("f", 10, 3))
         assertEquals(emptyList<Action>(), plan(listOf(Local("a", "A", 10)), listOf(Remote("f", "a", 4, 30)), s, busy = setOf("a")))

@@ -83,4 +83,24 @@ class TypesetTest {
             Typeset.latex(src)
         }
     }
+
+    @Test
+    fun manyUnclosedBracketsAreQuick() {
+        val t = System.nanoTime()
+        val row = Typeset.parse("(".repeat(40) + "x" + "[".repeat(20) + "|".repeat(15))
+        assertTrue("took ${(System.nanoTime() - t) / 1_000_000} ms", System.nanoTime() - t < 2_000_000_000L)
+        assertTrue(row.items.size > 60)
+        // A closed one inside an unclosed one is still a bracket.
+        val inner = Typeset.parse("((x)").items
+        assertEquals(2, inner.size)
+        assertTrue(inner[1] is Typeset.Fenced)
+    }
+
+    @Test
+    fun ticksFarFromZeroEnd() {
+        assertEquals(emptyList<Float>(), Plot.ticks(1e9f, 1e9f))
+        assertTrue(Plot.ticks(-1e30f, 1e30f).size <= 12)
+        assertEquals(listOf(0f, 1f, 2f), Plot.ticks(0f, 2f, 2))
+    }
 }
+

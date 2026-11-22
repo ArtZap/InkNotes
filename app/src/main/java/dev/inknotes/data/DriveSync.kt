@@ -4,6 +4,7 @@ import android.util.Log
 import kotlinx.coroutines.suspendCancellableCoroutine
 import org.json.JSONObject
 import java.io.File
+import java.security.MessageDigest
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.resume
 
@@ -66,8 +67,10 @@ class DriveSync(
         // Gone (deleted, in the trash), every notebook would look deleted on the other side:
         // what was synced with it is forgotten instead, and the notebooks go up to a new folder.
         var folderLost = false
+        // On WebDAV a folder made again has the same URL as the one deleted: lost is that the
+        // old one is gone, not that the new one is elsewhere.
         val folder = state.folder?.takeIf { api.exists(it) } ?: api.folder().also { found ->
-            if (state.folder != null && state.folder != found) {
+            if (state.folder != null) {
                 folderLost = true
                 state.notebooks.clear()
             }
@@ -202,7 +205,8 @@ class DriveSync(
 
     /** The notebook of [fileId] here: in place of the one with its id, or as a copy. */
     private suspend fun download(fileId: String, replace: Boolean): Notebook? {
-        val tmp = File(cacheDir, "sync-down-$fileId.inknote")
+        // On WebDAV the id is the file's whole URL: slashes and length make it no file name.
+        val tmp = File(cacheDir, "sync-down-${tempName(fileId)}.inknote")
         try {
             api.download(fileId, tmp)
             val ready = when (val r = suspendCancellableCoroutine { c -> repo.readArchiveAsync({ tmp.inputStream() }) { c.resume(it) } }) {
@@ -259,6 +263,10 @@ class DriveSync(
 
     companion object {
         private const val TAG = "DriveSync"
+
+        /** A short file name made of [id]: the same id, the same name. */
+        internal fun tempName(id: String): String =
+            MessageDigest.getInstance("SHA-256").digest(id.toByteArray()).take(16).joinToString("") { "%02x".format(it) }
         const val PROP_ID = "inknotesId"
         const val PROP_TIME = "inknotesUpdatedAt"
 

@@ -27,7 +27,9 @@ object Elongate {
 
     /** Gives the elements, now inside [bounds], the width [w] and height [h], top-left fixed. */
     fun resize(strokes: List<PageStroke>, fills: List<PageFill>, images: List<PageImage>, bounds: RectF, w: Float, h: Float): Result {
-        val shapes = shapesOf(strokes, fills)
+        // Elements without points have no shape: [at] maps each element to its shape (-1: none).
+        val at = IntArray(strokes.size + fills.size) { -1 }
+        val shapes = shapesOf(strokes, fills, at)
         // Small separate parts (the letters x and y by the axes) follow the part they label
         // instead of being spread away from it.
         val small = smallParts(shapes, max(bounds.width(), bounds.height()))
@@ -42,8 +44,8 @@ object Elongate {
                 floatArrayOf(mx.map(ax) - ax, my.map(ay) - ay)
             }
         }
-        fun mapX(i: Int, x: Float) = shift[i]?.let { x + it[0] } ?: mx.map(x)
-        fun mapY(i: Int, y: Float) = shift[i]?.let { y + it[1] } ?: my.map(y)
+        fun mapX(i: Int, x: Float) = shift.getOrNull(at[i])?.let { x + it[0] } ?: mx.map(x)
+        fun mapY(i: Int, y: Float) = shift.getOrNull(at[i])?.let { y + it[1] } ?: my.map(y)
         val newStrokes = strokes.mapIndexed { i, s ->
             val inputs = s.stroke.inputs
             val batch = MutableStrokeInputBatch()
@@ -153,13 +155,14 @@ object Elongate {
     /** A polyline with the thickness of its line. */
     private class Shape(val xs: FloatArray, val ys: FloatArray, val width: Float)
 
-    private fun shapesOf(strokes: List<PageStroke>, fills: List<PageFill>): List<Shape> {
+    private fun shapesOf(strokes: List<PageStroke>, fills: List<PageFill>, at: IntArray): List<Shape> {
         val out = ArrayList<Shape>()
         val p = StrokeInput()
-        for (s in strokes) {
+        for ((i, s) in strokes.withIndex()) {
             val inputs = s.stroke.inputs
             val n = inputs.size
             if (n == 0) continue
+            at[i] = out.size
             // Long strokes are sampled: the shape matters, not every point.
             val step = max(1, n / MAX_POINTS)
             val count = (n + step - 1) / step
@@ -172,9 +175,11 @@ object Elongate {
             }
             out += Shape(xs, ys, s.stroke.brush.size)
         }
-        for (f in fills) {
+        for ((j, f) in fills.withIndex()) {
             val o = f.outline
             val n = o.size / 2
+            if (n == 0) continue
+            at[strokes.size + j] = out.size
             out += Shape(FloatArray(n + 1) { o[2 * (it % n)] }, FloatArray(n + 1) { o[2 * (it % n) + 1] }, 0f)
         }
         return out

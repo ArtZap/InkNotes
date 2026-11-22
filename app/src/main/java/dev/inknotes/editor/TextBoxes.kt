@@ -37,7 +37,7 @@ object TextBoxes {
     fun box(text: PageText, x: Float, y: Float, maxWidth: Float): PageImage {
         val p = paint(text)
         val longest = text.text.lines().maxOfOrNull { p.measureText(it) } ?: 0f
-        val w = ceil(longest.coerceIn(text.size * 2, maxWidth)) + 2f
+        val w = ceil(longest.coerceIn(minOf(text.size * 2, maxWidth), maxOf(text.size * 2, maxWidth))) + 2f
         return PageImage.textBox(text, x, y, w, height(text, w))
     }
 

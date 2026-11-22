@@ -4,7 +4,8 @@ package dev.inknotes.data
  * What one sync with the cloud folder does, decided from three lists: the notebooks here, the
  * files there, and what was the same on both sides after the last sync. Plain JVM, so every
  * case is tested on the computer. Nothing is ever lost: a notebook changed on both sides is
- * kept twice, a notebook deleted on one side goes to the other side's trash.
+ * kept twice, a notebook deleted on one side goes to the other side's trash, unless it was
+ * changed on the other side since: then the change wins and the notebook comes back.
  */
 object SyncPlan {
     /** A notebook here: [updatedAt] changes with every change. */
@@ -52,12 +53,20 @@ object SyncPlan {
             val r = there[id]
             val s = synced[id]
             when {
-                l != null && r == null ->
+                l != null && r == null -> when {
+                    s == null -> out += Action.Upload(id, null)
+                    // Deleted there, but written in here since: what was written wins, it goes up again.
+                    l.updatedAt != s.localAt -> out += Action.Upload(id, null)
                     // Synced before and gone there: deleted on the other device.
-                    if (s != null) { if (id !in busy) out += Action.TrashLocal(id) } else out += Action.Upload(id, null)
-                l == null && r != null ->
+                    id !in busy -> out += Action.TrashLocal(id)
+                }
+                l == null && r != null -> out += when {
+                    s == null -> Action.Download(id, r.fileId)
+                    // Deleted here, but changed there since: that version comes back here.
+                    r.version != s.remoteVersion || r.fileId != s.fileId -> Action.Download(id, r.fileId)
                     // Synced before and gone here: deleted on this device.
-                    out += if (s != null) Action.TrashRemote(id, r.fileId) else Action.Download(id, r.fileId)
+                    else -> Action.TrashRemote(id, r.fileId)
+                }
                 l != null && r != null -> {
                     if (s == null) {
                         // Both have it, never synced from here: the same if the times agree.

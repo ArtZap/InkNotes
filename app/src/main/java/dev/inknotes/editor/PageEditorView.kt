@@ -1404,7 +1404,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                 Mode.PATH -> forEachSample(e) { x, y, _ -> traceTo(x, y) }
                 Mode.MOVE -> {
                     // Small jitter of a tap does not nudge the selection.
-                    if (!moveTravelled && hypot(e.x - downX, e.y - downY) > touchSlop) moveTravelled = true
+                    if (!moveTravelled && hypot(activeX(e) - downX, activeY(e) - downY) > touchSlop) moveTravelled = true
                     if (moveTravelled) forEachSample(e) { x, y, _ -> dragTo(x, y) }
                 }
                 Mode.GESTURE -> {
@@ -1438,25 +1438,18 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                 Mode.DRAW -> if (e.getPointerId(index) == activePointerId) endDraw(e, index)
                 Mode.GESTURE -> gesture.pointersChanged(e, excludeIndex = index)
                 Mode.RULER -> rulerPointersChanged(e, excludeIndex = index)
-                else -> Unit
+                Mode.NONE, Mode.SNAPPED -> Unit
+                // The pen lifted while a palm stays down: its stroke ends now, not when the palm goes.
+                else -> if (e.getPointerId(index) == activePointerId) {
+                    holdHandler.removeCallbacks(longPressRunnable)
+                    endMode(e, index)
+                    mode = Mode.NONE
+                }
             }
 
             MotionEvent.ACTION_UP -> {
                 holdHandler.removeCallbacks(longPressRunnable)
-                when (mode) {
-                    Mode.DRAW -> endDraw(e, index)
-                    Mode.ERASE -> endErase()
-                    Mode.PATH -> endTrace()
-                    Mode.MOVE -> if (isSelectionTap(e)) tapOnSelection(e.x, e.y) else endMove()
-                    Mode.GESTURE -> gesture.end(e)
-                    Mode.LASER -> laser.end()
-                    Mode.RULER -> endRulerMove()
-                    Mode.RULER_DRAW -> endRulerDraw()
-                    Mode.COMPASS -> endCompass()
-                    Mode.PDF_TEXT -> endPdfText()
-                    Mode.SPACE -> endSpace()
-                    Mode.NONE, Mode.SNAPPED -> Unit
-                }
+                endMode(e, index)
                 mode = Mode.NONE
             }
 
@@ -1694,6 +1687,28 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
     }
 
     private fun closedPolyline(pts: FloatArray) = pts.size >= 6 && hypot(pts[0] - pts[pts.size - 2], pts[1] - pts[pts.size - 1]) < 0.5f
+
+    /** The end of what pointer [index] of [e] was doing (the last one up, or the pen with a palm still down). */
+    private fun endMode(e: MotionEvent, index: Int) {
+        when (mode) {
+            Mode.DRAW -> endDraw(e, index)
+            Mode.ERASE -> endErase()
+            Mode.PATH -> endTrace()
+            Mode.MOVE -> if (isSelectionTap(e)) tapOnSelection(activeX(e), activeY(e)) else endMove()
+            Mode.GESTURE -> gesture.end(e)
+            Mode.LASER -> laser.end()
+            Mode.RULER -> endRulerMove()
+            Mode.RULER_DRAW -> endRulerDraw()
+            Mode.COMPASS -> endCompass()
+            Mode.PDF_TEXT -> endPdfText()
+            Mode.SPACE -> endSpace()
+            Mode.NONE, Mode.SNAPPED -> Unit
+        }
+    }
+
+    /** Where the pointer being followed is (a palm may be pointer 0); the first one if it is gone. */
+    private fun activeX(e: MotionEvent) = e.findPointerIndex(activePointerId).let { if (it >= 0) e.getX(it) else e.x }
+    private fun activeY(e: MotionEvent) = e.findPointerIndex(activePointerId).let { if (it >= 0) e.getY(it) else e.y }
 
     /** Calls [block] with every sample (historical first) of the active pointer, in page coordinates. */
     private inline fun forEachSample(e: MotionEvent, block: (Float, Float, Float) -> Unit) {
@@ -2533,11 +2548,14 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         }
         val moved = Collections.newSetFromMap<Any>(IdentityHashMap()).apply { addAll(s); addAll(f); addAll(i) }
         val edit = {
+            // What went over to a new page; without one it stays here, moved down with the rest.
+            var gone: Set<Any> = emptySet()
             if (over.isNotEmpty()) {
                 // What no longer fits keeps its layout at the top of a new page.
                 val next = listener?.addPageAfter(page)
                 val dst = next?.let(::doc)
                 if (next != null && dst != null) {
+                    gone = over
                     val topOf = { x: Any -> when (x) { is PageStroke -> PageCache.strokeBounds(x)?.top ?: 0f; is PageFill -> x.bounds.top; else -> PageEdits.bounds(x as PageImage).top } }
                     val top = over.minOf(topOf)
                     val shift = PageEdits.Transform.translation(0f, SPACE_TOP - top)
@@ -2549,9 +2567,9 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                 }
             }
             doc.edit(
-                doc.strokes.filter { it !in over }.map { if (it in moved) PageEdits.transform(it, t) else it },
-                doc.fills.filter { it !in over }.map { if (it in moved) PageEdits.transform(it, t) else it },
-                doc.images.filter { it !in over }.map { if (it in moved) PageEdits.transform(it, t) else it },
+                doc.strokes.filter { it !in gone }.map { if (it in moved) PageEdits.transform(it, t) else it },
+                doc.fills.filter { it !in gone }.map { if (it in moved) PageEdits.transform(it, t) else it },
+                doc.images.filter { it !in gone }.map { if (it in moved) PageEdits.transform(it, t) else it },
             )
         }
         listener?.editsTogether(edit) ?: edit()

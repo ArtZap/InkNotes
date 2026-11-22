@@ -62,6 +62,21 @@ class GraphSpecTest {
         val withText = PngText.write(png(), PngText.GRAPH, text)
         assertEquals(text, PngText.read(withText, PngText.GRAPH))
         assertNull(PngText.read(png(), PngText.GRAPH))
+        // From a file, the picture's data skipped.
+        val f = java.io.File.createTempFile("graph", ".png")
+        try {
+            f.writeBytes(withText)
+            assertEquals(text, PngText.read(f, PngText.GRAPH))
+            f.writeBytes(png())
+            assertNull(PngText.read(f, PngText.GRAPH))
+            // A damaged length near 2³¹: no endless reading.
+            val bad = png().also { b -> b[8] = 0x7f; b[9] = 0xff.toByte(); b[10] = 0xff.toByte(); b[11] = 0xf0.toByte() }
+            assertNull(PngText.read(bad, PngText.GRAPH))
+            f.writeBytes(bad)
+            assertNull(PngText.read(f, PngText.GRAPH))
+        } finally {
+            f.delete()
+        }
         assertNull(PngText.read(withText, "other"))
         // IEND stays last.
         assertEquals("IEND", String(withText, withText.size - 8, 4))

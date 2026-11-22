@@ -1147,7 +1147,8 @@ class NotebookRepository(filesDir: File) {
         if (!name.endsWith(".png") || !PageImage.NAME.matches(name)) return null
         val f = File(dir(nb.id), name)
         if (!f.isFile || f.length() > MAX_GRAPH_FILE) return null
-        return runCatching { dev.inknotes.math.PngText.read(f.readBytes(), dev.inknotes.math.PngText.GRAPH) }.getOrNull()
+        // Only the chunk heads are read: a big screenshot costs a few small reads, not megabytes.
+        return dev.inknotes.math.PngText.read(f, dev.inknotes.math.PngText.GRAPH)
     }
 
     /** Decodes a picture from [uri] (camera or gallery), at most [MAX_IMAGE_SIDE] px, upright. Blocking. */
@@ -1362,7 +1363,7 @@ class NotebookRepository(filesDir: File) {
     // ------------------------------------------------------- .inknotes (several)
 
     /** Notebooks to import from one or more files, with the folders a bundle brought along. */
-    class ImportSet(val items: List<Staged>, val folders: List<Folder>, val failures: List<String>) {
+    class ImportSet(val items: List<Staged>, val folders: List<Folder>, val failures: List<String>, val extras: Map<String, String> = emptyMap()) {
         val conflicts get() = items.count { it.ready.existing != null }
     }
 
@@ -1377,7 +1378,8 @@ class NotebookRepository(filesDir: File) {
      */
     fun exportBundleAsync(notebooks: List<Notebook>, folders: List<Folder>, open: () -> OutputStream?, onDone: (Boolean) -> Unit) {
         transferring {
-            val ok = runCatching { writeBundle(notebooks, folders, open) }.isSuccess
+            // A file to give away: the writer's handwriting stays on this device.
+            val ok = runCatching { writeBundle(notebooks, folders, open, backup = false) }.isSuccess
             main.post { onDone(ok) }
         }
     }
@@ -1389,7 +1391,7 @@ class NotebookRepository(filesDir: File) {
      */
     fun backupAsync(open: () -> OutputStream?, onDone: (Boolean) -> Unit) {
         backups.execute {
-            val ok = runCatching { writeBundle(list(), folders(), open) }
+            val ok = runCatching { writeBundle(list(), folders(), open, backup = true) }
                 .onFailure { Log.w(TAG, "backup failed", it) }.isSuccess
             main.post { onDone(ok) }
         }
@@ -1408,19 +1410,20 @@ class NotebookRepository(filesDir: File) {
      * deleted meanwhile fails the copy (a backup is made again later) instead of leaving a
      * notebook with missing pages in it.
      */
-    private fun writeBundle(notebooks: List<Notebook>, folders: List<Folder>, open: () -> OutputStream?) {
+    private fun writeBundle(notebooks: List<Notebook>, folders: List<Folder>, open: () -> OutputStream?, backup: Boolean) {
         val ids = folders.map { it.id }.toSet()
         (open() ?: throw IOException("cannot open output")).use { raw ->
             ZipOutputStream(raw.buffered()).use { zip ->
                 val list = JSONArray()
                 notebooks.forEachIndexed { i, nb -> list.put(JSONObject().put("file", "notebooks/$i.inknote").apply { nb.folder?.takeIf { it in ids }?.let { put("folder", it) } }) }
                 val fl = JSONArray(folders.map { f -> JSONObject().put("id", f.id).put("name", f.name).apply { f.parent?.takeIf { it in ids }?.let { put("parent", it) } } })
-                val manifest = JSONObject().put("format", BUNDLE_FORMAT).put("version", BUNDLE_VERSION).put("folders", fl).put("notebooks", list)
+                val manifest = JSONObject().put("format", BUNDLE_FORMAT).put("version", BUNDLE_VERSION).put("backup", backup).put("folders", fl).put("notebooks", list)
                 zip.putNextEntry(ZipEntry(BUNDLE_MANIFEST))
                 zip.write(manifest.toString(2).toByteArray())
                 zip.closeEntry()
-                // The writer's corrections and handwriting: lost with the tablet otherwise.
-                runCatching { extras?.files() }.getOrNull()?.forEach { (name, text) ->
+                // The writer's corrections and handwriting, in backups only: lost with the tablet
+                // otherwise, and nobody else's business in a file shared with a friend.
+                if (backup) runCatching { extras?.files() }.getOrNull()?.forEach { (name, text) ->
                     zip.putNextEntry(ZipEntry(EXTRAS_DIR + name))
                     zip.write(text.toByteArray())
                     zip.closeEntry()
@@ -1451,12 +1454,13 @@ class NotebookRepository(filesDir: File) {
             val items = ArrayList<Staged>()
             val folders = ArrayList<Folder>()
             val failures = ArrayList<String>()
+            val extraFiles = HashMap<String, String>()
             // One budget for everything written to staging by this import, however the files nest.
             val budget = Budget(MAX_BUNDLE_BYTES, MAX_BUNDLE_ENTRIES)
             for (open in opens.take(MAX_BUNDLE_NOTEBOOKS)) {
                 try {
                     if (isBundle(open)) {
-                        val (staged, bundleFolders) = readBundle(open, budget)
+                        val (staged, bundleFolders) = readBundle(open, budget, extraFiles)
                         items += staged
                         folders += bundleFolders
                     } else {
@@ -1477,7 +1481,7 @@ class NotebookRepository(filesDir: File) {
                     break
                 }
             }
-            val set = ImportSet(items, folders, failures)
+            val set = ImportSet(items, folders, failures, extraFiles)
             main.post { onDone(set) }
         }
     }
@@ -1489,6 +1493,8 @@ class NotebookRepository(filesDir: File) {
      */
     fun commitImportsAsync(set: ImportSet, replace: Boolean, into: String?, onDone: (List<Notebook>) -> Unit) {
         background {
+            // Only into what is empty here: a new tablet, or the app installed again.
+            if (set.extras.isNotEmpty()) runCatching { extras?.restore(set.extras) }
             val created = HashMap<String, String>()
             runCatching {
                 val all = readFolders().toMutableList()
@@ -1520,6 +1526,7 @@ class NotebookRepository(filesDir: File) {
                 val again = !taken.add(ready.notebook.id)
                 val nb = runCatching {
                     if (!again && (replace || existing == null)) {
+                        keepDeviceFiles(dir(ready.notebook.id), ready.staging)
                         SafeFiles.replaceDir(ready.staging, dir(ready.notebook.id))
                         ready.notebook.copy(folder = folder, favorite = existing?.favorite == true).also { writeMetaNow(it) }
                     } else {
@@ -1548,7 +1555,8 @@ class NotebookRepository(filesDir: File) {
             ZipInputStream(input.buffered()).use { it.nextEntry?.name == BUNDLE_MANIFEST }
         }
 
-    private fun readBundle(open: () -> InputStream?, budget: Budget): Pair<List<Staged>, List<Folder>> {
+    /** [extrasOut]: the handwriting files of a backup, restored only once the import is confirmed. */
+    private fun readBundle(open: () -> InputStream?, budget: Budget, extrasOut: MutableMap<String, String>): Pair<List<Staged>, List<Folder>> {
         val staged = HashMap<String, ArchiveImport.Ready>()
         val extraFiles = HashMap<String, String>()
         var manifest: JSONObject? = null
@@ -1615,8 +1623,8 @@ class NotebookRepository(filesDir: File) {
             }
             // Notebooks in the file but not in the list still come, at the top of the import.
             for ((file, ready) in staged) if (file !in used) out += Staged(ready, null)
-            // Only into what is empty here: a new tablet, or the app installed again.
-            if (extraFiles.isNotEmpty()) runCatching { extras?.restore(extraFiles) }
+            // Only a backup's (files before 0.73 say nothing: those were backups or the owner's own).
+            if (m.optBoolean("backup", true)) for ((k, v) in extraFiles) extrasOut.putIfAbsent(k, v)
             return out to folders.map { f -> if (f.parent in ids) f else f.copy(parent = null) }
         } catch (e: Throwable) {
             staged.values.forEach { deleteQuietly(it.staging) }
@@ -1713,6 +1721,7 @@ class NotebookRepository(filesDir: File) {
             val folder = SafeFiles.importFolder(null, into?.takeIf { id -> readFoldersOrNull().orEmpty().any { it.id == id } }, existing?.folder)
             val nb = runCatching {
                 if (replace || existing == null) {
+                    keepDeviceFiles(dir(ready.notebook.id), ready.staging)
                     SafeFiles.replaceDir(ready.staging, dir(ready.notebook.id))
                     // Folder and star belong to this device (not in shared files): replacing keeps them.
                     ready.notebook.copy(folder = folder, favorite = existing?.favorite == true).also { writeMetaNow(it) }
@@ -1904,6 +1913,19 @@ class NotebookRepository(filesDir: File) {
         if (names.size <= PageCopies.KEEP) return
         val ok = runCatching { PageCodec.read(file, PageCodec.Limits.OWN) }.isSuccess
         for (n in PageCopies.toDelete(names, file.name, ok)) File(file.parentFile, n).delete()
+    }
+
+    /**
+     * What only this device keeps of a notebook (card reviews, the text index) is not in its
+     * `.inknote`: when a newer version from the cloud or a file takes its place, these files go
+     * over to it, else every sync would forget them.
+     */
+    private fun keepDeviceFiles(old: File, staging: File) {
+        for (name in listOf(CARDS, TEXT_INDEX)) {
+            val from = File(old, name)
+            val to = File(staging, name)
+            if (from.isFile && !to.exists()) runCatching { from.copyTo(to) }
+        }
     }
 
     // ------------------------------------------------- flash cards

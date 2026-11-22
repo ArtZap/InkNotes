@@ -70,6 +70,9 @@ class FixStore(private val dir: File?, private val background: Boolean = false) 
         }
     }
 
+    /** While the files are read: the settings read back are not written again. */
+    private var loading = true
+
     init {
         learned = read(LEARNED)?.let { runCatching { Learned.parse(it) }.getOrNull() } ?: Learned()
         samples = read(SAMPLES)?.let { runCatching { Samples.parse(it) }.getOrNull() } ?: Samples()
@@ -93,11 +96,12 @@ class FixStore(private val dir: File?, private val background: Boolean = false) 
                 val (k, v) = line.split('=', limit = 2).takeIf { it.size == 2 } ?: continue
                 when (k) {
                     "learn" -> learn = v == "1"
-                    "ask" -> ask = Ask.valueOf(v)
+                    "ask" -> Ask.entries.firstOrNull { it.name == v }?.let { ask = it }
                     "hand" -> inHand = v == "1"
                 }
             }
         }
+        loading = false
     }
 
     private fun file(name: String) = dir?.let { File(it, name) }
@@ -162,6 +166,7 @@ class FixStore(private val dir: File?, private val background: Boolean = false) 
     }
 
     private fun saveSettings() {
+        if (loading) return
         write(SETTINGS, "learn=${if (learn) 1 else 0}\nask=${ask.name}\nhand=${if (inHand) 1 else 0}\n")
     }
 

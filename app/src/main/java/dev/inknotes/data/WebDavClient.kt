@@ -22,7 +22,8 @@ class WebDavClient(private val account: WebDavAccount, private val http: OkHttpC
 
     private val auth = Credentials.basic(account.user, account.password, Charsets.UTF_8)
 
-    private fun request(url: String) = Request.Builder().url(url).header("Authorization", auth)
+    // The password only to the account's own server, whatever address a listing gave.
+    private fun request(url: String) = Request.Builder().url(url).apply { if (WebDavListing.sameServer(account.base, url)) header("Authorization", auth) }
 
     private fun call(r: Request): Response = http.newCall(r).execute()
 
@@ -59,6 +60,8 @@ class WebDavClient(private val account: WebDavAccount, private val http: OkHttpC
             val name = runCatching { WebDavListing.nameOf(e.href) }.getOrNull() ?: return@mapNotNull null
             val (id, time) = WebDavNames.parse(name) ?: return@mapNotNull null
             val url = runCatching { WebDavListing.absolute(folderId, e.href) }.getOrNull() ?: return@mapNotNull null
+            // A file said to be on another server (or over http) is not ours to fetch or delete.
+            if (!WebDavListing.sameServer(account.base, url)) return@mapNotNull null
             DriveFile(url, name, time, mapOf(DriveSync.PROP_ID to id, DriveSync.PROP_TIME to time.toString()))
         }
     }
