@@ -1593,10 +1593,6 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                 return Mode.NONE
             }
         }
-        // A hand laid on the screen while writing (between letters, the pen just lifted) is a
-        // palm, not a finger: it does not move the page, undo or touch the ruler. The pen landing
-        // after it writes as usual.
-        if (toolType == MotionEvent.TOOL_TYPE_FINGER && e.eventTime - penUpAt < palmAfterPenMs) return Mode.NONE
         if (insertingSpace && (pen || toolType == MotionEvent.TOOL_TYPE_FINGER)) {
             activePage = pageAt(e.getX(index), e.getY(index))
             return Mode.SPACE
@@ -1652,6 +1648,12 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                 }
             }
         }
+        // A hand laid on the screen while writing (between letters, the pen just lifted) is a
+        // palm, not a finger: it does not move the page or undo. Only here, after the selection
+        // and the ruler: a finger taking what the pen has just selected moves it at once (in 0.71
+        // the check came first and a selection would not move for the first tries). The pen
+        // landing after a palm writes as usual.
+        if (toolType == MotionEvent.TOOL_TYPE_FINGER && e.eventTime - penUpAt < palmAfterPenMs) return Mode.NONE
         activePage = pageAt(e.getX(index), e.getY(index))
         val drawing = tool == Tool.PEN || tool == Tool.FOUNTAIN || tool == Tool.HIGHLIGHTER || tool == Tool.NEON || tool == Tool.SPOILER
         if (pen && !penButton && drawing) {
@@ -4608,7 +4610,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
          * A finger this soon after the pen lifted is the writing hand's palm. The device tests
          * tap with a finger right after a pen line, so their runner sets it to 0.
          */
-        var palmAfterPenMs = 700L
+        var palmAfterPenMs = 500L
 
         /** How far ahead of the pen (on screen) a predicted piece of line may reach. */
         const val PREDICT_REACH_DP = 40f

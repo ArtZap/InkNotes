@@ -326,6 +326,34 @@ class NewToolsTest {
     }
 
     @Test
+    fun aFingerMovesWhatThePenHasJustSelected() {
+        // Tap a line with the pen, take it with a finger at once: it moves on the first try
+        // (in 0.71 the palm rule dropped that finger).
+        val was = PageEditorView.palmAfterPenMs
+        PageEditorView.palmAfterPenMs = 500L
+        try {
+            onMain {
+                doc.edit(strokes = listOf(Magnet.restroke(template(), floatArrayOf(200f, 300f, 600f, 300f))))
+                view.tool = Tool.PEN
+                tap(400f, 300f)
+                assertEquals(1, selectionCount)
+                val left0 = PageEdits.bounds(doc.strokes[0])!!.left
+                val t0 = SystemClock.uptimeMillis()
+                val a = view.pageToViewPoint(0, 400f, 300f)
+                val b = view.pageToViewPoint(0, 400f, 400f)
+                send(MotionEvent.ACTION_DOWN, a[0], a[1], t0, t0, MotionEvent.TOOL_TYPE_FINGER)
+                for (k in 1..10) send(MotionEvent.ACTION_MOVE, a[0], a[1] + (b[1] - a[1]) * k / 10f, t0, t0 + 10L * k, MotionEvent.TOOL_TYPE_FINGER)
+                send(MotionEvent.ACTION_UP, b[0], b[1], t0, t0 + 110, MotionEvent.TOOL_TYPE_FINGER)
+                val moved = PageEdits.bounds(doc.strokes[0])!!
+                assertEquals(left0, moved.left, 2f)
+                assertEquals(400f, moved.centerY(), 4f)
+            }
+        } finally {
+            PageEditorView.palmAfterPenMs = was
+        }
+    }
+
+    @Test
     fun aPalmRightAfterThePenDoesNotMoveThePage() {
         val was = PageEditorView.palmAfterPenMs
         PageEditorView.palmAfterPenMs = 700L
