@@ -215,8 +215,13 @@ object MathLayout {
             // A decimal comma touching the digit before it (11,88 with the comma under the 8):
             // a short straight tick hanging under its right part is not part of it; joined,
             // the digit stood tall as a brace.
+            // The number goes on right after it on the line (8 of 11,88): a comma has digits after it.
             fun commaUnder(c: Ink, d: Ink) = Tune.commaApart > 0f && max(c.width, c.height) < 0.45f * h && c.height < 0.45f * d.height &&
-                c.top > d.bottom - 0.2f * d.height && c.bottom > d.bottom + 0.1f * h && c.cx > d.cx && straight(c, 0.2f)
+                d.height in 0.5f * h..1.4f * h && c.top > d.bottom - 0.2f * d.height && c.bottom > d.bottom + 0.1f * h && c.cx > d.cx && straight(c, 0.2f) &&
+                strokes.any { e ->
+                    e !== c && e !== d && e.left > c.cx && e.left - c.right < 0.8f * h && e.height > 0.5f * d.height &&
+                        abs(e.bottom - d.bottom) < 0.35f * d.height
+                }
             if (joined && (commaUnder(a, b) || commaUnder(b, a))) continue
             if (joined) parent[find(i)] = find(j)
         }
