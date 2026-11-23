@@ -100,6 +100,9 @@ jobs:
             adb shell am instrument -w -e shots 1 -e class dev.inknotes.ui.V038Screenshots,dev.inknotes.ui.V037Screenshots,dev.inknotes.ui.V032Screenshots,dev.inknotes.ui.V033Screenshots,dev.inknotes.ui.V034Screenshots,dev.inknotes.ui.V035Screenshots,dev.inknotes.ui.V036Screenshots dev.inknotes.test/dev.inknotes.InkTestRunner || true
             adb shell am instrument -w -e package dev.inknotes.data dev.inknotes.test/dev.inknotes.InkTestRunner > data-tests.txt 2>&1 || true
             cat data-tests.txt
+            # The editor: touches, the pen, the palm, the selection, the ruler (on the tablet they ran only by hand).
+            adb shell am instrument -w -e package dev.inknotes.editor dev.inknotes.test/dev.inknotes.InkTestRunner > editor-tests.txt 2>&1 || true
+            cat editor-tests.txt
             adb logcat -d -b crash | tail -120 || true
             adb logcat -d -b main -t 3000 | grep -iE "inknotes|hwui|OpenGLRenderer|RenderThread|InkTest|libc " | tail -80 || true
             mkdir -p shots && adb pull /sdcard/Android/data/dev.inknotes/files/shots shots || true
@@ -109,6 +112,7 @@ jobs:
             adb shell am instrument -w -e shots 1 -e lang en -e class dev.inknotes.ui.V036Screenshots dev.inknotes.test/dev.inknotes.InkTestRunner || true
             mkdir -p shots/en && adb pull /sdcard/Android/data/dev.inknotes/files/shots shots/en || true
             grep -q "^OK (" data-tests.txt
+            grep -q "^OK (" editor-tests.txt
       - name: Screenshots into the log
         # Artifacts cannot always be downloaded where the work is reviewed: smaller JPEGs, base64.
         if: always()
