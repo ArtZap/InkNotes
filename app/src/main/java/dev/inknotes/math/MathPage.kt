@@ -1571,9 +1571,13 @@ object MathPage {
         }.toSet()
         val chain = ArrayList<Ink>()
         var frontier = if (dir < 0) eq.left else eq.right
+        // A long straight slanted line crossing the line is part of a drawing beside the formula
+        // (the section of a beam): through it the side took in the whole drawing.
+        fun drawingLine(c: Ink) = Tune.drawingLines > 0f && c.width > 2f * h && c.height > 1.5f * h && MathLayout.straight(c, 0.06f)
         for (c in cand) {
             val near = if (dir < 0) c.right >= frontier - GAP * h else c.left <= frontier + GAP * h
             if (!near) break
+            if (drawingLine(c)) continue
             if (c.top <= bandBottom && c.bottom >= bandTop && c.height < 8 * h && c !in otherLine) {
                 chain += c
                 frontier = if (dir < 0) min(frontier, c.left) else max(frontier, c.right)
@@ -1617,13 +1621,28 @@ object MathPage {
                 val comma = !attached && !between && max(c.width, c.height) < 0.4f * h && c !in otherLine &&
                     members.any { foot(it) && it.right <= c.left + 0.15f * h && c.left - it.right < 0.5f * h } &&
                     members.any { foot(it) && it.left >= c.right - 0.15f * h && it.left - c.right < 0.6f * h }
-                if (attached || between || comma) {
+                // A bar touching the top of a symbol taken, no wider than it (the bar of a 5 just over the band), is of it.
+                val touching = !attached && !between && !comma && Tune.touchingStrokes > 0f && c.height < 1.3f * h && c !in otherLine &&
+                    c.isDash && members.any { m ->
+                        m in chain && c.left >= m.left - 0.1f * h && c.right <= m.right + 0.3f * h && c.cy < m.top + 0.25f * m.height &&
+                            touches(c, m, 0.12f * h)
+                    }
+                if (attached || between || comma || touching) {
                     members += c
                     grew = true
                 }
             }
         }
         return members
+    }
+
+    /** Some point of [a] within [tol] of some point of [b]. */
+    private fun touches(a: Ink, b: Ink, tol: Float): Boolean {
+        if (a.left > b.right + tol || b.left > a.right + tol || a.top > b.bottom + tol || b.top > a.bottom + tol) return false
+        for (i in a.xs.indices) for (j in b.xs.indices) {
+            if (abs(a.xs[i] - b.xs[j]) < tol && abs(a.ys[i] - b.ys[j]) < tol) return true
+        }
+        return false
     }
 
     /** A long bar just above the line with symbols of the line under it (√ over 2 + √2). */

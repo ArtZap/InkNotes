@@ -603,7 +603,7 @@ object MathLayout {
             var afterComma = false
             // Raised and lowered parts are wrapped in ^{…} and _{…}.
             fun enter(level: Level) {
-                if (level == cur) return
+                    if (level == cur) return
                 flush()
                 if (cur == Level.SUP) repeat(supRefs.size - 1) { text("}") }
                 supRefs.clear()
@@ -642,7 +642,7 @@ object MathLayout {
                 } else {
                     level(b, ref, ax)
                 }
-                afterComma = r0 != null && !refStructure && level == Level.BASE && b.height < 0.45f * r0.height &&
+                    afterComma = r0 != null && !refStructure && level == Level.BASE && b.height < 0.45f * r0.height &&
                     b.width < 0.8f * max(b.height, 0.5f * b.width + 0.01f) && b.top > r0.top + 0.6f * r0.height && b.left > r0.cx
                 // A short dash is a minus, not a dot (the − of f⁻¹ read f·1).
                 val tiny = max(b.width, b.height) < 0.22f * h && !(Tune.shortMinus > 0f && b.width >= 3f * max(b.height, 0.5f) && b.width >= Tune.shortMinus * h)
@@ -1157,6 +1157,12 @@ object Tune {
 
     /** Above 0: after a decimal comma low beside a number, a symbol of that number's size stays on its line. */
     @JvmField var afterComma = 1f
+
+    /** Above 0: a long straight slanted line crossing a formula's line is a drawing's, not a symbol of the formula. */
+    @JvmField var drawingLines = 1f
+
+    /** Above 0: a stroke touching a symbol already taken into a side (the bar of a 5 just over the line) is taken too. */
+    @JvmField var touchingStrokes = 1f
 
     /** Above 0: two dashes whose left ends start on one upright are the bars of an F (or E), not "=". */
     @JvmField var letterBars = 1f
