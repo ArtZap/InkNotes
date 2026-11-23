@@ -45,6 +45,13 @@ private class Topic(val title: String, val entries: List<Pair<String, String>>)
 
 private val TOPICS = listOf(
     Topic(
+        tr("Новое в 0.69", "What's new in 0.69"),
+        listOf(
+            tr("Системы с широкой скобкой", "Systems with a wide brace") to tr("Если концы фигурной скобки загибаются над первыми буквами (a/b в первой строке, a во второй), эти буквы больше не теряются: система читается целиком.", "When the ends of the curly brace curl over the first letters (a/b on the first line, a on the second), those letters are no longer lost: the whole system is read."),
+            tr("Минус в степени", "A minus in an exponent") to tr("Короткий минус в степени — минус, а не точка умножения, и единица после него — единица, а не штрих: x⁻¹ и 2ᵖ⁻¹ читаются верно.", "A short minus in an exponent is a minus, not a multiplication dot, and the 1 after it is a 1, not a prime: x⁻¹ and 2ᵖ⁻¹ read right."),
+        ),
+    ),
+    Topic(
         tr("Новое в 0.68", "What's new in 0.68"),
         listOf(
             tr("x из двух дуг", "An x of two arcs") to tr("x, написанный двумя дугами «)(», читается как одна буква: раньше половинка могла уйти в индекс или степень.", "An x written as two arcs \")(\" reads as one letter: before, a half could go into an index or an exponent."),

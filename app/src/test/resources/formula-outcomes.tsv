@@ -736,7 +736,7 @@ CROHME2013_data/TrainINKML	layout	200923-1556-84	RIGHT
 CROHME2013_data/TrainINKML	layout	200923-1556-85	NONE
 CROHME2013_data/TrainINKML	layout	200923-1556-99	RIGHT
 CROHME2013_data/TrainINKML	layout	200924-1312-10	RIGHT
-CROHME2013_data/TrainINKML	layout	200924-1312-112	NONE
+CROHME2013_data/TrainINKML	layout	200924-1312-112	RIGHT
 CROHME2013_data/TrainINKML	layout	200924-1312-114	RIGHT
 CROHME2013_data/TrainINKML	layout	200924-1312-118	RIGHT
 CROHME2013_data/TrainINKML	layout	200924-1312-13	NONE
@@ -965,7 +965,7 @@ CROHME2013_data/TrainINKML	layout	200926-1550-55	RIGHT
 CROHME2013_data/TrainINKML	layout	200926-1550-57	RIGHT
 CROHME2013_data/TrainINKML	layout	200926-1550-61	RIGHT
 CROHME2013_data/TrainINKML	layout	200926-1550-62	RIGHT
-CROHME2013_data/TrainINKML	layout	200926-1550-69	WRONG
+CROHME2013_data/TrainINKML	layout	200926-1550-69	RIGHT
 CROHME2013_data/TrainINKML	layout	200926-1550-72	NONE
 CROHME2013_data/TrainINKML	layout	200926-1550-73	WRONG
 CROHME2013_data/TrainINKML	layout	200926-1550-78	NONE
@@ -988,7 +988,7 @@ CROHME2013_data/TrainINKML	layout	200926-1617-160	RIGHT
 CROHME2013_data/TrainINKML	layout	200926-1617-177	RIGHT
 CROHME2013_data/TrainINKML	layout	200926-1617-18	RIGHT
 CROHME2013_data/TrainINKML	layout	200926-1617-187	RIGHT
-CROHME2013_data/TrainINKML	layout	200926-1617-188	WRONG
+CROHME2013_data/TrainINKML	layout	200926-1617-188	RIGHT
 CROHME2013_data/TrainINKML	layout	200926-1617-192	RIGHT
 CROHME2013_data/TrainINKML	layout	200926-1617-193	RIGHT
 CROHME2013_data/TrainINKML	layout	200926-1617-208	RIGHT
@@ -1313,7 +1313,7 @@ CROHME2013_data/TrainINKML	layout	MfrDB1546	NONE
 CROHME2013_data/TrainINKML	layout	MfrDB1547	NONE
 CROHME2013_data/TrainINKML	layout	MfrDB1548	WRONG
 CROHME2013_data/TrainINKML	layout	MfrDB1549	WRONG
-CROHME2013_data/TrainINKML	layout	MfrDB1550	WRONG
+CROHME2013_data/TrainINKML	layout	MfrDB1550	RIGHT
 CROHME2013_data/TrainINKML	layout	MfrDB1551	RIGHT
 CROHME2013_data/TrainINKML	layout	MfrDB1553	RIGHT
 CROHME2013_data/TrainINKML	layout	MfrDB1565	NONE
@@ -1444,7 +1444,7 @@ CROHME2013_data/TrainINKML	layout	MfrDB2480	RIGHT
 CROHME2013_data/TrainINKML	layout	MfrDB2485	NONE
 CROHME2013_data/TrainINKML	layout	MfrDB2486	RIGHT
 CROHME2013_data/TrainINKML	layout	MfrDB2487	RIGHT
-CROHME2013_data/TrainINKML	layout	MfrDB2489	NONE
+CROHME2013_data/TrainINKML	layout	MfrDB2489	WRONG
 CROHME2013_data/TrainINKML	layout	MfrDB2490	WRONG
 CROHME2013_data/TrainINKML	layout	MfrDB2491	WRONG
 CROHME2013_data/TrainINKML	layout	MfrDB2492	UNSURE
@@ -1552,7 +1552,7 @@ CROHME2013_data/TrainINKML	layout	MfrDB3847	RIGHT
 CROHME2013_data/TrainINKML	layout	MfrDB3870	RIGHT
 CROHME2013_data/TrainINKML	layout	MfrDB3873	RIGHT
 CROHME2013_data/TrainINKML	layout	MfrDB3901	RIGHT
-CROHME2013_data/TrainINKML	layout	MfrDB3902	WRONG
+CROHME2013_data/TrainINKML	layout	MfrDB3902	RIGHT
 CROHME2013_data/TrainINKML	layout	MfrDB3903	NONE
 CROHME2013_data/TrainINKML	layout	MfrDB3904	RIGHT
 CROHME2013_data/TrainINKML	layout	MfrDB3905	NONE
@@ -1942,9 +1942,9 @@ CROHME2013_data/TrainINKML	layout	formulaire005-equation018	RIGHT
 CROHME2013_data/TrainINKML	layout	formulaire005-equation019	NONE
 CROHME2013_data/TrainINKML	layout	formulaire005-equation026	RIGHT
 CROHME2013_data/TrainINKML	layout	formulaire005-equation034	NONE
-CROHME2013_data/TrainINKML	layout	formulaire005-equation037	NONE
+CROHME2013_data/TrainINKML	layout	formulaire005-equation037	RIGHT
 CROHME2013_data/TrainINKML	layout	formulaire005-equation038	RIGHT
-CROHME2013_data/TrainINKML	layout	formulaire005-equation043	NONE
+CROHME2013_data/TrainINKML	layout	formulaire005-equation043	RIGHT
 CROHME2013_data/TrainINKML	layout	formulaire005-equation048	RIGHT
 CROHME2013_data/TrainINKML	layout	formulaire005-equation052	RIGHT
 CROHME2013_data/TrainINKML	layout	formulaire005-equation054	RIGHT
@@ -2009,7 +2009,7 @@ CROHME2013_data/TrainINKML	layout	formulaire010-equation026	RIGHT
 CROHME2013_data/TrainINKML	layout	formulaire010-equation046	RIGHT
 CROHME2013_data/TrainINKML	layout	formulaire010-equation053	RIGHT
 CROHME2013_data/TrainINKML	layout	formulaire010-equation066	RIGHT
-CROHME2013_data/TrainINKML	layout	formulaire010-equation071	NONE
+CROHME2013_data/TrainINKML	layout	formulaire010-equation071	RIGHT
 CROHME2013_data/TrainINKML	layout	formulaire010-equation073	NONE
 CROHME2013_data/TrainINKML	layout	formulaire011-equation001	NONE
 CROHME2013_data/TrainINKML	layout	formulaire011-equation016	UNSURE
@@ -2021,7 +2021,7 @@ CROHME2013_data/TrainINKML	layout	formulaire011-equation041	UNSURE
 CROHME2013_data/TrainINKML	layout	formulaire011-equation048	RIGHT
 CROHME2013_data/TrainINKML	layout	formulaire011-equation051	RIGHT
 CROHME2013_data/TrainINKML	layout	formulaire011-equation058	WRONG
-CROHME2013_data/TrainINKML	layout	formulaire011-equation061	NONE
+CROHME2013_data/TrainINKML	layout	formulaire011-equation061	WRONG
 CROHME2013_data/TrainINKML	layout	formulaire011-equation063	NONE
 CROHME2013_data/TrainINKML	layout	formulaire011-equation068	NONE
 CROHME2013_data/TrainINKML	layout	formulaire012-equation003	RIGHT
@@ -2211,7 +2211,7 @@ CROHME2013_data/TrainINKML	layout	formulaire026-equation033	NONE
 CROHME2013_data/TrainINKML	layout	formulaire026-equation036	RIGHT
 CROHME2013_data/TrainINKML	layout	formulaire026-equation038	RIGHT
 CROHME2013_data/TrainINKML	layout	formulaire026-equation041	NONE
-CROHME2013_data/TrainINKML	layout	formulaire026-equation043	WRONG
+CROHME2013_data/TrainINKML	layout	formulaire026-equation043	RIGHT
 CROHME2013_data/TrainINKML	layout	formulaire026-equation046	RIGHT
 CROHME2013_data/TrainINKML	layout	formulaire026-equation061	RIGHT
 CROHME2013_data/TrainINKML	layout	formulaire026-equation062	NONE
@@ -3106,7 +3106,7 @@ CROHME2012_data/testDataGT	layout	formulaire040-equation023	RIGHT
 CROHME2012_data/testDataGT	layout	formulaire041-equation003	RIGHT
 CROHME2012_data/testDataGT	layout	formulaire041-equation006	RIGHT
 CROHME2012_data/testDataGT	layout	formulaire042-equation026	RIGHT
-CROHME2012_data/testDataGT	layout	formulaire042-equation033	NONE
+CROHME2012_data/testDataGT	layout	formulaire042-equation033	RIGHT
 CROHME2012_data/testDataGT	layout	formulaire042-equation046	RIGHT
 CROHME2012_data/testDataGT	layout	formulaire042-equation062	RIGHT
 CROHME2012_data/testDataGT	layout	formulaire043-equation023	UNSURE
@@ -3149,7 +3149,7 @@ CROHME2012_data/testDataGT	layout	formulaire056-equation051	RIGHT
 CROHME2012_data/testDataGT	layout	formulaire056-equation071	RIGHT
 CROHME2012_data/testDataGT	layout	formulaire056-equation073	WRONG
 CROHME2012_data/testDataGT	layout	formulaire057-equation018	NONE
-CROHME2012_data/testDataGT	layout	formulaire057-equation036	WRONG
+CROHME2012_data/testDataGT	layout	formulaire057-equation036	RIGHT
 CROHME2012_data/testDataGT	layout	formulaire058-equation011	NONE
 CROHME2012_data/testDataGT	layout	formulaire058-equation028	RIGHT
 CROHME2012_data/testDataGT	layout	formulaire058-equation053	RIGHT

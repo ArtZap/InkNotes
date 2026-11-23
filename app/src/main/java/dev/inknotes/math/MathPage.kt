@@ -582,8 +582,14 @@ object MathPage {
         var bottom = brace.bottom
         var right = brace.right
         var h = 0f
+        // The brace itself (one stroke or its two halves) is no part of a side.
+        val withoutBrace = rest.filter { st ->
+            !(st.height > 0.4f * brace.height && st.left >= brace.left - 1 && st.right <= brace.right + 1 && st.top >= brace.top - 1 && st.bottom <= brace.bottom + 1)
+        }
         val sides = members.map { eq ->
-            val l = side(eq, -1, eqs, rest, limit = brace.right)
+            // Bounded by the brace where the equation is: its hooks at the top and bottom
+            // reach farther right, over the first letters (a/b of the top line).
+            val l = side(eq, -1, eqs, withoutBrace, limit = braceAt(brace, eq.cy, eq.h))
             val r = side(eq, 1, eqs, rest, limit = null)
             if (l.isEmpty() || r.isEmpty() || l.size > MAX_SIDE || r.size > MAX_SIDE) return null
             Triple(eq, l, r)
@@ -794,6 +800,53 @@ object MathPage {
             return Triple(l, r, why)
         }
         return null
+    }
+
+    /** How far right [brace] reaches level with [y] (within half a line [h]); its whole width where it does not pass that level. */
+    private fun braceAt(brace: Ink, y: Float, h: Float): Float {
+        var x = -Float.MAX_VALUE
+        for (i in brace.xs.indices) {
+            if (abs(brace.ys[i] - y) < 0.5f * h) x = max(x, brace.xs[i])
+            // Where the stroke passes the line between two points.
+            if (i > 0 && (brace.ys[i - 1] - y) * (brace.ys[i] - y) <= 0f && brace.ys[i] != brace.ys[i - 1]) {
+                val t = (y - brace.ys[i - 1]) / (brace.ys[i] - brace.ys[i - 1])
+                x = max(x, brace.xs[i - 1] + t * (brace.xs[i] - brace.xs[i - 1]))
+            }
+        }
+        return if (x == -Float.MAX_VALUE) brace.right else x
+    }
+
+    /** A written equality "left = right" whose two sides are numbers: what they read as ([left], [right]: null when not a number). */
+    class Equality(val x: Float, val y: Float, val left: Double?, val right: Double?, val leftText: String, val rightText: String)
+
+    /**
+     * Every "=" on the page with what is written on both sides read as numbers: for checking
+     * the reading on pages of worked solutions (68·51 = 3468: the written result says what the
+     * left side is). Units after a number (cm², kN) and letters are left as they read.
+     */
+    fun equalities(strokes: List<Ink>, reader: RunReader): List<Equality> {
+        val ink = strokes.filter { it.height < MAX_STROKE && it.width < MAX_STROKE }
+        val eqs = findEquals(ink).take(MAX_EQUALS)
+        if (eqs.isEmpty()) return emptyList()
+        val rest = ink.filter { s -> eqs.none { s === it.top || s === it.bottom || s in it.extra } }
+        for (eq in eqs) eq.h = lineHeight(eq, rest)
+        val out = ArrayList<Equality>()
+        for (eq in eqs) {
+            val left = side(eq, -1, eqs, rest, limit = null)
+            val right = side(eq, 1, eqs, rest, limit = null)
+            if (left.isEmpty() || right.isEmpty()) continue
+            fun value(side: List<Ink>): Pair<Double?, String> {
+                val e = runCatching { read(side, eq.h, eq.cy, reader, Prefer.NUMBERS) }.getOrNull() ?: return null to "?"
+                val text = runCatching { Printer.expr(e) }.getOrDefault("?")
+                if (Algebra.freeVars(e).any { it !in Algebra.CONSTANTS }) return null to text
+                val v = (runCatching { Numeric.eval(e) }.getOrNull() as? Scalar)?.v?.takeIf { it.isFinite() }
+                return v to text
+            }
+            val (lv, lt) = value(left)
+            val (rv, rt) = value(right)
+            out += Equality(eq.left, eq.cy, lv, rv, lt, rt)
+        }
+        return out
     }
 
     /** The texts a run is read as, best first, for [readings]; empty when the reader saw nothing. */
