@@ -285,6 +285,71 @@ class NewToolsTest {
         save("ruler.png")
     }
 
+    // ---------------------------------------------------------- palm
+
+    // A free pen line reaches the page only through the ink library's window, which these
+    // tests do not have; what they can see is what lands at once: a shape made by holding the
+    // pen still, a line along the ruler.
+
+    @Test
+    fun aPalmWithThePenHeldBackDoesNotTurnTheLineIntoAShape() {
+        lateinit var before: FloatArray
+        lateinit var p: List<FloatArray>
+        lateinit var palm0: FloatArray
+        val t0 = SystemClock.uptimeMillis()
+        var t = t0
+        onMain {
+            view.tool = Tool.PEN
+            view.penSize = 3f
+            before = view.pageToViewPoint(0, 300f, 500f)
+            p = (0..30).map { view.pageToViewPoint(0, 300f + 10f * it, 500f) }
+            palm0 = view.pageToViewPoint(0, 650f, 900f)
+            send(MotionEvent.ACTION_DOWN, p[0][0], p[0][1], t0, t)
+            for (k in 1..10) send(MotionEvent.ACTION_MOVE, p[k][0], p[k][1], t0, (t + 4).also { t = it })
+            // The palm comes down and slides; the tablet holds the pen's samples back meanwhile.
+            sendWithPalm(MotionEvent.ACTION_POINTER_DOWN or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT), p[10], palm0[0], palm0[1], t0, (t + 4).also { t = it })
+            for (k in 1..5) sendWithPalm(MotionEvent.ACTION_MOVE, p[10], palm0[0], palm0[1] + 25f * k, t0, (t + 4).also { t = it })
+        }
+        // Longer than the hold that makes a shape: the straight start would have become a line.
+        Thread.sleep(PageEditorView.HOLD_MS + 500)
+        onMain {
+            assertEquals("no shape under the palm", 0, doc.strokes.size)
+            val after = view.pageToViewPoint(0, 300f, 500f)
+            assertEquals(before[0], after[0], 0.5f)
+            assertEquals(before[1], after[1], 0.5f)
+            // The pen goes on and ends the line as usual.
+            sendWithPalm(MotionEvent.ACTION_POINTER_UP or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT), p[11], palm0[0], palm0[1] + 125f, t0, (t + 4).also { t = it })
+            for (k in 12..30) send(MotionEvent.ACTION_MOVE, p[k][0], p[k][1], t0, (t + 4).also { t = it })
+            send(MotionEvent.ACTION_UP, p[30][0], p[30][1], t0, t + 4)
+            assertEquals("still no shape", 0, doc.strokes.size)
+        }
+    }
+
+    @Test
+    fun aPalmRightAfterThePenDoesNotMoveThePage() {
+        val was = PageEditorView.palmAfterPenMs
+        PageEditorView.palmAfterPenMs = 700L
+        try {
+            onMain {
+                doc.edit(strokes = listOf(Magnet.restroke(template(), floatArrayOf(200f, 300f, 600f, 300f))))
+                view.tool = Tool.PEN
+                trace(listOf(300f to 500f, 500f to 520f))
+                val before = view.pageToViewPoint(0, 300f, 500f)
+                val t0 = SystemClock.uptimeMillis()
+                val c = view.pageToViewPoint(0, 600f, 900f)
+                send(MotionEvent.ACTION_DOWN, c[0], c[1], t0, t0, MotionEvent.TOOL_TYPE_FINGER)
+                for (k in 1..10) send(MotionEvent.ACTION_MOVE, c[0], c[1] - 30f * k, t0, t0 + 8L * k, MotionEvent.TOOL_TYPE_FINGER)
+                send(MotionEvent.ACTION_UP, c[0], c[1] - 300f, t0, t0 + 90, MotionEvent.TOOL_TYPE_FINGER)
+                val after = view.pageToViewPoint(0, 300f, 500f)
+                assertEquals(before[1], after[1], 0.5f)
+                assertEquals("nothing undone or selected", 1, doc.strokes.size)
+                assertEquals(0, selectionCount)
+            }
+        } finally {
+            PageEditorView.palmAfterPenMs = was
+        }
+    }
+
     // ---------------------------------------------------------- corners
 
     @Test
@@ -749,6 +814,21 @@ class NewToolsTest {
         }
         val last = pts.last()
         send(MotionEvent.ACTION_UP, last[0], last[1], t0, t + 4)
+    }
+
+    /** An event with the pen (id 0) and a palm (id 1, a finger) on the screen. */
+    private fun sendWithPalm(action: Int, pen: FloatArray, palmX: Float, palmY: Float, downTime: Long, time: Long) {
+        val props = arrayOf(
+            MotionEvent.PointerProperties().apply { id = 0; toolType = MotionEvent.TOOL_TYPE_STYLUS },
+            MotionEvent.PointerProperties().apply { id = 1; toolType = MotionEvent.TOOL_TYPE_FINGER },
+        )
+        val coords = arrayOf(
+            MotionEvent.PointerCoords().apply { x = pen[0]; y = pen[1]; pressure = 0.6f },
+            MotionEvent.PointerCoords().apply { x = palmX; y = palmY; pressure = 0.9f },
+        )
+        val e = MotionEvent.obtain(downTime, time, action, 2, props, coords, 0, 0, 1f, 1f, 0, 0, InputDevice.SOURCE_TOUCHSCREEN or InputDevice.SOURCE_STYLUS, 0)
+        view.dispatchTouchEvent(e)
+        e.recycle()
     }
 
     private fun send(action: Int, x: Float, y: Float, downTime: Long, time: Long, tool: Int = MotionEvent.TOOL_TYPE_STYLUS) {

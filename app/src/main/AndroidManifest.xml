@@ -22,6 +22,7 @@
         android:theme="@style/Theme.InkNotes">
         <activity
             android:name=".ui.MainActivity"
+            android:theme="@style/Theme.InkNotes.Launch"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode|density|fontScale|locale|layoutDirection"
             android:exported="true"
             android:launchMode="singleTask"

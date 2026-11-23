@@ -193,16 +193,14 @@ class EditorController(
 
     fun toggleRuler() {
         rulerShown = view?.toggleRuler(protractor = false) ?: false
-        protractorShown = false
     }
 
-    /** The protractor is lying on the page (in place of the ruler). */
+    /** The protractor is lying on the page (the ruler may lie there too). */
     var protractorShown by mutableStateOf(false)
         private set
 
     fun toggleProtractor() {
         protractorShown = view?.toggleRuler(protractor = true) ?: false
-        rulerShown = false
         if (protractorShown) showStatus(tr("Транспортир: пальцами двигать и поворачивать, пером — линия по низу или дуга по краю, наведите перо — угол", "Protractor: move and turn it with fingers; with the pen draw a line along the base or an arc along the edge; hover the pen to see the angle"))
     }
 
@@ -495,6 +493,7 @@ class EditorController(
         toolbarIntro = !prefs.toolbarIntroShown
         dev.inknotes.data.Layers.active = notebook.activeLayer
         rulerShown = false
+        protractorShown = false
         v.listener = this
         v.dark = dark
         syncView()

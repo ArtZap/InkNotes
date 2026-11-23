@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The start window: paper with the pen in the middle, 240dp like the system splash of
+     Android 12+. Splash.kt draws the same pen at the same place and size on its first frame. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/splash_bg" />
+    <item
+        android:width="240dp"
+        android:height="240dp"
+        android:drawable="@drawable/splash_logo"
+        android:gravity="center" />
+</layer-list>

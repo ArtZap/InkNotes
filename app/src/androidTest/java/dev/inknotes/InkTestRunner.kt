@@ -22,6 +22,8 @@ class InkTestRunner : AndroidJUnitRunner() {
     override fun callApplicationOnCreate(app: Application?) {
         Lang.english = english
         Lang.fixed = true
+        // Taps right after a pen line are taps here, not a palm (PalmTest turns it back on).
+        dev.inknotes.editor.PageEditorView.palmAfterPenMs = 0L
         super.callApplicationOnCreate(app)
     }
 }
