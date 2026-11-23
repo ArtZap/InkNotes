@@ -1164,6 +1164,9 @@ object Tune {
     /** Above 0: a stroke touching a symbol already taken into a side (the bar of a 5 just over the line) is taken too. */
     @JvmField var touchingStrokes = 1f
 
+    /** Above 0: a decimal comma between two digits of a side may be a long slanting tick, up to 0.55 of a line. */
+    @JvmField var longCommas = 1f
+
     /** Above 0: two dashes whose left ends start on one upright are the bars of an F (or E), not "=". */
     @JvmField var letterBars = 1f
 

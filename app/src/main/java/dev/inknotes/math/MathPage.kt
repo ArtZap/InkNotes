@@ -1618,9 +1618,22 @@ object MathPage {
                 // A decimal comma between two digits taken, hanging just under their foot
                 // (2446,59 in a denominator): small, below the line the band follows.
                 fun foot(m: Ink) = c.top in m.bottom - 0.4f * m.height..m.bottom + 0.3f * h
-                val comma = !attached && !between && max(c.width, c.height) < 0.4f * h && c !in otherLine &&
-                    members.any { foot(it) && it.right <= c.left + 0.15f * h && c.left - it.right < 0.5f * h } &&
-                    members.any { foot(it) && it.left >= c.right - 0.15f * h && it.left - c.right < 0.6f * h }
+                val small = max(c.width, c.height) < 0.4f * h
+                val before = members.filter { foot(it) && it.right <= c.left + 0.15f * h && c.left - it.right < 0.5f * h }
+                val after = members.filter { foot(it) && it.left >= c.right - 0.15f * h && it.left - c.right < 0.6f * h }
+                // A comma drawn as a long slanting tick (0,1), up to half a line: under the right
+                // edge of the digit before it, hanging below the feet of the digits on both sides.
+                fun hangs(m: Ink) = c.bottom > m.bottom + 0.1f * h
+                // (a tick, taller than wide, between symbols of digit size: not the o of log)
+                fun digitSize(m: Ink) = m.height in 0.5f * h..1.3f * h
+                val long = Tune.longCommas > 0f && !small && max(c.width, c.height) < 0.55f * h && c.height >= 0.8f * c.width &&
+                    members.any { digitSize(it) && foot(it) && hangs(it) && it.cx < c.left && c.left - it.right < 0.5f * h } &&
+                    members.any { digitSize(it) && foot(it) && hangs(it) && it.cx > c.right && it.left - c.right < 0.6f * h }
+                // A small one may also start under the right edge of the digit before it (2051,0).
+                val tucked = Tune.longCommas > 0f && small &&
+                    members.any { digitSize(it) && foot(it) && it.cx < c.left && c.left - it.right < 0.5f * h } &&
+                    members.any { digitSize(it) && foot(it) && it.cx > c.right && it.left - c.right < 0.6f * h }
+                val comma = !attached && !between && c !in otherLine && ((small && before.isNotEmpty() && after.isNotEmpty()) || long || tucked)
                 // A bar touching the top of a symbol taken, no wider than it (the bar of a 5 just over the band), is of it.
                 val touching = !attached && !between && !comma && Tune.touchingStrokes > 0f && c.height < 1.3f * h && c !in otherLine &&
                     c.isDash && members.any { m ->
