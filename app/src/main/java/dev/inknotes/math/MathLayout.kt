@@ -352,6 +352,8 @@ object MathLayout {
 
     private fun tick(t: Ink, other: Ink, h: Float): Boolean {
         if (max(t.width, t.height) > 0.45f * h || t.xs.size < 2 || !straight(t, 0.2f)) return false
+        // Hanging from the foot it is a decimal comma (1021,41), not a flag or a bar.
+        if (Tune.commaSlant > 0f && t.top > other.bottom - 0.2f * other.height && t.bottom > other.bottom + 0.1f * h) return false
         val tol = 0.12f * h
         fun near(x: Float, y: Float): Boolean {
             for (k in other.xs.indices) if (abs(other.xs[k] - x) < tol && abs(other.ys[k] - y) < tol) return true
@@ -655,7 +657,7 @@ object MathLayout {
                 } else {
                     level(b, ref, ax, tick = item.glyph.strokes.size == 1 && straight(item.glyph.strokes[0], 0.2f))
                 }
-                    afterComma = r0 != null && !refStructure && level == Level.BASE && b.height < 0.45f * r0.height &&
+                    afterComma = r0 != null && !refStructure && level == Level.BASE && b.height < max(0.45f, Tune.longCommaSize) * r0.height &&
                     b.width < 0.8f * max(b.height, 0.5f * b.width + 0.01f) && b.top > r0.top + 0.6f * r0.height && b.left > r0.cx
                 // A short dash is a minus, not a dot (the − of f⁻¹ read f·1).
                 val tiny = max(b.width, b.height) < 0.22f * h && !(Tune.shortMinus > 0f && b.width >= 3f * max(b.height, 0.5f) && b.width >= Tune.shortMinus * h)
@@ -824,7 +826,7 @@ object MathLayout {
                     )
                 ) ||
                 // a longer one (−0,1169), or slanting as a tick (0,1), when it clearly hangs below the digit's foot
-                (Tune.longCommas > 0f && tick && b.width < slant * b.height && b.height < 0.5f * ref.height &&
+                (Tune.longCommas > 0f && tick && b.width < slant * b.height && b.height < Tune.longCommaSize * ref.height &&
                     b.height < 0.5f * h && b.top > ref.top + 0.7f * ref.height && b.bottom > ref.bottom + 0.1f * ref.height && b.bottom < ref.bottom + 0.6f * ref.height)
             if (small && !comma && b.height < Tune.subSize * h && max(b.width, b.height) >= 0.22f * h && b.top > axis + Tune.subTop * h && b.bottom > axis + Tune.subBottom * h) return Level.SUB
             // An index beside the symbol it belongs to (T₈₅₀, L₀): smaller than it, starting well
@@ -1210,6 +1212,9 @@ object Tune {
 
     /** Above 0: a hanging comma tick may slant, as wide as high (0,1), and still be no index. */
     @JvmField var commaSlant = 1f
+
+    /** How long a hanging comma tick may be, of the digit before it (1021,41: a 7 under a thin 14). */
+    @JvmField var longCommaSize = 0.55f
 
     /** Above 0: two dashes whose left ends start on one upright are the bars of an F (or E), not "=". */
     @JvmField var letterBars = 1f
