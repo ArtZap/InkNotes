@@ -598,6 +598,9 @@ object MathLayout {
             val supRefs = ArrayList<Box>()
             // The bar of the fraction just written (null: the last item was not one).
             var barAfter: Float? = null
+            // The last item was a decimal comma (or point) low beside a number: what follows at
+            // that number's size goes on with it (19,63 read 19⁶³ when 63 sat a little higher).
+            var afterComma = false
             // Raised and lowered parts are wrapped in ^{…} and _{…}.
             fun enter(level: Level) {
                 if (level == cur) return
@@ -631,7 +634,16 @@ object MathLayout {
                 }
                 val b = item.box
                 val ax = axisAt(b.cx)
-                val level = level(b, ref, ax)
+                val r0 = ref
+                val level = if (Tune.afterComma > 0f && afterComma && r0 != null && !refStructure && cur == Level.BASE &&
+                    b.height > 0.6f * r0.height && b.height < 1.4f * r0.height && abs(b.bottom - r0.bottom) < 0.35f * r0.height
+                ) {
+                    Level.BASE
+                } else {
+                    level(b, ref, ax)
+                }
+                afterComma = r0 != null && !refStructure && level == Level.BASE && b.height < 0.45f * r0.height &&
+                    b.width < 0.8f * max(b.height, 0.5f * b.width + 0.01f) && b.top > r0.top + 0.6f * r0.height && b.left > r0.cx
                 // A short dash is a minus, not a dot (the − of f⁻¹ read f·1).
                 val tiny = max(b.width, b.height) < 0.22f * h && !(Tune.shortMinus > 0f && b.width >= 3f * max(b.height, 0.5f) && b.width >= Tune.shortMinus * h)
                 val r = ref
@@ -718,7 +730,8 @@ object MathLayout {
                     }
                 }
                 run += item.glyph
-                if (level == Level.BASE && !item.glyph.isDash && b.height >= 0.35f * h) {
+                // A decimal comma is no symbol to measure the next one by: the digit before it is.
+                if (level == Level.BASE && !item.glyph.isDash && b.height >= 0.35f * h && !(Tune.afterComma > 0f && afterComma)) {
                     ref = b
                     refStructure = false
                 }
@@ -1141,6 +1154,9 @@ object Tune {
 
     /** Above 0: a decimal comma is also told by the digit before it (short, thin, low on it), not only by the line's middle. */
     @JvmField var commaRel = 1f
+
+    /** Above 0: after a decimal comma low beside a number, a symbol of that number's size stays on its line. */
+    @JvmField var afterComma = 1f
 
     /** Above 0: two dashes whose left ends start on one upright are the bars of an F (or E), not "=". */
     @JvmField var letterBars = 1f

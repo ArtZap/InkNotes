@@ -884,7 +884,24 @@ object MathPage {
                 return v to text
             }
             val (lv, lt) = value(left, unitsAfter = false)
-            val (rv, rt) = value(right, unitsAfter = true)
+            var (rv, rt) = value(right, unitsAfter = true)
+            // Units written as a fraction (−8,2 кН/см²) leave the side unreadable: the number
+            // before the first clear gap.
+            if (rv == null) {
+                val sorted = right.sortedBy { it.left }
+                var reach = sorted[0].right
+                for (k in 1 until sorted.size) {
+                    if (sorted[k].left - reach > 0.5f * eq.h) {
+                        val (v, t) = value(sorted.take(k), unitsAfter = true)
+                        if (v != null) {
+                            rv = v
+                            rt = t
+                        }
+                        break
+                    }
+                    reach = max(reach, sorted[k].right)
+                }
+            }
             out += Equality(eq.left, eq.cy, lv, rv, lt, rt)
         }
         return out
