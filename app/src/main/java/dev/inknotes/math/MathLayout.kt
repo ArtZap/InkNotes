@@ -827,7 +827,7 @@ object MathLayout {
                 ) ||
                 // a longer one (−0,1169), or slanting as a tick (0,1), when it clearly hangs below the digit's foot
                 (Tune.longCommas > 0f && tick && b.width < slant * b.height && b.height < Tune.longCommaSize * ref.height &&
-                    b.height < 0.5f * h && b.top > ref.top + 0.7f * ref.height && b.bottom > ref.bottom + 0.1f * ref.height && b.bottom < ref.bottom + 0.6f * ref.height)
+                    b.height < 0.5f * h && b.top > ref.top + 0.7f * ref.height && b.bottom > ref.bottom + 0.1f * ref.height && b.bottom < ref.bottom + Tune.commaHang * ref.height)
             if (small && !comma && b.height < Tune.subSize * h && max(b.width, b.height) >= 0.22f * h && b.top > axis + Tune.subTop * h && b.bottom > axis + Tune.subBottom * h) return Level.SUB
             // An index beside the symbol it belongs to (T₈₅₀, L₀): smaller than it, starting well
             // down it and reaching below its foot. The line's own middle can be wrong when much
@@ -1215,6 +1215,9 @@ object Tune {
 
     /** How long a hanging comma tick may be, of the digit before it (1021,41: a 7 under a thin 14). */
     @JvmField var longCommaSize = 0.55f
+
+    /** How far below the digit's foot a comma tick may reach, of the digit (2446,59: 0.7). */
+    @JvmField var commaHang = 0.8f
 
     /** Above 0: two dashes whose left ends start on one upright are the bars of an F (or E), not "=". */
     @JvmField var letterBars = 1f
