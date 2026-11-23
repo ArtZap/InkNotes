@@ -810,13 +810,17 @@ object MathLayout {
             // A decimal comma hangs a little below the line; it is not an index.
             // Measured on the symbol before it too (327,2 in a numerator, where the line's middle
             // says little): short, thin, starting low on that symbol.
-            val comma = b.width < 0.6f * b.height && (
-                (b.height < 0.35f * h && b.top > axis + 0.15f * h) ||
-                    (Tune.commaRel > 0f && b.height < 0.4f * ref.height && b.height < 0.45f * h && b.top > ref.top + 0.7f * ref.height && b.bottom < ref.bottom + 0.3f * ref.height) ||
-                    // a longer one (−0,1169) when it clearly hangs below the digit's foot
-                    (Tune.longCommas > 0f && tick && b.height < 0.5f * ref.height && b.height < 0.5f * h && b.top > ref.top + 0.7f * ref.height &&
-                        b.bottom > ref.bottom + 0.1f * ref.height && b.bottom < ref.bottom + 0.6f * ref.height)
-                )
+            // a tick may slant: as wide as high
+            val slant = if (Tune.commaApart > 0f) 1.0f else 0.6f
+            val comma = (
+                b.width < 0.6f * b.height && (
+                    (b.height < 0.35f * h && b.top > axis + 0.15f * h) ||
+                        (Tune.commaRel > 0f && b.height < 0.4f * ref.height && b.height < 0.45f * h && b.top > ref.top + 0.7f * ref.height && b.bottom < ref.bottom + 0.3f * ref.height)
+                    )
+                ) ||
+                // a longer one (−0,1169), or slanting as a tick (0,1), when it clearly hangs below the digit's foot
+                (Tune.longCommas > 0f && tick && b.width < slant * b.height && b.height < 0.5f * ref.height &&
+                    b.height < 0.5f * h && b.top > ref.top + 0.7f * ref.height && b.bottom > ref.bottom + 0.1f * ref.height && b.bottom < ref.bottom + 0.6f * ref.height)
             if (small && !comma && b.height < Tune.subSize * h && max(b.width, b.height) >= 0.22f * h && b.top > axis + Tune.subTop * h && b.bottom > axis + Tune.subBottom * h) return Level.SUB
             // An index beside the symbol it belongs to (T₈₅₀, L₀): smaller than it, starting well
             // down it and reaching below its foot. The line's own middle can be wrong when much
