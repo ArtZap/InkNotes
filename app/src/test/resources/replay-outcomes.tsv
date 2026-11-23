@@ -190,7 +190,7 @@ CROHME2012_data/testDataGT/KME1G3_4_sub_25	UNSURE	UNSURE
 CROHME2012_data/testDataGT/KME1G3_5_sub_25	NONE	WRONG
 CROHME2012_data/testDataGT/KME1G3_6_sub_25	WRONG	UNSURE
 CROHME2012_data/testDataGT/KME1G3_7_sub_25	NONE	NONE
-CROHME2012_data/testDataGT/KME1G3_8_sub_25	WRONG	UNSURE
+CROHME2012_data/testDataGT/KME1G3_8_sub_25	RIGHT	UNSURE
 CROHME2012_data/testDataGT/KME1G3_9_sub_25	NONE	NONE
 CROHME2012_data/testDataGT/KME2G3_0_sub_15	WRONG	
 CROHME2012_data/testDataGT/KME2G3_0_sub_3	WRONG	
@@ -248,7 +248,7 @@ CROHME2012_data/testDataGT/KME2G3_9_sub_15	WRONG
 CROHME2012_data/testDataGT/KME2G3_9_sub_3	UNSURE	
 CROHME2012_data/testDataGT/KME2G3_9_sub_39	UNSURE	
 CROHME2012_data/testDataGT/KME2G3_9_sub_42	WRONG	
-CROHME2012_data/testDataGT/KME2G3_9_sub_61	NONE	UNSURE
+CROHME2012_data/testDataGT/KME2G3_9_sub_61	NONE	NONE
 CROHME2012_data/testDataGT/KME2G3_9_sub_63	NONE	
 CROHME2012_data/testDataGT/crohme_f043-eq058	RIGHT	WRONG
 CROHME2012_data/testDataGT/formulaire040-equation023	RIGHT	
@@ -520,7 +520,7 @@ synthetic/equation-linear-14	SKIP	RIGHT
 synthetic/equation-linear-15	SKIP	WRONG
 synthetic/equation-linear-16	SKIP	RIGHT
 synthetic/equation-linear-17	SKIP	RIGHT
-synthetic/equation-linear-18	SKIP	RIGHT
+synthetic/equation-linear-18	SKIP	UNSURE
 synthetic/equation-linear-19	SKIP	UNSURE
 synthetic/equation-linear-20	SKIP	RIGHT
 synthetic/equation-linear-21	SKIP	NONE
@@ -567,7 +567,7 @@ synthetic/equation-fraction-21	SKIP	UNSURE
 synthetic/equation-fraction-22	SKIP	RIGHT
 synthetic/equation-fraction-23	SKIP	NONE
 synthetic/equation-fraction-24	SKIP	RIGHT
-synthetic/equation-fraction-25	SKIP	UNSURE
+synthetic/equation-fraction-25	SKIP	RIGHT
 synthetic/equation-fraction-26	SKIP	RIGHT
 synthetic/equation-fraction-27	SKIP	NONE
 synthetic/equation-fraction-28	SKIP	RIGHT
@@ -592,7 +592,7 @@ synthetic/equation-quadratic-6	SKIP	NONE
 synthetic/equation-quadratic-7	SKIP	UNSURE
 synthetic/equation-quadratic-8	SKIP	NONE
 synthetic/equation-quadratic-9	SKIP	WRONG
-synthetic/equation-quadratic-10	SKIP	NONE
+synthetic/equation-quadratic-10	SKIP	RIGHT
 synthetic/equation-quadratic-11	SKIP	RIGHT
 synthetic/equation-quadratic-12	SKIP	RIGHT
 synthetic/equation-quadratic-13	SKIP	NONE
