@@ -174,7 +174,9 @@ object MathLayout {
             val b = strokes[j]
             if (a in bars || b in bars) continue
             // Over and under a fraction bar: numerator and denominator, however close (a small ½).
-            if (bars.any { bar ->
+            // Not the body of a 5 and its own bar, level with a long low √ beside them (325²).
+            val fiveBar = Tune.rootNotBar > 0f && (cap(a, b, h) || cap(b, a, h))
+            if (!fiveBar && bars.any { bar ->
                     bar.cy > min(a.bottom, b.bottom) - 0.05f * h && bar.cy < max(a.top, b.top) + 0.05f * h &&
                         bar.left < a.right && bar.right > a.left && bar.left < b.right && bar.right > b.left
                 }
