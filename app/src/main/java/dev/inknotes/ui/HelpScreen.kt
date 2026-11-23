@@ -45,6 +45,16 @@ private class Topic(val title: String, val entries: List<Pair<String, String>>)
 
 private val TOPICS = listOf(
     Topic(
+        tr("Новое в 0.70", "What's new in 0.70"),
+        listOf(
+            tr("Ластик «Обрезка»", "The “Trim” eraser") to tr("Ластик → «Обрезка»: коснитесь линии — уйдёт её кусок до ближайших мест, где она пересекает или касается других линий и фигур. Свободный конец уходит до первого пересечения, линия ни с чем не пересекающаяся — целиком. Можно провести по нескольким линиям сразу; «Отменить» возвращает всё.", "Eraser → “Trim”: touch a line and its piece up to the nearest places where it crosses or touches other lines and shapes goes. A free end goes up to the first crossing, a line that meets nothing goes whole. Sweep over several lines at once; Undo brings it all back."),
+            tr("Калькулятор для систем", "The formula keyboard for systems") to tr("В окне «Как прочитана система» — «Нет нужного — набрать формулу»: калькулятор формул, как для одной формулы, по уравнению за раз (кнопки 1, 2, …). Набранное сохраняется, и при новом открытии окно показывает набранное, а не прочитанное.", "In the “How the system was read” window — “Not there — type the formula”: the formula keyboard, as for one formula, an equation at a time (buttons 1, 2, …). What is typed is kept, and the window opens again on what was typed, not on what was read."),
+            tr("Исправить функцию графика", "Correct a graph's function") to tr("В окне графика — «Как прочитано»: то же окно с барабанами и калькулятором для формулы y = …. После «Готово» график пересчитывается; картинка графика в тетради перерисовывается на месте с тем же масштабом.", "In a graph's window, “How it was read”: the same window with wheels and the formula keyboard for its y = … formula. After Done the graph follows; a graph picture in the notebook is redrawn in its place with the same view."),
+            tr("Калькулятор везде", "The formula keyboard everywhere") to tr("Если запись не удалось разобрать по символам, окно «Как прочитано» больше не закрывается с извинением, а сразу открывает калькулятор формул: наберите, что написано, и нажмите «Готово».", "When the writing could not be taken apart into symbols, the “How it was read” window no longer closes with an apology: it opens on the formula keyboard straight away. Type what is written and press Done."),
+            tr("Страницы с решениями", "Pages of worked solutions") to tr("Цепочки вычислений (F = 8a·6a = 68·51 = 3468) больше не решаются как уравнения — раньше на таких страницах появлялись бессмысленные серые ответы. Десятичная запятая под знаменателем (393378/2446,59) больше не теряется.", "Chains of working (F = 8a·6a = 68·51 = 3468) are no longer solved as equations: such pages used to get nonsense grey answers. A decimal comma under a denominator (393378/2446.59) is no longer lost."),
+        ),
+    ),
+    Topic(
         tr("Новое в 0.69", "What's new in 0.69"),
         listOf(
             tr("Системы с широкой скобкой", "Systems with a wide brace") to tr("Если концы фигурной скобки загибаются над первыми буквами (a/b в первой строке, a во второй), эти буквы больше не теряются: система читается целиком.", "When the ends of the curly brace curl over the first letters (a/b on the first line, a on the second), those letters are no longer lost: the whole system is read."),

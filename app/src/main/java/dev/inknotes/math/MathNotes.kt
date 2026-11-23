@@ -234,10 +234,12 @@ class MathNotes(
                 val draft = runCatching {
                     val learned = fixes.learned.takeIf { fixes.learn }
                     val samples = fixes.samples.takeIf { fixes.learn }
+                    // A side that cannot be taken apart into symbols gets no wheels: the window
+                    // then opens on the formula keyboard.
+                    fun bare(ink: List<Ink>) = Correct.Side(ink, emptyList(), emptyList(), emptyList())
                     val rows = fix.rows.map { row ->
-                        val left = Correct.side(row.left, row.h, row.axis, reader, row.leftRead, learned, samples)
-                        val right = row.right?.let { Correct.side(it, row.h, row.axis, reader, row.rightRead, learned, samples) }
-                        if (left == null || row.right != null && right == null) return@runCatching null
+                        val left = runCatching { Correct.side(row.left, row.h, row.axis, reader, row.leftRead, learned, samples) }.getOrNull() ?: bare(row.left)
+                        val right = row.right?.let { r -> runCatching { Correct.side(r, row.h, row.axis, reader, row.rightRead, learned, samples) }.getOrNull() ?: bare(r) }
                         Row(row, left, right)
                     }
                     Draft(fix, rows)

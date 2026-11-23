@@ -33,12 +33,14 @@ class NotesReplayTest {
         File("build/notes-report.txt").writeText(report.toString())
     }
 
-    /** Strokes as tools/notes-ink.py writes them: [{"o":…,"x":[…],"y":[…],"t":[…]}, …]. */
-    private fun load(f: File): List<Ink> {
-        val re = Regex("\\{\"o\": (\\d+), \"x\": \\[([^\\]]*)\\], \"y\": \\[([^\\]]*)\\], \"t\": \\[([^\\]]*)\\]\\}")
-        return re.findAll(f.readText()).map { m ->
-            fun floats(s: String) = s.split(',').filter { it.isNotBlank() }.map { it.trim().toFloat() }.toFloatArray()
-            Ink(floats(m.groupValues[2]), floats(m.groupValues[3]), m.groupValues[1].toInt(), m.groupValues[4].split(',').filter { it.isNotBlank() }.map { it.trim().toLong() }.toLongArray())
-        }.toList()
+    companion object {
+        /** Strokes as tools/notes-ink.py writes them: [{"o":…,"x":[…],"y":[…],"t":[…]}, …]. */
+        fun load(f: File): List<Ink> {
+            val re = Regex("\\{\"o\": (\\d+), \"x\": \\[([^\\]]*)\\], \"y\": \\[([^\\]]*)\\], \"t\": \\[([^\\]]*)\\]\\}")
+            return re.findAll(f.readText()).map { m ->
+                fun floats(s: String) = s.split(',').filter { it.isNotBlank() }.map { it.trim().toFloat() }.toFloatArray()
+                Ink(floats(m.groupValues[2]), floats(m.groupValues[3]), m.groupValues[1].toInt(), m.groupValues[4].split(',').filter { it.isNotBlank() }.map { it.trim().toLong() }.toLongArray())
+            }.toList()
+        }
     }
 }

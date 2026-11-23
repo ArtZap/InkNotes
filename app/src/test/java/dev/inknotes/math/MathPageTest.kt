@@ -116,6 +116,33 @@ class MathPageTest {
     }
 
     @Test
+    fun aLinkOfAChainOfWorkingIsNotSolved() {
+        // a + 1 = 5 = 5: the written working of a value, not an equation in a.
+        val s = Sheet()
+        s.glyph("a", 100f, 106f, 12f, 18f)
+        s.glyph("+", 118f, 106f, 12f, 12f)
+        s.glyph("1", 138f, 100f, 8f)
+        s.equals(154f, 112f)
+        s.glyph("5", 180f, 100f)
+        s.equals(200f, 112f)
+        s.glyph("5", 226f, 100f)
+        assertTrue(s.answers().none { !it.missing })
+    }
+
+    @Test
+    fun aDecimalCommaUnderADenominatorIsKept() {
+        // 1/2,5 = 0,4: the comma hangs under the foot of the denominator's digits.
+        val s = Sheet()
+        s.glyph("1", 112f, 80f, 8f)
+        s.dash(100f, 106f, 40f)
+        s.glyph("2", 102f, 112f)
+        s.add(",", listOf(118f, 117f, 116f), listOf(135f, 139f, 142f))
+        s.glyph("5", 122f, 112f)
+        s.equals(150f, 106f)
+        assertEquals("0,4", text(s.answers().single()))
+    }
+
+    @Test
     fun simpleSum() {
         val s = Sheet()
         s.glyph("2", 100f, 100f)
@@ -318,6 +345,29 @@ class MathPageTest {
         val a = MathPage.analyze(s.strokes, s.reader(emptyMap()), pinned = pinned).single()
         assertEquals("x = 3; y = 2", text(a))
         assertEquals("x = 3; y = 2", (Correct.outcomeSystem(listOf("x+y" to "5", "x-y" to "1"), Env()).answer as Answer.Text).lines.joinToString("; "))
+    }
+
+    @Test
+    fun aSystemTypedByHandIsTaken() {
+        val s = Sheet()
+        s.tall(null, 90f, 66f, 100f, 12f) { t -> if (t < 0.5f) 1 - 2 * t * (1 - 0.0f) else 2 * t - 1 }
+        s.glyph("x", 110f, 80f, 14f, 16f)
+        s.glyph("+", 128f, 80f, 12f, 12f)
+        s.glyph("y", 146f, 80f, 14f, 22f)
+        s.equals(166f, 88f)
+        s.glyph("3", 190f, 76f)
+        s.glyph("x", 110f, 136f, 14f, 16f)
+        s.dash(128f, 143f, 12f)
+        s.glyph("y", 146f, 136f, 14f, 22f)
+        s.equals(166f, 144f)
+        s.glyph("1", 190f, 132f, 8f)
+        val fix = s.answers().single().fix!!
+        // Typed in the window, as LaTeX: \frac{x}{2}+y = 3 and x − y = 0.
+        val pinned = mapOf(
+            Correct.fingerprint(fix.rows[0].left) to "\\frac{x}{2}+y", Correct.fingerprint(fix.rows[0].right!!) to "3",
+            Correct.fingerprint(fix.rows[1].left) to "x-y", Correct.fingerprint(fix.rows[1].right!!) to "0",
+        )
+        assertEquals("x = 2; y = 2", text(MathPage.analyze(s.strokes, s.reader(emptyMap()), pinned = pinned).single()))
     }
 
     /** A Russian б reads as 6 first: in a system whose unknowns are a and б, 3б is 3·b, not 36. */

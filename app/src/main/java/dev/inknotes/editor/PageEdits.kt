@@ -131,6 +131,45 @@ object PageEdits {
         return pieces
     }
 
+    /** The points of [s] as a line for [Trim]. */
+    fun trimLine(s: PageStroke): Trim.Line {
+        val inputs = s.stroke.inputs
+        return Trim.Line(FloatArray(inputs.size) { inputs.get(it).x }, FloatArray(inputs.size) { inputs.get(it).y })
+    }
+
+    /** The outline of [f], closed, as a line for [Trim]. */
+    fun trimLine(f: PageFill): Trim.Line {
+        val n = f.outline.size / 2
+        return Trim.Line(FloatArray(n + 1) { f.outline[2 * (it % n)] }, FloatArray(n + 1) { f.outline[2 * (it % n) + 1] })
+    }
+
+    /**
+     * [s] trimmed at ([x], [y]) ([Trim]): what is left of it (empty: it goes whole), or null
+     * when the touch is not on it. [others]: the lines and outlines that stop the cut.
+     */
+    fun trimStroke(s: PageStroke, others: List<Trim.Line>, x: Float, y: Float, r: Float): List<PageStroke>? {
+        val line = trimLine(s)
+        val reach = r + s.stroke.brush.size / 2
+        // Hand-drawn lines meet with a gap about as wide as the pen.
+        val touch = max(1.5f, s.stroke.brush.size)
+        val keep = Trim.keep(line, others, x, y, reach, touch) ?: return null
+        val inputs = s.stroke.inputs
+        fun at(param: Float): StrokeInput {
+            val i = param.toInt().coerceIn(0, inputs.size - 1)
+            val t = param - i
+            return if (i >= inputs.size - 1 || t <= 0f) inputs.get(i) else lerp(inputs.get(i), inputs.get(i + 1), t)
+        }
+        return keep.mapNotNull { (from, to) ->
+            val pts = ArrayList<StrokeInput>()
+            pts += at(from)
+            for (i in (from.toInt() + 1)..to.toInt().coerceAtMost(inputs.size - 1)) if (i > from && i < to) pts += inputs.get(i)
+            pts += at(to)
+            // Too short to see: nothing kept there.
+            val length = pts.zipWithNext().sumOf { (a, b) -> hypot(b.x - a.x, b.y - a.y).toDouble() }
+            if (pts.size < 2 || length < touch) null else toStroke(s, pts)
+        }
+    }
+
     private fun resample(stroke: Stroke, step: Float): List<StrokeInput> {
         val inputs = stroke.inputs
         val out = ArrayList<StrokeInput>(inputs.size * 2)

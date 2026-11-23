@@ -61,7 +61,7 @@ private enum class ScrollAxis { UNDECIDED, VERTICAL, HORIZONTAL, FREE }
 
 enum class Tool { PEN, FOUNTAIN, HIGHLIGHTER, ERASER, LASSO, AREA, NEON, LASER, SPOILER }
 
-enum class EraserMode { WHOLE, PARTIAL }
+enum class EraserMode { WHOLE, PARTIAL, TRIM }
 
 /** What the eraser takes: everything, or only one kind (the marker without the text under it). */
 enum class EraserTarget(val title: String) {
@@ -2041,9 +2041,13 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
 
     // --- eraser
 
+    /** Pieces left by trimming in this stroke of the eraser: not trimmed again until it is lifted. */
+    private val trimmedNow: MutableSet<PageStroke> = Collections.newSetFromMap(IdentityHashMap())
+
     private fun startErase(e: MotionEvent, index: Int) {
         val doc = doc(activePage) ?: return
         doc.beginSession()
+        trimmedNow.clear()
         activePointerId = e.getPointerId(index)
         val p = toPage(activePage, e.getX(index), e.getY(index))
         lastX = p[0]
@@ -2073,7 +2077,33 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             val b = PageCache.strokeBounds(s) ?: return false
             return PageEdits.segmentNear(b, ax, ay, bx, by, r + s.stroke.brush.size)
         }
-        if (eraserMode == EraserMode.WHOLE) {
+        if (eraserMode == EraserMode.TRIM) {
+            // Each line touched loses the part between the lines it meets; pieces left are
+            // not trimmed again in the same stroke of the eraser.
+            val kept = ArrayList<PageStroke>(doc.strokes.size)
+            for (s in doc.strokes) {
+                if (s in trimmedNow || !near(s) || !PageEdits.strokeTouched(s, ax, ay, bx, by, r)) {
+                    kept += s
+                    continue
+                }
+                // Lines ending a little short of this one meet it too.
+                val b = PageCache.strokeBounds(s)?.let { RectF(it).apply { inset(-8f, -8f) } }
+                val others = doc.strokes.filter { o ->
+                    o !== s && o.kind != InkKind.HIGHLIGHTER && (b == null || PageCache.strokeBounds(o)?.let { RectF.intersects(it, b) } != false)
+                }.map(PageEdits::trimLine) + doc.fills.filter { b == null || RectF.intersects(it.bounds, b) }.map(PageEdits::trimLine)
+                val pieces = PageEdits.trimStroke(s, others, bx, by, r)
+                if (pieces == null) {
+                    kept += s
+                } else {
+                    kept += pieces
+                    trimmedNow.addAll(pieces)
+                    changed = true
+                }
+            }
+            strokes = kept
+            fills = doc.fills
+            if (changed) buzz()
+        } else if (eraserMode == EraserMode.WHOLE) {
             strokes = doc.strokes.filterNot { near(it) && PageEdits.strokeTouched(it, ax, ay, bx, by, r) }
             fills = if (target.fills) doc.fills.filterNot { editable(it) && PageEdits.fillTouched(it, bx, by, r) } else doc.fills
             changed = strokes.size != doc.strokes.size || fills.size != doc.fills.size
