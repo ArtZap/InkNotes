@@ -22,8 +22,16 @@ class NotesReplayTest {
         val report = StringBuilder()
         for (page in dir.listFiles { f -> f.name.endsWith(".json") }.orEmpty().sortedBy { it.name }) {
             val id = page.name.removeSuffix(".json")
-            val r = NotesJudge.measure(load(page), RecordedReader(reads["notes/$id"].orEmpty()))
+            val ink = load(page)
+            val reader = RecordedReader(reads["notes/$id"].orEmpty(), compose = true)
+            val r = NotesJudge.measure(ink, reader)
             report.append("== $id: $r\n")
+            // What is really written, where it has been transcribed (truth/<id>.tsv).
+            File(dir, "truth/$id.tsv").takeIf { it.isFile }?.let { f ->
+                val t = NotesTruth.score(MathPage.equalities(ink, reader), NotesTruth.parse(f.readLines().asSequence()))
+                report.append("== $id: $t\n")
+                t.lines.forEach { report.append("  $it\n") }
+            }
             r.lines.forEach { report.append("  $it\n") }
             report.append("  -- ответы на странице\n")
             r.answers.forEach { report.append("  $it\n") }

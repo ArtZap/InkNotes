@@ -6,13 +6,38 @@ package dev.inknotes.math
  * the same guesses: the two interleaved, glyph by glyph when ReadOptions says so, unsure when the
  * two first guesses differ. A run not recorded reads as nothing.
  */
-class RecordedReader(private val reads: Map<List<Int>, Pair<List<String>, List<String>>>) : RunReader {
+class RecordedReader(
+    private val reads: Map<List<Int>, Pair<List<String>, List<String>>>,
+    /**
+     * A run never read on the emulator (a rule joined 327 , 2 into one) is read as the
+     * recorded runs it is made of, side by side: an approximation of what ML Kit would read,
+     * for trying layout rules on the owner's pages before the emulator confirms them.
+     */
+    private val compose: Boolean = false,
+) : RunReader {
 
     private fun key(run: List<Ink>) = run.map { it.order }.sorted()
 
     private fun raw(run: List<Ink>): List<String> {
-        val (plain, math) = reads[key(run)] ?: return emptyList()
+        val (plain, math) = reads[key(run)] ?: return if (compose) composed(run) else emptyList()
         return ReadOptions.rank(ReadOptions.interleave(plain, math))
+    }
+
+    private fun composed(run: List<Ink>): List<String> {
+        val byOrder = run.associateBy { it.order }
+        val parts = reads.keys.filter { it.isNotEmpty() && byOrder.keys.containsAll(it) }.sortedByDescending { it.size }
+        val used = HashSet<Int>()
+        val chosen = ArrayList<List<Int>>()
+        for (k in parts) if (k.none { it in used }) {
+            chosen += k
+            used += k
+        }
+        if (used.size != byOrder.size || chosen.size < 2) return emptyList()
+        val texts = chosen.sortedBy { k -> k.minOf { byOrder.getValue(it).left } }.map { k ->
+            val (plain, math) = reads.getValue(k)
+            ReadOptions.rank(ReadOptions.interleave(plain, math)).firstOrNull() ?: return emptyList()
+        }
+        return listOf(texts.joinToString(""))
     }
 
     override fun read(strokes: List<Ink>, lineHeight: Float): List<String> {

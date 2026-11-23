@@ -787,7 +787,12 @@ object MathLayout {
                 return Level.SUP
             }
             // A decimal comma hangs a little below the line; it is not an index.
-            val comma = b.height < 0.35f * h && b.width < 0.6f * b.height && b.top > axis + 0.15f * h
+            // Measured on the symbol before it too (327,2 in a numerator, where the line's middle
+            // says little): short, thin, starting low on that symbol.
+            val comma = b.width < 0.6f * b.height && (
+                (b.height < 0.35f * h && b.top > axis + 0.15f * h) ||
+                    (Tune.commaRel > 0f && b.height < 0.4f * ref.height && b.height < 0.45f * h && b.top > ref.top + 0.7f * ref.height && b.bottom < ref.bottom + 0.3f * ref.height)
+                )
             if (small && !comma && b.height < Tune.subSize * h && max(b.width, b.height) >= 0.22f * h && b.top > axis + Tune.subTop * h && b.bottom > axis + Tune.subBottom * h) return Level.SUB
             // An index beside the symbol it belongs to (T₈₅₀, L₀): smaller than it, starting well
             // down it and reaching below its foot. The line's own middle can be wrong when much
@@ -1133,6 +1138,18 @@ object Tune {
 
     /** Above 0: an equation with another "=" close on its line is a link of a chain of working, not solved. */
     @JvmField var chains = 1f
+
+    /** Above 0: a decimal comma is also told by the digit before it (short, thin, low on it), not only by the line's middle. */
+    @JvmField var commaRel = 1f
+
+    /** Above 0: two dashes whose left ends start on one upright are the bars of an F (or E), not "=". */
+    @JvmField var letterBars = 1f
+
+    /** Above 0: a "<" or ">" at the end of a long line is an arrowhead (of an axis), not a sign. */
+    @JvmField var arrowHeads = 1f
+
+    /** Above 0: an inequality worked on with "=" after it (D ≥ ∛… = 6,2) is not solved; nor is a system with ∞ solutions shown. */
+    @JvmField var workedInequalities = 1f
 
     /** A dash at least this long (and three times as long as high) is a minus, not a dot (0: off). */
     @JvmField var shortMinus = 0.1f

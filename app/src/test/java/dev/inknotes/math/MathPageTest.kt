@@ -9,7 +9,7 @@ import org.junit.Test
 /** Layout tests on drawn-by-code strokes; the "reader" knows what each stroke was meant to be. */
 class MathPageTest {
 
-    private class Sheet {
+    internal class Sheet {
         val strokes = ArrayList<Ink>()
         val labels = HashMap<Ink, String>()
 
@@ -127,6 +127,89 @@ class MathPageTest {
         s.equals(200f, 112f)
         s.glyph("5", 226f, 100f)
         assertTrue(s.answers().none { !it.missing })
+    }
+
+    /** Runs [block] with a [Tune] switch set to [value], then puts it back. */
+    private fun <T> with(set: (Float) -> Unit, get: () -> Float, value: Float, block: () -> T): T {
+        val was = get()
+        set(value)
+        try {
+            return block()
+        } finally {
+            set(was)
+        }
+    }
+
+    @Test
+    fun theBarsOfAnFAreNotEquals() {
+        // 5 + 2F (as ΣS/F on the owner's page): the two bars of the F start on its stem; taken
+        // for "=" they gave a confident answer.
+        val s = Sheet()
+        s.glyph("5", 60f, 100f)
+        s.glyph("+", 80f, 106f, 12f, 12f)
+        s.glyph("2", 100f, 100f)
+        s.add(null, listOf(130f, 130f, 130f), listOf(98f, 110f, 124f))
+        s.dash(130f, 99f, 13f, null)
+        s.dash(130f, 109f, 11f, null)
+        assertTrue(s.answers().none { !it.missing })
+        val off = with({ Tune.letterBars = it }, { Tune.letterBars }, 0f) { s.answers().filter { !it.missing } }
+        assertEquals("without the rule the bars are an =", "7", off.joinToString { text(it) })
+    }
+
+    @Test
+    fun anArrowheadOfAnAxisIsNotASign() {
+        // ——> z: the head of an axis is no ">".
+        val s = Sheet()
+        s.add(null, listOf(0f, 100f, 200f), listOf(100f, 100f, 100f))
+        s.add(null, listOf(194f, 199f, 205f, 199f, 194f), listOf(92f, 96f, 100f, 104f, 108f))
+        s.glyph("z", 212f, 92f, 12f, 16f)
+        assertTrue(MathPage.findInequalities(s.strokes).isEmpty())
+        val off = with({ Tune.arrowHeads = it }, { Tune.arrowHeads }, 0f) { MathPage.findInequalities(s.strokes) }
+        assertEquals("without the rule it is a >", 1, off.size)
+    }
+
+    @Test
+    fun anInequalityWorkedOnIsNotSolved() {
+        // x > 3 = 3: the value is written already; the inequality is not solved.
+        val s = Sheet()
+        s.glyph("x", 100f, 104f, 14f, 16f)
+        s.add(null, listOf(122f, 128f, 134f, 128f, 122f), listOf(102f, 106f, 110f, 114f, 118f))
+        s.glyph("3", 144f, 98f)
+        s.equals(166f, 110f)
+        s.glyph("3", 192f, 98f)
+        assertTrue(s.answers().none { !it.missing && text(it).contains("∈") })
+        val off = with({ Tune.workedInequalities = it }, { Tune.workedInequalities }, 0f) { s.answers().filter { !it.missing && text(it).contains("∈") } }
+        assertEquals("without the rule it is solved", 1, off.size)
+    }
+
+    @Test
+    fun aSystemWithInfinitelyManySolutionsIsNotShown() {
+        // { x + y = 3 / x + y = 3: lines of values under a stem that looks like "{".
+        val s = Sheet()
+        s.tall(null, 90f, 66f, 100f, 12f) { t -> if (t < 0.5f) 1 - 2 * t * (1 - 0.0f) else 2 * t - 1 }
+        for (y in listOf(80f, 136f)) {
+            s.glyph("x", 110f, y, 14f, 16f)
+            s.glyph("+", 128f, y, 12f, 12f)
+            s.glyph("y", 146f, y, 14f, 22f)
+            s.equals(166f, y + 8f)
+            s.glyph("3", 190f, y - 4f)
+        }
+        assertTrue(s.answers().none { !it.missing && text(it).contains("∞") })
+    }
+
+    @Test
+    fun aDecimalCommaInANumeratorIsNoIndex() {
+        // 327,2 over 24,54: the comma starts low on the 7 before it and hangs a little below
+        // it; taken for an index (327₍,₎2) the numerator could not be read.
+        val s = Sheet()
+        s.glyph("327", 100f, 72f, 26f, 15f)
+        s.add(",", listOf(128f, 128f, 127.5f), listOf(84f, 87f, 89f))
+        s.glyph("2", 135f, 74f, 10f, 14f)
+        s.dash(98f, 93f, 50f)
+        s.glyph("24,54", 100f, 97f, 36f, 19f)
+        s.equals(156f, 93f)
+        // 327,2 / 24,54 = 40/3
+        assertTrue(text(s.answers().single()).startsWith("40/3"))
     }
 
     @Test

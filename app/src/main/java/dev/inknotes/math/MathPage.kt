@@ -499,6 +499,15 @@ object MathPage {
             val left = side(a, -1, anchors, rest, limit = null)
             val right = side(a, 1, anchors, rest, limit = null)
             if (left.isEmpty() || right.isEmpty() || left.size > MAX_SIDE || right.size > MAX_SIDE) continue
+            // Worked on further (D ≥ ∛(32·23,81/3,14) = 6,2): the writer has its value already,
+            // and a misread side (the 3 of the root lost) would be solved into nonsense.
+            if (Tune.workedInequalities > 0f && eqs.any { o ->
+                    abs(o.cy - a.cy) < 0.6f * max(a.h, o.h) &&
+                        (o.left - right.maxOf { it.right } in -0.5f * a.h..CHAIN_GAP * a.h || left.minOf { it.left } - o.right in -0.5f * a.h..CHAIN_GAP * a.h)
+                }) {
+                trace?.invoke("inequality worked on: skipped")
+                continue
+            }
             val l = read(left, a.h, a.cy, reader, Prefer.FIRST) ?: continue
             val r = read(right, a.h, a.cy, reader, Prefer.FIRST) ?: continue
             val env = envAt(ordered.count { it.cy < a.cy })
@@ -532,6 +541,17 @@ object MathPage {
             val vi = s.xs.indices.minBy { abs(s.xs[it] - vx) }
             val tol = 0.18f * s.height
             if (ink.any { o -> o !== s && o.xs.indices.any { k -> abs(o.xs[k] - s.xs[vi]) < tol && abs(o.ys[k] - s.ys[vi]) < tol } }) continue
+            // An arrowhead: a long line (an axis) runs up to its point from behind, between its
+            // arms (a fraction bar after a sign starts beyond the point instead).
+            if (Tune.arrowHeads > 0f) {
+                val vxp = s.xs[vi]
+                val vyp = s.ys[vi]
+                val reach = 1.0f * s.height
+                if (ink.any { o ->
+                        o !== s && max(o.width, o.height) > 3f * s.height && (if (less) o.cx > vxp else o.cx < vxp) &&
+                            o.xs.indices.any { k -> abs(o.xs[k] - vxp) < reach && abs(o.ys[k] - vyp) < 0.4f * s.height }
+                    }) continue
+            }
             val under = ink.firstOrNull { d ->
                 d !== s && d.isDash && d.width in 0.5f * s.width..1.8f * s.width && d.top > s.bottom - 0.15f * s.height &&
                     d.top - s.bottom < 0.6f * s.height && d.cx in s.left..s.right
@@ -651,7 +671,11 @@ object MathPage {
             return PageAnswer(brace.left, bottom + 0.25f * size + lines.size * perLine * size / 2, size, answer, error, steps = if (error) null else Steps.of(equations, env), fix = fix)
         }
         return try {
-            under(Calc.solve(equations, env), error = false)
+            val answer = Calc.solve(equations, env)
+            // Lines of values stacked under each other (F₂ = 118 см², J = 55962 см⁴) are no
+            // system, even when a letter's stem looks like "{": they give ∞ solutions.
+            if (Tune.workedInequalities > 0f && (answer as? Answer.Text)?.lines == listOf(tr("∞ решений", "∞ solutions"))) return null
+            under(answer, error = false)
         } catch (e: MathError) {
             under(Answer.Text(listOf(e.message ?: "?")), error = true)
         }
@@ -1306,6 +1330,12 @@ object MathPage {
                 trace?.invoke("  crossed = at ${a.cx.toInt()},${a.cy.toInt()}")
                 continue
             }
+            // The bars of an F or E (ΣS/F read "ΣS/=" gave a confident 55): both dashes start on
+            // the same upright stroke.
+            if (Tune.letterBars > 0f && letterBars(a, b, ink)) {
+                trace?.invoke("  letter bars = at ${a.cx.toInt()},${a.cy.toInt()}")
+                continue
+            }
             if (crowded) {
                 trace?.invoke("  crowded = at ${a.cx.toInt()},${a.cy.toInt()}")
                 continue
@@ -1328,6 +1358,23 @@ object MathPage {
             out += Equals(top, bottom, listOf(z))
         }
         return out
+    }
+
+    /**
+     * Whether one upright stroke (not a dash) touches the left ends of both [a] and [b], from the
+     * top dash down to the lower one: the stem of an F or E with its bars.
+     */
+    private fun letterBars(a: Ink, b: Ink, ink: List<Ink>): Boolean {
+        val gap = b.cy - a.cy
+        val tol = max(0.2f * max(a.width, b.width), 1.5f)
+        fun near(o: Ink, x: Float, y: Float) = o.xs.indices.any { k -> abs(o.xs[k] - x) < tol && abs(o.ys[k] - y) < tol }
+        fun leftEnd(d: Ink): Pair<Float, Float> = d.xs.indices.minBy { d.xs[it] }.let { d.xs[it] to d.ys[it] }
+        val (ax, ay) = leftEnd(a)
+        val (bx, by) = leftEnd(b)
+        return ink.any { o ->
+            o !== a && o !== b && !o.isDash && o.height > 0.9f * gap && o.width < 0.6f * max(a.width, b.width) &&
+                o.top < a.cy + 0.3f * gap && o.bottom > b.cy - 0.3f * gap && near(o, ax, ay) && near(o, bx, by)
+        }
     }
 
     /** Whether a stroke other than a dash crosses [d] away from its ends (the middle 70 %). */
