@@ -45,6 +45,13 @@ private class Topic(val title: String, val entries: List<Pair<String, String>>)
 
 private val TOPICS = listOf(
     Topic(
+        tr("Новое в 0.76", "What's new in 0.76"),
+        listOf(
+            tr("Цепочки вычислений", "Chains of working") to tr("Средняя часть цепочки (F = 118 + 2·40·0,1 = 126) больше не теряется из-за мелких единиц после «=». Запятая, касающаяся цифры (11,88), не склеивается с ней.", "The middle of a chain (F = 118 + 2·40·0,1 = 126) is no longer lost because of small units after the \"=\". A comma touching a digit (11,88) is not joined to it."),
+            tr("Углы в градусах", "Angles in degrees") to tr("Выражения с градусами (−149,6·cos 10°) считаются и при проверке записанного результата.", "Expressions with degrees (−149.6·cos 10°) are computed when a written result is checked too."),
+        ),
+    ),
+    Topic(
         tr("Новое в 0.75", "What's new in 0.75"),
         listOf(
             tr("Корни", "Roots") to tr("Длинный плоский знак корня больше не принимается за черту дроби: √(325² + 38²) считается. Показатель, написанный перед корнем без «галочки» (∛), берётся корнем, а не степенью буквы перед ним. Запятые в числах под корнем остаются под корнем.", "A long flat root sign is no longer taken for a fraction bar: √(325² + 38²) is computed. A degree written before a root without a tick (∛) belongs to the root, not as an exponent to the letter before it. Commas in numbers under a root stay under it."),
