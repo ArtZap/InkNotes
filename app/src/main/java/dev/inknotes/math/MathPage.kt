@@ -867,9 +867,14 @@ object MathPage {
         if (eqs.isEmpty()) return emptyList()
         val rest = ink.filter { s -> eqs.none { s === it.top || s === it.bottom || s in it.extra } }
         for (eq in eqs) eq.h = lineHeight(eq, rest)
+        val ineqs = runCatching { findInequalities(ink) }.getOrDefault(emptyList())
+        for ((a, _) in ineqs) if (a.h <= 0f) a.h = lineHeight(a, rest)
         val out = ArrayList<Equality>()
         for (eq in eqs) {
-            val left = side(eq, -1, eqs, rest, limit = null)
+            // An inequality sign before it on the line (D ≥ ∛… = 6,24) bounds the left side.
+            val signs = ineqs.filter { (a, _) -> abs(a.cy - eq.cy) < 0.6f * max(a.h, eq.h) && a.right <= eq.left }
+            val signEdge = signs.maxOfOrNull { it.first.right }
+            val left = side(eq, -1, eqs, rest, limit = null).filter { signEdge == null || it.cx > signEdge }
             val right = side(eq, 1, eqs, rest, limit = null)
             if (left.isEmpty() || right.isEmpty()) continue
             fun value(side: List<Ink>, unitsAfter: Boolean): Pair<Double?, String> {

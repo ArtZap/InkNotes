@@ -946,7 +946,12 @@ object MathLayout {
             val found = pool.filter {
                 it !== r && it is G && !it.glyph.isDash && it.box.height < 0.6f * rb.height && it.box.height < 0.8f * h &&
                     it.box.left > rb.left - 0.4f * h && it.box.right > rb.left + 0.05f * rb.width && it.box.cx < rb.left + Tune.degreeRight * rb.width &&
-                    it.box.bottom < rb.top + Tune.degreeBottom * rb.height && it.box.bottom > rb.top + Tune.degreeTop * rb.height
+                    it.box.bottom < rb.top + Tune.degreeBottom * rb.height && it.box.bottom > rb.top + Tune.degreeTop * rb.height ||
+                    // written wholly before a root with no tick (∛ as a tall bracket with a bar):
+                    // small, right at its left edge, in its upper part
+                    Tune.degreeBefore > 0f && it !== r && it is G && !it.glyph.isDash && it.box.height < 0.75f * h && it.box.height < 0.4f * rb.height &&
+                    it.box.right in rb.left - 0.3f * h..rb.left + 0.05f * rb.width && it.box.left > rb.left - 1.2f * h &&
+                    it.box.bottom < rb.top + 0.65f * rb.height && it.box.top > rb.top
             }
             // One short number or letter, not a whole term written before the root.
             return if (found.size in 1..2 && found.maxOf { it.box.right } - found.minOf { it.box.left } < 1.2f * h) found else emptyList()
@@ -1174,6 +1179,9 @@ object Tune {
 
     /** Above 0: a stroke shaped as a root is no fraction bar, however flat. */
     @JvmField var rootNotBar = 1f
+
+    /** Above 0: a small symbol right before a root, in its upper part, is the root's degree (∛). */
+    @JvmField var degreeBefore = 1f
 
     /** Above 0: two dashes whose left ends start on one upright are the bars of an F (or E), not "=". */
     @JvmField var letterBars = 1f
