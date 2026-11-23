@@ -712,6 +712,15 @@ object MathPage {
         shift: MathLayout.Shift = MathLayout.Shift.NONE,
     ): Expr? = readings(strokes, h, axis, reader, prefer, known, shift = shift).firstOrNull()
 
+    /** Angles written in degrees (cos 10°) as radians, for a value: −149,6·cos 10°. */
+    private fun inRadians(e: Expr): Expr = when (e) {
+        is Expr.Fn -> if (e.name in Angles.UNITS && e.args.size == 1) Angles.radians(inRadians(e.args[0])) else Expr.Fn(e.name, e.args.map(::inRadians))
+        is Expr.Add -> Expr.Add(e.terms.map(::inRadians))
+        is Expr.Mul -> Expr.Mul(e.factors.map(::inRadians))
+        is Expr.Pow -> Expr.Pow(inRadians(e.base), inRadians(e.exp))
+        else -> e
+    }
+
     /** The height of a side's own symbols: three in four of its strokes (not dashes) are no taller. */
     private fun sideHeight(strokes: List<Ink>): Float {
         val heights = strokes.filter { !it.isDash }.map { it.height }.sorted()
@@ -912,7 +921,7 @@ object MathPage {
                     e0.factors.drop(1).all { it is Expr.Sym || (it is Expr.Pow && it.base is Expr.Sym) }
                 ) e0.factors.first() else e0
                 if (Algebra.freeVars(e).any { it !in Algebra.CONSTANTS }) return null to text
-                val v = (runCatching { Numeric.eval(e) }.getOrNull() as? Scalar)?.v?.takeIf { it.isFinite() }
+                val v = (runCatching { Numeric.eval(inRadians(e)) }.getOrNull() as? Scalar)?.v?.takeIf { it.isFinite() }
                 return v to text
             }
             val (lv, lt) = value(left, unitsAfter = false)

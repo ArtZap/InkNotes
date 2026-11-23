@@ -132,8 +132,6 @@ object Numeric {
         }
         if (a.size != 1 && name != "log" && name != "max" && name != "min") throw MathError(tr("$name: аргументы", "$name: arguments"))
         return when (name) {
-            // an angle written in degrees (30°, 6°40′8″), in radians as the functions take it
-            "deg", "dms" -> x * Math.PI / 180
             "sin" -> Math.sin(x)
             "cos" -> Math.cos(x)
             "tan" -> { domain(abs(Math.cos(x)) > 1e-15); Math.tan(x) }
