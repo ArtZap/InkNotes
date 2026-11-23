@@ -386,7 +386,13 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
     private val laser = Laser(resources.displayMetrics.density)
     private val inProgressView = InProgressStrokesView(context).apply { textureBitmapStore = InkTextures.delegate }
     // Made again for each line: what it learnt from another line (or a palm) does not carry over.
-    private var predictor = MotionEventPredictor.newInstance(this)
+    private var predictor = newPredictor()
+
+    /**
+     * Null where it cannot be made: on Android 11+ it asks the view's display, which a view made
+     * outside a window has none of (the device tests); the line is then drawn without a guess ahead.
+     */
+    private fun newPredictor(): MotionEventPredictor? = runCatching { MotionEventPredictor.newInstance(this) }.getOrNull()
 
     /** When the pen last left the screen ([MotionEvent.getEventTime]); a palm comes down right after. */
     private var penUpAt = Long.MIN_VALUE / 2
@@ -1797,8 +1803,8 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
     private fun startDraw(e: MotionEvent, index: Int) {
         if (doc(activePage) == null) return
         requestUnbufferedDispatch(e)
-        predictor = MotionEventPredictor.newInstance(this)
-        if (e.pointerCount == 1) predictor.record(e)
+        predictor = newPredictor()
+        if (e.pointerCount == 1) predictor?.record(e)
         val (brush, wet) = newWet(activePage)
         activePointerId = e.getPointerId(index)
         val id = inProgressView.startStroke(e, activePointerId, brush, viewToPageMatrix(activePage), Matrix())
@@ -1879,8 +1885,8 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         // ahead: the predictor takes all pointers of an event and its guess for the pen could
         // jump towards the hand: the line jerked and left a stray vertical piece.
         val predicted = if (e.pointerCount == 1) {
-            predictor.record(e)
-            predictor.predict()?.let { p -> if (plausible(p, e, index)) p else { p.recycle(); null } }
+            predictor?.record(e)
+            predictor?.predict()?.let { p -> if (plausible(p, e, index)) p else { p.recycle(); null } }
         } else null
         try {
             inProgressView.addToStroke(e, activePointerId, id, predicted)
