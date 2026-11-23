@@ -876,7 +876,9 @@ object MathLayout {
         private fun fractions(pool: MutableList<Item>): MutableList<Item> {
             val inks = pool.filterIsInstance<G>().flatMap { it.glyph.strokes }
             val bars = pool.filterIsInstance<G>().filter {
-                it.glyph.isDash && (it.box.width >= Tune.barWidth * h || isBar(it.glyph.strokes[0], inks, h))
+                it.glyph.isDash && (it.box.width >= Tune.barWidth * h || isBar(it.glyph.strokes[0], inks, h)) &&
+                    // a long low √ (its bar over 325² + 38²) is as flat as a fraction bar: it is the root
+                    !(Tune.rootNotBar > 0f && it.glyph.strokes.size == 1 && isRadical(it.glyph.strokes[0], h))
             }.sortedByDescending { it.box.width }
             for (bar in bars) {
                 if (bar !in pool) continue
@@ -1169,6 +1171,9 @@ object Tune {
 
     /** Above 0: a decimal comma between two digits of a side may be a long slanting tick, up to 0.55 of a line. */
     @JvmField var longCommas = 1f
+
+    /** Above 0: a stroke shaped as a root is no fraction bar, however flat. */
+    @JvmField var rootNotBar = 1f
 
     /** Above 0: two dashes whose left ends start on one upright are the bars of an F (or E), not "=". */
     @JvmField var letterBars = 1f
