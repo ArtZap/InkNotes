@@ -45,6 +45,12 @@ private class Topic(val title: String, val entries: List<Pair<String, String>>)
 
 private val TOPICS = listOf(
     Topic(
+        tr("Новое в 0.75", "What's new in 0.75"),
+        listOf(
+            tr("Корни", "Roots") to tr("Длинный плоский знак корня больше не принимается за черту дроби: √(325² + 38²) считается. Показатель, написанный перед корнем без «галочки» (∛), берётся корнем, а не степенью буквы перед ним. Запятые в числах под корнем остаются под корнем.", "A long flat root sign is no longer taken for a fraction bar: √(325² + 38²) is computed. A degree written before a root without a tick (∛) belongs to the root, not as an exponent to the letter before it. Commas in numbers under a root stay under it."),
+        ),
+    ),
+    Topic(
         tr("Новое в 0.74", "What's new in 0.74"),
         listOf(
             tr("Запятая любой формы", "A decimal comma of any shape") to tr("Длинная косая запятая (0,1) и запятая, заходящая под цифру, больше не теряются и не становятся индексом: 2·40·0,1 = 8, а не 80; −0,1169 читается как число.", "A long slanting comma (0,1) or one tucked under the digit is no longer lost or taken for an index: 2·40·0,1 = 8, not 80; −0,1169 reads as a number."),

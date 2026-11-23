@@ -988,7 +988,9 @@ object MathLayout {
                 val start = min(tickBottomX(r.glyph) ?: (rb.left + 0.25f * rb.width), rb.left + 0.25f * rb.width)
                 val inner = pool.filter {
                     it !== r && it !in degree && it.box.cx > start && it.box.cx < rb.right + 0.1f * h &&
-                        it.box.cy > rb.top && it.box.cy < rb.bottom + 0.2f * h
+                        it.box.cy > rb.top && (it.box.cy < rb.bottom + 0.2f * h ||
+                            // a decimal comma hanging under the root's foot (√(133,3² + …))
+                            Tune.rootNotBar > 0f && max(it.box.width, it.box.height) < 0.5f * h && it.box.top < rb.bottom + 0.15f * h)
                 }
                 if (inner.isEmpty()) continue
                 pool.removeAll(inner.toSet() + degree + r)
