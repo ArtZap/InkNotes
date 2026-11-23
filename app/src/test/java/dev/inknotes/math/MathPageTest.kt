@@ -213,6 +213,21 @@ class MathPageTest {
     }
 
     @Test
+    fun aLongDecimalCommaHangingBelowIsNoIndex() {
+        // 0,5 + 1 with the comma a long tick hanging well below the 0 (−0,1169 on the owner's
+        // page read −o₁·1169): the comma is no index.
+        val s = Sheet()
+        s.glyph("0", 100f, 100f, 10f, 13f)
+        s.add(",", listOf(107f, 106f, 105f), listOf(110f, 113f, 116f))
+        s.glyph("5", 112f, 100f, 10f, 13f)
+        s.glyph("+", 128f, 102f, 10f, 10f)
+        s.glyph("1", 144f, 100f, 4f, 13f)
+        s.equals(158f, 106f)
+        val a = s.answers().single { !it.missing }
+        assertTrue(text(a), text(a) == "3/2" || text(a) == "1,5")
+    }
+
+    @Test
     fun aDecimalCommaUnderADenominatorIsKept() {
         // 1/2,5 = 0,4: the comma hangs under the foot of the denominator's digits.
         val s = Sheet()

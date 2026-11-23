@@ -640,7 +640,7 @@ object MathLayout {
                 ) {
                     Level.BASE
                 } else {
-                    level(b, ref, ax)
+                    level(b, ref, ax, tick = item.glyph.strokes.size == 1 && straight(item.glyph.strokes[0], 0.2f))
                 }
                     afterComma = r0 != null && !refStructure && level == Level.BASE && b.height < 0.45f * r0.height &&
                     b.width < 0.8f * max(b.height, 0.5f * b.width + 0.01f) && b.top > r0.top + 0.6f * r0.height && b.left > r0.cx
@@ -780,7 +780,7 @@ object MathLayout {
                 (f.num + f.den).all { it.box.height < 0.8f * size }
         }
 
-        private fun level(b: Box, ref: Box?, axis: Float): Level {
+        private fun level(b: Box, ref: Box?, axis: Float, tick: Boolean = false): Level {
             if (ref == null) return Level.BASE
             // The writer's own way of placing exponents and indexes, where it is clear.
             val dashLike = b.width >= 2.2f * max(b.height, 0.5f)
@@ -804,7 +804,10 @@ object MathLayout {
             // says little): short, thin, starting low on that symbol.
             val comma = b.width < 0.6f * b.height && (
                 (b.height < 0.35f * h && b.top > axis + 0.15f * h) ||
-                    (Tune.commaRel > 0f && b.height < 0.4f * ref.height && b.height < 0.45f * h && b.top > ref.top + 0.7f * ref.height && b.bottom < ref.bottom + 0.3f * ref.height)
+                    (Tune.commaRel > 0f && b.height < 0.4f * ref.height && b.height < 0.45f * h && b.top > ref.top + 0.7f * ref.height && b.bottom < ref.bottom + 0.3f * ref.height) ||
+                    // a longer one (−0,1169) when it clearly hangs below the digit's foot
+                    (Tune.longCommas > 0f && tick && b.height < 0.5f * ref.height && b.height < 0.5f * h && b.top > ref.top + 0.7f * ref.height &&
+                        b.bottom > ref.bottom + 0.1f * ref.height && b.bottom < ref.bottom + 0.6f * ref.height)
                 )
             if (small && !comma && b.height < Tune.subSize * h && max(b.width, b.height) >= 0.22f * h && b.top > axis + Tune.subTop * h && b.bottom > axis + Tune.subBottom * h) return Level.SUB
             // An index beside the symbol it belongs to (T₈₅₀, L₀): smaller than it, starting well
