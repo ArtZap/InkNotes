@@ -47,7 +47,7 @@ private val TOPICS = listOf(
     Topic(
         tr("Новое в 0.76", "What's new in 0.76"),
         listOf(
-            tr("Цепочки вычислений", "Chains of working") to tr("Средняя часть цепочки (F = 118 + 2·40·0,1 = 126) больше не теряется из-за мелких единиц после «=». Запятая, касающаяся цифры (11,88), не склеивается с ней.", "The middle of a chain (F = 118 + 2·40·0,1 = 126) is no longer lost because of small units after the \"=\". A comma touching a digit (11,88) is not joined to it."),
+            tr("Цепочки вычислений", "Chains of working") to tr("Средняя часть цепочки (F = 118 + 2·40·0,1 = 126) больше не теряется из-за мелких единиц после «=».", "The middle of a chain (F = 118 + 2·40·0,1 = 126) is no longer lost because of small units after the \"=\"."),
         ),
     ),
     Topic(

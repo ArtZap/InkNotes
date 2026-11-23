@@ -1206,7 +1206,7 @@ object Tune {
     @JvmField var sideHeight = 1f
 
     /** Above 0: a comma touching the digit before it, hanging under its right part, stays a symbol of its own. */
-    @JvmField var commaApart = 1f
+    @JvmField var commaApart = 0f
 
     /** Above 0: a hanging comma tick may slant, as wide as high (0,1), and still be no index. */
     @JvmField var commaSlant = 1f
