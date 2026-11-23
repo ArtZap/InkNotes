@@ -1204,7 +1204,7 @@ object Tune {
     @JvmField var commaApart = 1f
 
     /** Above 0: a hanging comma tick may slant, as wide as high (0,1), and still be no index. */
-    @JvmField var commaSlant = 1f
+    @JvmField var commaSlant = 0f
 
     /** Above 0: two dashes whose left ends start on one upright are the bars of an F (or E), not "=". */
     @JvmField var letterBars = 1f
