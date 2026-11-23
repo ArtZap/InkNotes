@@ -45,6 +45,12 @@ private class Topic(val title: String, val entries: List<Pair<String, String>>)
 
 private val TOPICS = listOf(
     Topic(
+        tr("Новое в 0.73", "What's new in 0.73"),
+        listOf(
+            tr("Числа с запятой", "Numbers with a decimal comma") to tr("Цифры после десятичной запятой больше не уходят в степень: 19,63 читается как 19,63, а не 19⁶³. На страницах РГР 7 верно читается заметно больше чисел.", "Digits after a decimal comma no longer go up into an exponent: 19,63 reads as 19,63, not 19⁶³. Many more numbers on the RGR 7 pages read right."),
+        ),
+    ),
+    Topic(
         tr("Новое в 0.72", "What's new in 0.72"),
         listOf(
             tr("Выделенное двигается сразу", "A selection moves at once") to tr("Выделенное пером снова сразу берётся пальцем: правило о ладони больше не отбрасывает такое касание. Ладонью считается только касание мимо выделения и линейки в первые 0,5 с после пера.", "What the pen has selected is taken by a finger at once again: the palm rule no longer drops that touch. Only a touch away from the selection and the ruler within 0.5 s after the pen counts as the palm."),
