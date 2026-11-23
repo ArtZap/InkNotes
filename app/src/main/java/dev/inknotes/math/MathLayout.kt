@@ -811,7 +811,7 @@ object MathLayout {
             // Measured on the symbol before it too (327,2 in a numerator, where the line's middle
             // says little): short, thin, starting low on that symbol.
             // a tick may slant: as wide as high
-            val slant = if (Tune.commaApart > 0f) 1.0f else 0.6f
+            val slant = if (Tune.commaSlant > 0f) 1.0f else 0.6f
             val comma = (
                 b.width < 0.6f * b.height && (
                     (b.height < 0.35f * h && b.top > axis + 0.15f * h) ||
@@ -1202,6 +1202,9 @@ object Tune {
 
     /** Above 0: a comma touching the digit before it, hanging under its right part, stays a symbol of its own. */
     @JvmField var commaApart = 1f
+
+    /** Above 0: a hanging comma tick may slant, as wide as high (0,1), and still be no index. */
+    @JvmField var commaSlant = 1f
 
     /** Above 0: two dashes whose left ends start on one upright are the bars of an F (or E), not "=". */
     @JvmField var letterBars = 1f
