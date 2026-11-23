@@ -1698,6 +1698,7 @@ private fun SelectionOptions(c: EditorController, onPickColor: () -> Unit, onHat
         IconAction(InkIcons.TableAddColumn, tr("Добавить столбец справа", "Add a column on the right"), { c.addToTable(row = false) })
         IconAction(InkIcons.TableRemoveRow, tr("Убрать последнюю строку", "Remove the last row"), { c.removeFromTable(row = true) })
         IconAction(InkIcons.TableRemoveColumn, tr("Убрать последний столбец", "Remove the last column"), { c.removeFromTable(row = false) })
+        TextButton(onClick = { c.tableTotals() }) { Text(tr("Итоги", "Totals")) }
     }
     if (c.selectedFills > 0) IconAction(InkIcons.Tune, tr("Штриховка выделенного", "Hatching of the selection"), onHatchSettings)
     IconAction(InkIcons.FlipHorizontal, tr("Отразить слева направо", "Flip left to right"), { c.flipSelection(horizontal = true) })

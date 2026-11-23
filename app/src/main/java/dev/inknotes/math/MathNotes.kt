@@ -154,6 +154,17 @@ class MathNotes(
         }.onFailure { onResult(null) }
     }
 
+    /** Sums and averages of a table's rows and columns ([TableSums]), on the main thread (null: not read). */
+    fun tableSums(rowLines: List<Float>, colLines: List<Float>, strokes: List<PageStroke>, onResult: (TableSums.Result?) -> Unit) {
+        if (state != State.Ready) return onResult(null)
+        runCatching {
+            exec.execute {
+                val result = runCatching { TableSums.compute(rowLines, colLines, toInk(strokes), reader) }.getOrNull()
+                main.post { onResult(result) }
+            }
+        }.onFailure { onResult(null) }
+    }
+
     /**
      * A wrong answer as a test case: the page's ink, every run the reader was asked about with
      * what it read, the answer at ([x], [y]) and the one [expected]. JSON, read back by

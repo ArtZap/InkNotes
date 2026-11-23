@@ -1198,6 +1198,12 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
     /** True when the selection is the lines of a table (see [Tables]). */
     fun selectionIsTable(): Boolean = selected.isNotEmpty() && Tables.grid(selected) != null
 
+    /** The selected table, what is written in its cells and its page; null when the selection is not a table. */
+    fun selectedTable(): Triple<Tables.Grid, List<PageStroke>, Int>? {
+        val grid = Tables.grid(selected) ?: return null
+        return Triple(grid, grid.content.filterIsInstance<PageStroke>().filter { it.kind.isInk }, selectionPage)
+    }
+
     /** Adds a row under the selected table ([row]) or a column on its right. */
     fun addToTable(row: Boolean) {
         val doc = doc(selectionPage) ?: return
