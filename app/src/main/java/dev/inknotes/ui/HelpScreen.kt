@@ -45,6 +45,13 @@ private class Topic(val title: String, val entries: List<Pair<String, String>>)
 
 private val TOPICS = listOf(
     Topic(
+        tr("Новое в 0.74", "What's new in 0.74"),
+        listOf(
+            tr("Запятая любой формы", "A decimal comma of any shape") to tr("Длинная косая запятая (0,1) и запятая, заходящая под цифру, больше не теряются и не становятся индексом: 2·40·0,1 = 8, а не 80; −0,1169 читается как число.", "A long slanting comma (0,1) or one tucked under the digit is no longer lost or taken for an index: 2·40·0,1 = 8, not 80; −0,1169 reads as a number."),
+            tr("Чертёж рядом с формулой", "A drawing beside a formula") to tr("Длинные наклонные линии чертежа рядом с формулой больше не затягивают чертёж в её прочтение.", "Long slanted lines of a drawing beside a formula no longer pull the drawing into its reading."),
+        ),
+    ),
+    Topic(
         tr("Новое в 0.73", "What's new in 0.73"),
         listOf(
             tr("Числа с запятой", "Numbers with a decimal comma") to tr("Цифры после десятичной запятой больше не уходят в степень: 19,63 читается как 19,63, а не 19⁶³. На страницах РГР 7 верно читается заметно больше чисел.", "Digits after a decimal comma no longer go up into an exponent: 19,63 reads as 19,63, not 19⁶³. Many more numbers on the RGR 7 pages read right."),
