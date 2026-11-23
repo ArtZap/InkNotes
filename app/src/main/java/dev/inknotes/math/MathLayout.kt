@@ -212,6 +212,12 @@ object MathLayout {
                 iDot(a, b, h) || iDot(b, a, h) ||
                 // an x written as two arcs back to back, ")(" touching in the middle
                 arcsOfX(a, b, h) || arcsOfX(b, a, h)
+            // A decimal comma touching the digit before it (11,88 with the comma under the 8):
+            // a short straight tick hanging under its right part is not part of it; joined,
+            // the digit stood tall as a brace.
+            fun commaUnder(c: Ink, d: Ink) = Tune.commaApart > 0f && max(c.width, c.height) < 0.45f * h && c.height < 0.45f * d.height &&
+                c.top > d.bottom - 0.2f * d.height && c.bottom > d.bottom + 0.1f * h && c.cx > d.cx && straight(c, 0.2f)
+            if (joined && (commaUnder(a, b) || commaUnder(b, a))) continue
             if (joined) parent[find(i)] = find(j)
         }
         return strokes.indices.groupBy(::find).values.map { idx -> G(Glyph(idx.map { strokes[it] })) }
@@ -1186,6 +1192,12 @@ object Tune {
 
     /** Above 0: a small symbol right before a root, in its upper part, is the root's degree (∛). */
     @JvmField var degreeBefore = 1f
+
+    /** Above 0: a side whose layout fails at the line's height is laid out again at its own symbols' height. */
+    @JvmField var sideHeight = 1f
+
+    /** Above 0: a comma touching the digit before it, hanging under its right part, stays a symbol of its own. */
+    @JvmField var commaApart = 1f
 
     /** Above 0: two dashes whose left ends start on one upright are the bars of an F (or E), not "=". */
     @JvmField var letterBars = 1f

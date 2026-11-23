@@ -712,6 +712,12 @@ object MathPage {
         shift: MathLayout.Shift = MathLayout.Shift.NONE,
     ): Expr? = readings(strokes, h, axis, reader, prefer, known, shift = shift).firstOrNull()
 
+    /** The height of a side's own symbols: three in four of its strokes (not dashes) are no taller. */
+    private fun sideHeight(strokes: List<Ink>): Float {
+        val heights = strokes.filter { !it.isDash }.map { it.height }.sorted()
+        return max(heights.getOrNull(heights.size * 3 / 4) ?: 0f, MIN_H)
+    }
+
     /** Distinct readings that parse, best first (at most [MAX_READINGS]). */
     fun readings(
         strokes: List<Ink>,
@@ -729,7 +735,16 @@ object MathPage {
             MathLayout.formula(strokes, h, axis, shift)
         } catch (e: MathError) {
             trace?.invoke("  layout failed: ${e.message}")
-            return emptyList()
+            // The line's height can be taken from small symbols beside (126 см² after the
+            // "="): then the 1s of 118 stand tall as braces. Again with the side's own height.
+            val own = sideHeight(strokes)
+            if (Tune.sideHeight <= 0f || own < 1.1f * h) return emptyList()
+            try {
+                MathLayout.formula(strokes, own, axis, shift).also { trace?.invoke("  layout again with its own height $own") }
+            } catch (e2: MathError) {
+                trace?.invoke("  layout failed again: ${e2.message}")
+                return emptyList()
+            }
         }
         // Read again with moved thresholds only to see whether the answer changes: when the
         // layout came out the same, so would the answer, and nothing is read.
@@ -854,7 +869,19 @@ object MathPage {
     }
 
     /** A written equality "left = right" whose two sides are numbers: what they read as ([left], [right]: null when not a number). */
-    class Equality(val x: Float, val y: Float, val left: Double?, val right: Double?, val leftText: String, val rightText: String)
+    class Equality(
+        val x: Float,
+        val y: Float,
+        val left: Double?,
+        val right: Double?,
+        val leftText: String,
+        val rightText: String,
+        // the strokes of each side, the line's height and middle (for the benches)
+        val leftInk: List<Ink> = emptyList(),
+        val rightInk: List<Ink> = emptyList(),
+        val h: Float = 0f,
+        val axis: Float = 0f,
+    )
 
     /**
      * Every "=" on the page with what is written on both sides read as numbers: for checking
@@ -907,7 +934,7 @@ object MathPage {
                     reach = max(reach, sorted[k].right)
                 }
             }
-            out += Equality(eq.left, eq.cy, lv, rv, lt, rt)
+            out += Equality(eq.left, eq.cy, lv, rv, lt, rt, left, right, eq.h, eq.cy)
         }
         return out
     }
@@ -942,7 +969,16 @@ object MathPage {
      * tried gives it. The correction window starts from these, so that it shows what the
      * page read, whichever way of reading (numbers, letters, a graph) the page took.
      */
-    fun choiceFor(strokes: List<Ink>, h: Float, axis: Float, reader: RunReader, target: Expr, known: (String) -> Boolean = { false }): List<String?>? {
+    fun choiceFor(
+        strokes: List<Ink>,
+        h: Float,
+        axis: Float,
+        reader: RunReader,
+        target: Expr,
+        known: (String) -> Boolean = { false },
+        // in place of equal to [target] (the benches: a value written by hand)
+        accept: ((Expr) -> Boolean)? = null,
+    ): List<String?>? {
         val pieces = runCatching { MathLayout.formula(strokes, h, axis) }.getOrNull() ?: return null
         val slots = pieces.map { p ->
             when (p) {
@@ -963,7 +999,10 @@ object MathPage {
         }
         for (choice in tries.take(MAX_CHOICE_TRIES)) {
             val text = choice.joinToString("")
-            if (integralVariants(text).flatMap { listOf(it) + bracketFixes(it) }.any { v -> runCatching { Parser.parse(v) }.getOrNull() == target }) {
+            if (integralVariants(text).flatMap { listOf(it) + bracketFixes(it) }.any { v ->
+                    runCatching { Parser.parse(v) }.getOrNull()?.let { e -> if (accept != null) accept(e) else e == target } == true
+                }
+            ) {
                 return pieces.indices.map { i -> if (pieces[i] is Piece.Hole || choice[i] != (pieces[i] as Piece.Text).s) choice[i] else null }
             }
         }
