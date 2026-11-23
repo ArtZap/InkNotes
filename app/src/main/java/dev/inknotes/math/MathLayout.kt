@@ -1201,7 +1201,7 @@ object Tune {
     @JvmField var sideHeight = 1f
 
     /** Above 0: a comma touching the digit before it, hanging under its right part, stays a symbol of its own. */
-    @JvmField var commaApart = 1f
+    @JvmField var commaApart = 0f
 
     /** Above 0: two dashes whose left ends start on one upright are the bars of an F (or E), not "=". */
     @JvmField var letterBars = 1f
