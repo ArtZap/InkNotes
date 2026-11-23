@@ -1198,7 +1198,7 @@ object Tune {
     @JvmField var degreeBefore = 1f
 
     /** Above 0: a side whose layout fails at the line's height is laid out again at its own symbols' height. */
-    @JvmField var sideHeight = 1f
+    @JvmField var sideHeight = 0f
 
     /** Above 0: a comma touching the digit before it, hanging under its right part, stays a symbol of its own. */
     @JvmField var commaApart = 1f
