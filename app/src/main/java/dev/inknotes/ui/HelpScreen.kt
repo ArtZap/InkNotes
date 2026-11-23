@@ -47,6 +47,7 @@ private val TOPICS = listOf(
     Topic(
         tr("Новое в 0.76", "What's new in 0.76"),
         listOf(
+            tr("Длинная запятая", "A long comma") to tr("Запятая длинной галочкой под цифрой (1021,41; 2446,59) больше не приклеивается к цифре и не поднимает следующие цифры в степень.", "A comma drawn as a long tick under a digit (1021,41; 2446,59) is no longer joined to the digit or raises the digits after it into an exponent."),
             tr("Цепочки вычислений", "Chains of working") to tr("Средняя часть цепочки (F = 118 + 2·40·0,1 = 126) больше не теряется из-за мелких единиц после «=».", "The middle of a chain (F = 118 + 2·40·0,1 = 126) is no longer lost because of small units after the \"=\"."),
         ),
     ),
