@@ -827,7 +827,9 @@ object MathLayout {
             val comma = (
                 b.width < 0.6f * b.height && (
                     (b.height < 0.35f * h && b.top > axis + 0.15f * h) ||
-                        (Tune.commaRel > 0f && b.height < 0.4f * ref.height && b.height < 0.45f * h && b.top > ref.top + 0.7f * ref.height && b.bottom < ref.bottom + 0.3f * ref.height)
+                        (Tune.commaRel > 0f && b.height < 0.4f * ref.height && b.height < 0.45f * h && b.top > ref.top + 0.7f * ref.height && b.bottom < ref.bottom + 0.3f * ref.height) ||
+                        // or wholly under the digit's foot, a little longer
+                        (Tune.commaLow > 0f && b.height < 0.5f * ref.height && b.height < 0.45f * h && b.top > ref.bottom - 0.1f * ref.height && b.bottom < ref.bottom + 0.5f * ref.height)
                     )
                 ) ||
                 // a longer one (−0,1169), or slanting as a tick (0,1), when it clearly hangs below the digit's foot
@@ -1226,6 +1228,8 @@ object Tune {
     @JvmField var commaSlant = 1f
 
     /** How long a hanging comma tick may be, of the digit before it (1021,41: a 7 under a thin 14). */
+    /** A short comma may hang wholly below the number's foot (2446,59 under a fraction bar). */
+    @JvmField var commaLow = 1f
     @JvmField var longCommaSize = 0.55f
 
     /** How far below the digit's foot a comma tick may reach, of the digit (2446,59: 0.7). */
