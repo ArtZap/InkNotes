@@ -952,7 +952,11 @@ object MathLayout {
                     // A comma of the numerator hanging down across the bar (269,15 over 2183,6):
                     // small, begun above the bar, it is the numerator's, not the denominator's.
                     fun commaAcross(it: Item) = Tune.commaAcross > 0f && it.box.top < bb.cy && it.box.bottom <= bb.cy + (if (Tune.commaDeep > 0f) 0.35f else 0.15f) * h &&
-                        max(it.box.width, it.box.height) < 0.5f * h
+                        (max(it.box.width, it.box.height) < 0.5f * h ||
+                            // or a digit with its comma joined, the comma hanging through the bar (60, in 160,79)
+                            (Tune.digitCommaAcross > 0f && it is G && it.glyph.strokes.size >= 2 && it.box.cy < bb.cy - 0.2f * h &&
+                                it.glyph.strokes.count { s -> s.bottom > bb.cy } == 1 &&
+                                it.glyph.strokes.single { s -> s.bottom > bb.cy }.let { s -> max(s.width, s.height) < 0.5f * h && s.top < bb.cy }))
                     val cand = pool.filter {
                         it !== bar && it.box.cx in bb.left - 0.15f * h..bb.right + 0.15f * h && !across(it) &&
                             (if (up) it.box.bottom <= bb.cy + 0.15f * h || commaAcross(it) else it.box.top >= bb.cy - 0.15f * h && !commaAcross(it))
@@ -1281,6 +1285,8 @@ object Tune {
     @JvmField var otherCommas = 1f
     /** Such a comma may reach a third of a line below the bar. */
     @JvmField var commaDeep = 1f
+    /** A digit joined with its comma hanging through the bar is the numerator's too. */
+    @JvmField var digitCommaAcross = 1f
 
     /** Above 0: two dashes whose left ends start on one upright are the bars of an F (or E), not "=". */
     @JvmField var letterBars = 1f
