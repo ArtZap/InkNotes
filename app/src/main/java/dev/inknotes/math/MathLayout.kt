@@ -476,6 +476,11 @@ object MathLayout {
             val (top, bottom) = if (s.ys[0] < s.ys.last()) 0 to s.ys.lastIndex else s.ys.lastIndex to 0
             if (g.strokes.size == 1 && s.xs[top] - (midX - 0.5f * slope) > 0.3f * w && (midX + 0.5f * slope) - s.xs[bottom] > 0.12f * w) return '∫'
         }
+        // A digit with a comma hung under it is no bracket.
+        if (g.strokes.size == 2) {
+            val (small, big) = g.strokes.sortedBy { it.height }
+            if (small.height < 0.4f * big.height && small.top > big.bottom - 0.2f * big.height) return null
+        }
         if (b.height < TALL * h) {
             // Round brackets as tall as the digits: a narrow arc, both ends to one side.
             if (g.strokes.size != 1 || b.height < PAREN_MIN * h || b.width > 0.45f * b.height || verticalTurns(g.strokes[0]) != 0) return null
