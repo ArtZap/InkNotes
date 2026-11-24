@@ -1139,7 +1139,10 @@ object MathLayout {
             val rows = ArrayList<MutableList<Item>>()
             var bottom = -Float.MAX_VALUE
             for (it in sorted) {
-                if (rows.isEmpty() || it.box.top > bottom - 0.15f * h) {
+                // A comma hanging just under its row (−14,68 in brackets) is no row of its own.
+                val hanging = Tune.commaAcross > 0f && rows.isNotEmpty() && max(it.box.width, it.box.height) < 0.5f * h &&
+                    it.box.top < bottom + 0.3f * h && rows.last().any { o -> abs(o.box.cx - it.box.cx) < 1.5f * h }
+                if (rows.isEmpty() || it.box.top > bottom - 0.15f * h && !hanging) {
                     rows += mutableListOf(it)
                 } else {
                     rows.last() += it

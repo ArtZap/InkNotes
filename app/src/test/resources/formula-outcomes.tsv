@@ -182,7 +182,7 @@ CROHME2013_data/TrainINKML	layout	2009213-139-14	NONE
 CROHME2013_data/TrainINKML	layout	2009213-139-152	RIGHT
 CROHME2013_data/TrainINKML	layout	2009213-139-161	WRONG
 CROHME2013_data/TrainINKML	layout	2009213-139-178	RIGHT
-CROHME2013_data/TrainINKML	layout	2009213-139-179	NONE
+CROHME2013_data/TrainINKML	layout	2009213-139-179	RIGHT
 CROHME2013_data/TrainINKML	layout	2009213-139-18	RIGHT
 CROHME2013_data/TrainINKML	layout	2009213-139-183	WRONG
 CROHME2013_data/TrainINKML	layout	2009213-139-197	NONE
@@ -230,7 +230,7 @@ CROHME2013_data/TrainINKML	layout	200922-1017-148	RIGHT
 CROHME2013_data/TrainINKML	layout	200922-1017-149	RIGHT
 CROHME2013_data/TrainINKML	layout	200922-1017-151	RIGHT
 CROHME2013_data/TrainINKML	layout	200922-1017-159	RIGHT
-CROHME2013_data/TrainINKML	layout	200922-1017-176	NONE
+CROHME2013_data/TrainINKML	layout	200922-1017-176	RIGHT
 CROHME2013_data/TrainINKML	layout	200922-1017-18	RIGHT
 CROHME2013_data/TrainINKML	layout	200922-1017-26	RIGHT
 CROHME2013_data/TrainINKML	layout	200922-1017-3	RIGHT
@@ -1864,7 +1864,7 @@ CROHME2013_data/TrainINKML	layout	TrainData2_8_sub_20	RIGHT
 CROHME2013_data/TrainINKML	layout	TrainData2_8_sub_29	NONE
 CROHME2013_data/TrainINKML	layout	TrainData2_8_sub_33	NONE
 CROHME2013_data/TrainINKML	layout	TrainData2_8_sub_39	RIGHT
-CROHME2013_data/TrainINKML	layout	TrainData2_8_sub_61	WRONG
+CROHME2013_data/TrainINKML	layout	TrainData2_8_sub_61	RIGHT
 CROHME2013_data/TrainINKML	layout	TrainData2_8_sub_63	NONE
 CROHME2013_data/TrainINKML	layout	TrainData2_8_sub_71	NONE
 CROHME2013_data/TrainINKML	layout	TrainData2_8_sub_88	RIGHT
@@ -2858,8 +2858,8 @@ CROHME2013_data/TestINKMLGT	layout	123_em_391	NONE
 CROHME2013_data/TestINKMLGT	layout	124_em_405	WRONG
 CROHME2013_data/TestINKMLGT	layout	124_em_419	NONE
 CROHME2013_data/TestINKMLGT	layout	124_em_421	RIGHT
-CROHME2013_data/TestINKMLGT	layout	125_em_427	WRONG
-CROHME2013_data/TestINKMLGT	layout	125_em_429	NONE
+CROHME2013_data/TestINKMLGT	layout	125_em_427	NONE
+CROHME2013_data/TestINKMLGT	layout	125_em_429	RIGHT
 CROHME2013_data/TestINKMLGT	layout	125_em_436	RIGHT
 CROHME2013_data/TestINKMLGT	layout	125_em_437	RIGHT
 CROHME2013_data/TestINKMLGT	layout	125_em_442	RIGHT
@@ -3129,7 +3129,7 @@ CROHME2012_data/testDataGT	layout	formulaire049-equation063	RIGHT
 CROHME2012_data/testDataGT	layout	formulaire049-equation068	RIGHT
 CROHME2012_data/testDataGT	layout	formulaire050-equation006	RIGHT
 CROHME2012_data/testDataGT	layout	formulaire050-equation048	RIGHT
-CROHME2012_data/testDataGT	layout	formulaire050-equation061	NONE
+CROHME2012_data/testDataGT	layout	formulaire050-equation061	RIGHT
 CROHME2012_data/testDataGT	layout	formulaire050-equation073	WRONG
 CROHME2012_data/testDataGT	layout	formulaire051-equation021	RIGHT
 CROHME2012_data/testDataGT	layout	formulaire052-equation003	RIGHT
