@@ -919,11 +919,11 @@ object MathLayout {
                 fun stack(up: Boolean): List<Item> {
                     // A comma of the numerator hanging down across the bar (269,15 over 2183,6):
                     // small, begun above the bar, it is the numerator's, not the denominator's.
-                    fun commaAcross(it: Item) = Tune.commaAcross > 0f && it.box.top < bb.cy && it.box.bottom <= bb.cy + 0.15f * h &&
+                    fun commaAcross(it: Item) = Tune.commaAcross > 0f && it.box.top < bb.cy && it.box.bottom <= bb.cy + (if (Tune.commaDeep > 0f) 0.35f else 0.15f) * h &&
                         max(it.box.width, it.box.height) < 0.5f * h
                     val cand = pool.filter {
                         it !== bar && it.box.cx in bb.left - 0.15f * h..bb.right + 0.15f * h && !across(it) &&
-                            (if (up) it.box.bottom <= bb.cy + 0.15f * h else it.box.top >= bb.cy - 0.15f * h && !commaAcross(it))
+                            (if (up) it.box.bottom <= bb.cy + 0.15f * h || commaAcross(it) else it.box.top >= bb.cy - 0.15f * h && !commaAcross(it))
                     }
                     val got = ArrayList<Item>()
                     var grew = true
@@ -1237,6 +1237,8 @@ object Tune {
 
     /** Above 0: a small stroke begun above a fraction bar and hanging across it is the numerator's (its comma). */
     @JvmField var commaAcross = 1f
+    /** Such a comma may reach a third of a line below the bar. */
+    @JvmField var commaDeep = 1f
 
     /** Above 0: two dashes whose left ends start on one upright are the bars of an F (or E), not "=". */
     @JvmField var letterBars = 1f
