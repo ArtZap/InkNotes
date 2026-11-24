@@ -1720,7 +1720,7 @@ object MathPage {
     private val GRAPH_LETTERS = setOf("y", "z")
 
     private const val MAX_STROKE = 600f
-    private const val MIN_EQ_WIDTH = 3.5f
+    private const val MIN_EQ_WIDTH = 3.0f
     private const val MAX_EQ_WIDTH = 160f
     private const val MIN_H = 8f
 
