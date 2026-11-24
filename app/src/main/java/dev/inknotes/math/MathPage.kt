@@ -1670,7 +1670,9 @@ object MathPage {
                     (m.height > MathLayout.TALL * h && c.cy in m.top - 0.7f * h..m.bottom + 0.7f * h && c.cx in m.left - 0.3f * h..maxX &&
                         c !in otherLine && MathLayout.tallShape(MathLayout.Glyph(listOf(m)), h).let { it != null && it != '}' }) ||
                         (m.isDash && m.width > 0.45f * h && c.cx in m.left - 0.15f * h..m.right + 0.15f * h &&
-                            max(c.top - m.bottom, m.top - c.bottom) < 0.8f * h && c !in otherLine) ||
+                            max(c.top - m.bottom, m.top - c.bottom) < 0.8f * h && c !in otherLine &&
+                            // a root with its long bar holds what is under the bar, not the line below its foot
+                            (Tune.rootFoot <= 0f || m.height < 0.6f * h || c.top < m.bottom)) ||
                         // an exponent; not the foot of the line above (dense notes: its denominators)
                         (c.left in m.right - 0.3f * h..m.right + 0.8f * h && c.bottom in m.top - 0.5f * h..m.cy + 0.25f * h && c.height < 1.3f * h && c !in otherLine) ||
                         // the next or previous symbol of an exponent already taken (the − and 1 of ⁻¹)

@@ -1254,6 +1254,8 @@ object Tune {
 
     /** Above 0: a small stroke begun above a fraction bar and hanging across it is the numerator's (its comma). */
     @JvmField var commaAcross = 1f
+    /** A side does not take in the line under the foot of a root (MathPage.side). */
+    @JvmField var rootFoot = 1f
     /** The comma of a line above hanging into this one stays out of its sides (MathPage.side). */
     @JvmField var otherCommas = 1f
     /** Such a comma may reach a third of a line below the bar. */
