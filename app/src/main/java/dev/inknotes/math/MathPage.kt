@@ -1372,7 +1372,9 @@ object MathPage {
             val overlap = min(a.right, b.right) - max(a.left, b.left)
             if (overlap < 0.55f * min(a.width, b.width)) continue
             if (min(a.width, b.width) < 0.45f * w) continue
-            if (gap < 0.1f * w || gap > 0.85f * w || gap < max(a.height, b.height) * 0.6f) {
+            // A tiny "=" (lines 3–5 px) has its lines farther apart than they are long.
+            val tiny = w < 6f && max(a.height, b.height) < 0.35f * w && gap <= 1.2f * w
+            if (gap < 0.1f * w || (gap > 0.85f * w && !tiny) || gap < max(a.height, b.height) * 0.6f) {
                 if (gap < w) trace?.invoke("  pair at ${a.cx.toInt()},${a.cy.toInt()}: gap $gap w $w heights ${a.height},${b.height}")
                 continue
             }
