@@ -45,6 +45,14 @@ private class Topic(val title: String, val entries: List<Pair<String, String>>)
 
 private val TOPICS = listOf(
     Topic(
+        tr("Новое в 0.77", "What's new in 0.77"),
+        listOf(
+            tr("Запятые в дробях", "Commas in fractions") to tr("Запятая, свисающая через черту дроби или целиком под цифрой (2446,59 в знаменателе), остаётся запятой в своём числе, а не становится индексом или строкой матрицы.", "A comma hanging across a fraction bar or wholly under a digit (2446,59 in a denominator) stays a comma in its number instead of becoming an index or a row of a matrix."),
+            tr("Маленькое «=»", "A small \"=\"") to tr("Совсем короткое «=» (шириной в 3–4 точки) находится, и две записи на строке больше не сливаются в одну.", "A very short \"=\" (3–4 points wide) is found, so two pieces of working on a line no longer merge into one."),
+            tr("Единица с запятой", "A one with a comma") to tr("«1» с запятой под ней (11,88) больше не принимается за фигурную скобку.", "A \"1\" with a comma under it (11,88) is no longer taken for a curly brace."),
+        ),
+    ),
+    Topic(
         tr("Новое в 0.76", "What's new in 0.76"),
         listOf(
             tr("Длинная запятая", "A long comma") to tr("Запятая длинной галочкой под цифрой (1021,41; 2446,59) больше не приклеивается к цифре и не поднимает следующие цифры в степень.", "A comma drawn as a long tick under a digit (1021,41; 2446,59) is no longer joined to the digit or raises the digits after it into an exponent."),
