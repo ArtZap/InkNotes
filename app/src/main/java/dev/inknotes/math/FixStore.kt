@@ -117,6 +117,10 @@ class FixStore(private val dir: File?, private val background: Boolean = false) 
         write(SCALES, scales.entries.joinToString("") { (k, v) -> k + "\t" + v + "\n" })
     }
 
+    /** The [n] pins set or used last, oldest first (for a saved example). */
+    @Synchronized
+    fun lastPins(n: Int): List<Pair<String, String>> = pins.entries.toList().takeLast(n).map { it.key to it.value }
+
     @Synchronized
     fun pin(fingerprint: String, text: String) {
         pins[fingerprint] = text

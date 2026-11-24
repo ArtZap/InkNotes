@@ -179,6 +179,11 @@ class MathNotes(
                     val reads = LinkedHashMap<List<Int>, List<String>>()
                     val recorder = RunReader { run, h -> read(run, h).also { reads[run.map { it.order }.sorted()] = it } }
                     MathPage.analyze(ink, recorder, pageWidth)
+                    // The formulas set by hand lately, and what the page gives with them: a
+                    // correction that did not take shows here.
+                    val pins = fixes.lastPins(REPORT_PINS)
+                    val pinned = runCatching { MathPage.analyze(ink, recorder, pageWidth, pins.toMap()) }.getOrDefault(emptyList())
+                    val sides = pinned.mapNotNull { it.fix }.flatMap { f -> f.rows.flatMap { r -> listOfNotNull(r.left, r.right) } }.map { Correct.fingerprint(it) }.toSet()
                     fun q(t: String) = "\"" + t.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n") + "\""
                     fun floats(a: FloatArray) = a.joinToString(",") { "%.2f".format(java.util.Locale.ROOT, it) }
                     buildString {
@@ -187,6 +192,10 @@ class MathNotes(
                         append(ink.joinToString(",\n") { "{\"o\":${it.order},\"x\":[${floats(it.xs)}],\"y\":[${floats(it.ys)}]}" })
                         append("],\n\"reads\":[")
                         append(reads.entries.joinToString(",\n") { (k, v) -> "{\"s\":[${k.joinToString(",")}],\"t\":[${v.joinToString(",") { q(it) }}]}" })
+                        append("],\n\"pins\":[")
+                        append(pins.joinToString(",\n") { (k, t) -> "{\"k\":${q(k)},\"pin\":${q(t)},\"onPage\":${k in sides}}" })
+                        append("],\n\"withPins\":[")
+                        append(pinned.joinToString(",\n") { a -> "{\"at\":[${a.x.toInt()},${a.y.toInt()}],\"answer\":${q(a.answer.toString())}}" })
                         append("]}\n")
                     }
                 }.getOrNull()
@@ -363,6 +372,8 @@ class MathNotes(
     }
 
     private companion object {
+        /** How many of the last pins a saved example carries. */
+        const val REPORT_PINS = 20
         const val CANDIDATES = 5
         const val MATH_CONTEXT = "12+3*4 = "
         const val CACHE_SIZE = 3000

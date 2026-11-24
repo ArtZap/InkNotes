@@ -45,6 +45,12 @@ private class Topic(val title: String, val entries: List<Pair<String, String>>)
 
 private val TOPICS = listOf(
     Topic(
+        tr("Новое в 0.79", "What's new in 0.79"),
+        listOf(
+            tr("Исправление формулы", "Correcting a formula") to tr("После «Готово» в окне «Как прочитано» приложение проверяет, что страница взяла исправление. Если нет — скажет об этом; тогда нажмите на ответ → «Неверно…» → «Сохранить пример»: в пример теперь попадают и набранные формулы.", "After Done in the “How it was read” window the app checks that the page took the correction. If not, it says so; then tap the answer → “Wrong…” → “Save example”: the example now carries the typed formulas too."),
+        ),
+    ),
+    Topic(
         tr("Новое в 0.78", "What's new in 0.78"),
         listOf(
             tr("Скобки", "Brackets") to tr("Высокая скобка, начатая или законченная маленьким крючком, больше не принимается за модуль: −1021,41·(−14,68) считается со скобками.", "A tall bracket begun or ended with a small hook is no longer taken for an absolute value: −1021.41·(−14.68) is computed with brackets."),

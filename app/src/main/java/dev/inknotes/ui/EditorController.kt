@@ -1986,6 +1986,27 @@ class EditorController(
         if (pick != null) checkOffer = pick
     }
 
+    /** A correction just made: its page and the fingerprints of the sides pinned, until the page is read again. */
+    private class PinCheck(val pageId: String, val keys: Set<String>, val defines: Boolean)
+
+    private var pinCheck: PinCheck? = null
+
+    /**
+     * After a correction the page is read again: when no answer comes from the corrected
+     * formula any more, the writer is told so (the page reads it from other strokes, or it is
+     * now a definition with nothing to show) instead of seeing the old answer stay.
+     */
+    private fun checkPinTook(pageId: String, answers: List<PageAnswer>) {
+        val check = pinCheck ?: return
+        val keys = check.keys
+        if (check.pageId != pageId || keys.isEmpty()) return
+        pinCheck = null
+        val took = answers.any { a -> a.fix?.rows?.any { r -> Correct.fingerprint(r.left) in keys || r.right?.let { Correct.fingerprint(it) in keys } == true } == true }
+        if (took) return
+        if (check.defines) showStatus(tr("Запомнено как определение — для строк ниже", "Remembered as a definition — for the lines below"))
+        else showStatus(tr("Исправление сохранено, но страница его не взяла. Если ответ остался прежним, нажмите на него → «Неверно…» → «Сохранить пример» и пришлите файл.", "The correction is saved, but the page did not take it. If the answer stayed as it was, tap it → “Wrong…” → “Save example” and send the file."))
+    }
+
     /** The formula of [answer] was set by hand (pinned to its strokes). */
     fun isPinned(answer: PageAnswer): Boolean {
         val fix = answer.fix ?: return false
@@ -2026,6 +2047,19 @@ class EditorController(
         }
         math.fixes.learn(read, chosen, strokes, places)
         val pageId = mathAnswers.entries.firstOrNull { (_, list) -> list.any { it === answer } }?.key
+        pinCheck = pageId?.let { id ->
+            val keys = fix.rows.zip(texts).flatMap { (row, t) ->
+                listOfNotNull(
+                    Correct.fingerprint(row.left).takeIf { t.first.isNotBlank() },
+                    row.right?.let { r -> Correct.fingerprint(r).takeIf { t.second?.isNotBlank() == true } },
+                )
+            }.toSet()
+            // a = …, f(x) = …: a definition for the lines below, no answer of its own.
+            val defines = !fix.graph && texts.any { (l, r) ->
+                r != null && dev.inknotes.math.MathPage.parseText(l)?.let { runCatching { dev.inknotes.math.Calc.isDefinition(it) }.getOrDefault(false) } == true
+            }
+            PinCheck(id, keys, defines)
+        }
         if (pageId != null) mathRevision.remove(pageId) else mathRevision.clear()
         requestMath()
     }
@@ -3083,6 +3117,7 @@ class EditorController(
             mathRevision[id] = doc.revision
             math.analyze("${notebook.id}/$id", doc.strokes, notebook.pageWidthUnits(id), onKnobs = { k -> if (k.isEmpty()) mathKnobs.remove(id) else mathKnobs[id] = k }) { answers ->
                 if (answers.isEmpty()) mathRaw.remove(id) else mathRaw[id] = answers
+                checkPinTook(id, answers)
                 redrawCorrectedGraph(id, answers)
                 placeAnswers(id)
                 if (id == notebook.pageIds.getOrNull(pageIndex)) offerCheck(id, answers)
