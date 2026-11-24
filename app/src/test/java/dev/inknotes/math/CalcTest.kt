@@ -43,6 +43,8 @@ class CalcTest {
         assertEquals("1", eval("ln e"))
         assertEquals("3", eval("ln(e^{3})"))
         assertEquals("1", eval("sin^{2}x+cos^{2}x".replace("x", "1.7")))
+        // tg 10° written small after the descender of g: read raised, still its argument
+        assertEquals("1", eval("tg^{45^{0}}"))
         assertEquals("4", eval("log_{3}81"))
     }
 

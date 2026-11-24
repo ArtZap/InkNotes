@@ -87,6 +87,8 @@ class Parser private constructor(private val toks: List<Tok>) {
 
         /** Functions of an angle. */
         val TRIG = setOf("sin", "cos", "tan", "cot")
+        /** Functions whose argument may be read raised beside them (tg 10° after the descender of g). */
+        val FN_ARG_RAISED = setOf("sin", "cos", "tan", "cot", "tg", "ctg")
 
         /** Units of measurement after numbers (`9,8 м/с² · 3 с`), and physical constants; a setting. */
         @Volatile
@@ -499,6 +501,16 @@ class Parser private constructor(private val toks: List<Tok>) {
             // sin^2 x
             val exp = if (isOp("^")) { pos++; group() } else null
             val trig = name in TRIG
+            // tg^{10°} with nothing after it: the "exponent" is the argument, written small
+            // beside a name with a descender (tg 10°).
+            val nothingAfter = toks.getOrNull(pos).let { it == null || (it is Tok.Op && it.s in setOf("+", "-", "*", "/", "=", ")", "}", "&", "\\")) }
+            // Not a power: cos²·x read with the x elsewhere stays an error.
+            val power = exp is Expr.Num && exp.v == Math.floor(exp.v) && exp.v in -1.0..3.0
+            if (exp != null && nothingAfter && name in FN_ARG_RAISED && !power) {
+                // its degree sign raised once more: 10⁰ for 10°
+                val arg = if (exp is Expr.Pow && exp.base is Expr.Num && (exp.exp as? Expr.Num)?.v == 0.0) Expr.Fn("deg", listOf(exp.base)) else exp
+                return Expr.Fn(name, listOf(arg))
+            }
             if (trig) trigDepth++
             val a = try {
                 if (isOp("(")) args() else listOf(implicitChain())
