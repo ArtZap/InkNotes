@@ -1625,7 +1625,7 @@ object MathPage {
             }
         }.toSet() + if (Tune.otherCommas > 0f) cand.filter { c ->
             // the decimal comma of a line above, hanging down into this one (218,6 over 2051,0)
-            max(c.width, c.height) < 0.4f * h && c.cy < eq.cy && otherLines.any { o ->
+            max(c.width, c.height) < 0.5f * h && c.cy < eq.cy && otherLines.any { o ->
                 o.cy < eq.cy && abs(c.cy - o.cy) < 1.2f * o.h && c.cx in o.left - 10 * o.h..o.right + 10 * o.h &&
                     listOf(-1, 1).all { side ->
                         ink.any { m ->
