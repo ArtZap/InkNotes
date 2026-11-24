@@ -808,7 +808,9 @@ object MathLayout {
         private fun sign(g: Glyph): String? {
             // A pen dot left at the end of a stroke is not part of the shape.
             val st = g.strokes.filter { max(it.width, it.height) >= 0.15f * h }.ifEmpty { return null }
-            if (st.size == 1 && st[0].isDash && st[0].width < 1.3f * h && st[0].width > 0.2f * h) return "-"
+            // (not a flat scribble going up and down: "см" written low after a number)
+            if (st.size == 1 && st[0].isDash && st[0].width < 1.3f * h && st[0].width > 0.2f * h &&
+                (Tune.wavyNotMinus <= 0f || st[0].height < 0.3f * h || verticalTurns(st[0]) < 3)) return "-"
             if (st.size != 2 || Box.of(st).height > 1.1f * h) return null
             val (v, d) = if (st[0].isDash) st[1] to st[0] else st[0] to st[1]
             // Upright and roughly straight: a crossed 7 has the same cross, but its stroke slants
@@ -1275,6 +1277,8 @@ object Tune {
 
     /** Above 0: a small stroke begun above a fraction bar and hanging across it is the numerator's (its comma). */
     @JvmField var commaAcross = 1f
+    /** A flat stroke going up and down three times or more is no minus. */
+    @JvmField var wavyNotMinus = 1f
     /** A tall bracket may begin with a hook up to a fifth of its height. */
     @JvmField var bracketHook = 1f
     /** A minus before a symbol taken, under or over a bar, belongs to the side (MathPage.side). */
