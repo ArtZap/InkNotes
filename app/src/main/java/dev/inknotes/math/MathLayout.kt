@@ -280,8 +280,13 @@ object MathLayout {
      */
     private fun iDot(d: Ink, s: Ink, h: Float): Boolean {
         if (max(d.width, d.height) >= 0.28f * h) return false
-        if (s.width >= 0.25f * h || s.height < 0.25f * h || s.height > 0.8f * h || s.height < 2.5f * max(s.width, 0.05f * h)) return false
         val gap = s.top - d.bottom
+        // "in" written in one stroke: the dot over the top of its first upright.
+        if (Tune.joinedDot > 0f && s.width >= 0.25f * h && s.width < 1.2f * h && s.height >= 0.4f * h && s.height <= 0.8f * h &&
+            gap > -0.05f * h && gap < 0.6f * h && d.cx < s.cx &&
+            s.xs.indices.any { k -> abs(s.xs[k] - d.cx) < 0.2f * h && s.ys[k] < s.top + 0.25f * s.height }
+        ) return true
+        if (s.width >= 0.25f * h || s.height < 0.25f * h || s.height > 0.8f * h || s.height < 2.5f * max(s.width, 0.05f * h)) return false
         return gap > -0.05f * h && gap < max(0.6f * h, 1.1f * s.height) && abs(d.cx - s.cx) < 0.22f * h
     }
 
@@ -1309,6 +1314,9 @@ object Tune {
 
     /** The dot of an i or j joins the stroke below it across at most this gap. */
     @JvmField var dotGap = 0.45f
+
+    /** The dot of an i over a stroke going on into the next letter ("in" in one stroke). */
+    @JvmField var joinedDot = 1f
 
     /** The degree of a root: its middle left of this part of the √, its bottom above this part of its height… */
     @JvmField var degreeRight = 0.3f
