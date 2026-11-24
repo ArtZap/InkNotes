@@ -1623,7 +1623,19 @@ object MathPage {
                     // that line's own formula, not one in another column at the same height
                     c.cx in o.left - 10 * o.h..o.right + 10 * o.h
             }
-        }.toSet()
+        }.toSet() + if (Tune.otherCommas > 0f) cand.filter { c ->
+            // the decimal comma of a line above, hanging down into this one (218,6 over 2051,0)
+            max(c.width, c.height) < 0.4f * h && c.cy < eq.cy && otherLines.any { o ->
+                o.cy < eq.cy && abs(c.cy - o.cy) < 1.2f * o.h && c.cx in o.left - 10 * o.h..o.right + 10 * o.h &&
+                    listOf(-1, 1).all { side ->
+                        ink.any { m ->
+                            m !== c && abs(m.cy - o.cy) < 0.6f * o.h && m.height in 0.4f * o.h..1.3f * o.h &&
+                                c.top in m.bottom - 0.4f * m.height..m.bottom + 0.3f * o.h &&
+                                (if (side < 0) m.cx < c.left && c.left - m.right < 0.5f * o.h else m.cx > c.right && m.left - c.right < 0.6f * o.h)
+                        }
+                    }
+            }
+        } else emptyList()
         val chain = ArrayList<Ink>()
         var frontier = if (dir < 0) eq.left else eq.right
         // A long straight slanted line crossing the line is part of a drawing beside the formula
