@@ -498,7 +498,8 @@ object MathLayout {
         // A bracket drawn in one stroke runs one way, top to bottom (or back); a y goes down,
         // up its second arm and down its tail.
         val one = g.strokes.singleOrNull()
-        val monotonic = one == null || verticalTurns(one) == 0
+        // (a small hook where the pen came down or lifted is no turn)
+        val monotonic = one == null || verticalTurns(one) == 0 || (Tune.bracketHook > 0f && hooksOnly(one))
         return when {
             ends - midX > 0.2f * w && monotonic -> if (cusp(g, b, w, left = true) || (q1 + q3) / 2 - midX > 0.32f * w) '{' else '('
             midX - ends > 0.2f * w && monotonic -> if (cusp(g, b, w, left = false) || midX - (q1 + q3) / 2 > 0.32f * w) '}' else ')'
@@ -508,6 +509,22 @@ object MathLayout {
     }
 
     /** Times the stroke turns between going down and going up (by more than a sixth of its height). */
+    /**
+     * [s] runs one way between its top and its bottom; what comes before or after them is a
+     * hook less than a fifth of its height.
+     */
+    private fun hooksOnly(s: Ink): Boolean {
+        val top = s.ys.indices.minByOrNull { s.ys[it] }!!
+        val bottom = s.ys.indices.maxByOrNull { s.ys[it] }!!
+        val a = min(top, bottom)
+        val b = max(top, bottom)
+        if (b - a < 3) return false
+        fun span(from: Int, to: Int) = if (to <= from) 0f else (from..to).maxOf { s.ys[it] } - (from..to).minOf { s.ys[it] }
+        if (span(0, a) > 0.2f * s.height || span(b, s.ys.lastIndex) > 0.2f * s.height) return false
+        val mid = Ink(s.xs.copyOfRange(a, b + 1), s.ys.copyOfRange(a, b + 1))
+        return verticalTurns(mid) == 0
+    }
+
     internal fun verticalTurns(s: Ink): Int {
         val step = max(0.5f, s.height / 6f)
         var turns = 0
@@ -1254,6 +1271,8 @@ object Tune {
 
     /** Above 0: a small stroke begun above a fraction bar and hanging across it is the numerator's (its comma). */
     @JvmField var commaAcross = 1f
+    /** A tall bracket may begin with a hook up to a fifth of its height. */
+    @JvmField var bracketHook = 1f
     /** A minus before a symbol taken, under or over a bar, belongs to the side (MathPage.side). */
     @JvmField var leadingSign = 1f
     /** A side does not take in the line under the foot of a root (MathPage.side). */
