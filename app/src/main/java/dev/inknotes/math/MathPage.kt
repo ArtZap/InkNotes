@@ -1684,6 +1684,10 @@ object MathPage {
                 val between = !attached && c.height < 1.3f * h && c !in otherLine &&
                     members.any { c.cy in it.top..it.bottom && it.right <= c.left + 0.1f * h && c.left - it.right < 3 * h } &&
                     members.any { c.cy in it.top..it.bottom && it.left >= c.right - 0.1f * h && it.left - c.right < 1.5f * h }
+                // A minus right before a symbol taken, under a bar (−0,38 over −3,25): it signs it.
+                val leadingSign = !attached && !between && Tune.leadingSign > 0f && c.isDash && c.width < 1.2f * h && c !in otherLine &&
+                    members.any { m -> m.isDash && m.width > 1.5f * h && c.left >= m.left - 0.3f * h && c.right <= m.right && abs(c.cy - m.cy) < 1.5f * h } &&
+                    members.any { c.cy in it.top..it.bottom && it.left >= c.right - 0.1f * h && it.left - c.right < 0.8f * h && it.height < 1.3f * h }
                 // A decimal comma between two digits taken, hanging just under their foot
                 // (2446,59 in a denominator): small, below the line the band follows.
                 fun foot(m: Ink) = c.top in m.bottom - 0.4f * m.height..m.bottom + 0.3f * h
@@ -1709,7 +1713,7 @@ object MathPage {
                         m in chain && c.left >= m.left - 0.1f * h && c.right <= m.right + 0.3f * h && c.cy < m.top + 0.25f * m.height &&
                             touches(c, m, 0.12f * h)
                     }
-                if (attached || between || comma || touching) {
+                if (attached || between || comma || touching || leadingSign) {
                     members += c
                     grew = true
                 }
