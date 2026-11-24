@@ -45,6 +45,15 @@ private class Topic(val title: String, val entries: List<Pair<String, String>>)
 
 private val TOPICS = listOf(
     Topic(
+        tr("Новое в 0.78", "What's new in 0.78"),
+        listOf(
+            tr("Скобки", "Brackets") to tr("Высокая скобка, начатая или законченная маленьким крючком, больше не принимается за модуль: −1021,41·(−14,68) считается со скобками.", "A tall bracket begun or ended with a small hook is no longer taken for an absolute value: −1021.41·(−14.68) is computed with brackets."),
+            tr("Знаки и запятые в дробях", "Signs and commas in fractions") to tr("Минус перед знаменателем (−0,38 / −3,25), запятая под единицей (22,38 / 1,5) и цифра с запятой, свисающей через черту (160,79), остаются на своих местах.", "A minus before a denominator (−0.38 / −3.25), a comma under a one (22.38 / 1.5) and a digit whose comma hangs through the bar (160.79) stay where they belong."),
+            tr("Соседние строки", "Lines close together") to tr("Запятая строки выше, свисающая в следующую строку, и корень строки ниже больше не попадают в формулу. Совсем маленькое «=» находится.", "A comma of the line above hanging into the next line, and a root of the line below, no longer get into a formula. A tiny \"=\" is found."),
+            tr("tg 10° и sin", "tg 10° and sin") to tr("tg 10°, написанный мелко после хвоста g, читается как тангенс 10°; «in» в sin, написанное одним штрихом, не теряет точку над i; низко написанное «см» не принимается за минус.", "tg 10° written small after the tail of the g reads as the tangent of 10°; \"in\" of sin written in one stroke keeps the dot of its i; a low, flat \"cm\" is not taken for a minus."),
+        ),
+    ),
+    Topic(
         tr("Новое в 0.77", "What's new in 0.77"),
         listOf(
             tr("Запятые в дробях", "Commas in fractions") to tr("Запятая, свисающая через черту дроби или целиком под цифрой (2446,59 в знаменателе), остаётся запятой в своём числе, а не становится индексом или строкой матрицы.", "A comma hanging across a fraction bar or wholly under a digit (2446,59 in a denominator) stays a comma in its number instead of becoming an index or a row of a matrix."),
