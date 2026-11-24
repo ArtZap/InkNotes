@@ -661,6 +661,16 @@ object MathLayout {
                     Level.BASE
                 } else {
                     level(b, ref, ax, tick = item.glyph.strokes.size == 1 && straight(item.glyph.strokes[0], 0.2f))
+                }.let { lv ->
+                    // A long tick hanging under the foot with a symbol of the same size right
+                    // after it on the line (1,5 under a fraction bar): a comma, not an index.
+                    val nx = items.getOrNull(items.indexOf(item) + 1)
+                    if (Tune.commaBeforeDigit > 0f && lv == Level.SUB && r0 != null && !refStructure && nx is G &&
+                        item.glyph.strokes.size == 1 && straight(item.glyph.strokes[0], 0.2f) && b.width < 0.6f * b.height &&
+                        b.height < 0.6f * r0.height && b.top > r0.top + 0.6f * r0.height && b.bottom > r0.bottom &&
+                        nx.box.height in 0.6f * r0.height..1.4f * r0.height && abs(nx.box.bottom - r0.bottom) < 0.35f * r0.height &&
+                        nx.box.left - b.right < 0.6f * h && nx.box.top < b.top
+                    ) Level.BASE else lv
                 }
                     afterComma = r0 != null && !refStructure && level == Level.BASE && b.height < max(0.45f, Tune.longCommaSize) * r0.height &&
                     b.width < 0.8f * max(b.height, 0.5f * b.width + 0.01f) && b.top > r0.top + 0.6f * r0.height && b.left > r0.cx
@@ -1202,6 +1212,8 @@ object Tune {
 
     /** Above 0: after a decimal comma low beside a number, a symbol of that number's size stays on its line. */
     @JvmField var afterComma = 1f
+    /** A long tick under a symbol, with one of its size right after it, is a comma (1,5). */
+    @JvmField var commaBeforeDigit = 1f
 
     /** Above 0: a long straight slanted line crossing a formula's line is a drawing's, not a symbol of the formula. */
     @JvmField var drawingLines = 1f
