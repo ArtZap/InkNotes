@@ -910,9 +910,13 @@ object MathLayout {
                 // nothing but its denominator stands.
                 val reach = max(Tune.fracReach * h, min(Tune.longBarReach * bb.width, LONG_BAR_REACH_MAX * h))
                 fun stack(up: Boolean): List<Item> {
+                    // A comma of the numerator hanging down across the bar (269,15 over 2183,6):
+                    // small, begun above the bar, it is the numerator's, not the denominator's.
+                    fun commaAcross(it: Item) = Tune.commaAcross > 0f && it.box.top < bb.cy && it.box.bottom <= bb.cy + 0.15f * h &&
+                        max(it.box.width, it.box.height) < 0.5f * h
                     val cand = pool.filter {
                         it !== bar && it.box.cx in bb.left - 0.15f * h..bb.right + 0.15f * h && !across(it) &&
-                            (if (up) it.box.bottom <= bb.cy + 0.15f * h else it.box.top >= bb.cy - 0.15f * h)
+                            (if (up) it.box.bottom <= bb.cy + 0.15f * h else it.box.top >= bb.cy - 0.15f * h && !commaAcross(it))
                     }
                     val got = ArrayList<Item>()
                     var grew = true
@@ -1218,6 +1222,9 @@ object Tune {
 
     /** How far below the digit's foot a comma tick may reach, of the digit (2446,59: 0.7). */
     @JvmField var commaHang = 0.8f
+
+    /** Above 0: a small stroke begun above a fraction bar and hanging across it is the numerator's (its comma). */
+    @JvmField var commaAcross = 1f
 
     /** Above 0: two dashes whose left ends start on one upright are the bars of an F (or E), not "=". */
     @JvmField var letterBars = 1f
