@@ -940,6 +940,13 @@ object MathLayout {
         }
 
         /** A ")" drawn as one stroke: its middle bulges right of its two ends. */
+    private fun parenOpening(s: Ink): Boolean {
+        if (s.height < 2f * s.width || s.xs.size < 5) return false
+        val mid = s.xs.indices.filter { s.ys[it] in s.top + 0.35f * s.height..s.bottom - 0.35f * s.height }.map { s.xs[it] }
+        if (mid.isEmpty()) return false
+        return mid.average() < (s.xs.first() + s.xs.last()) / 2 - 0.15f * s.width
+    }
+
     private fun parenClosing(s: Ink): Boolean {
         if (s.height < 2f * s.width || s.xs.size < 5) return false
         val mid = s.xs.indices.filter { s.ys[it] in s.top + 0.35f * s.height..s.bottom - 0.35f * s.height }.map { s.xs[it] }
@@ -965,8 +972,10 @@ object MathLayout {
                 // (6·1,5·(6,24 + 1,5·3,12) over 1·1,3): the numerator's.
                 fun closesNumerator(it: Item) = Tune.closingParen > 0f && it is G && it.glyph.strokes.size == 1 &&
                     it.box.top < bb.cy - 0.5f * h && bb.cy - it.box.top >= 0.65f * it.box.height && it.box.bottom > bb.cy &&
-                    it.box.cx > bb.cx && it.box.right <= bb.right + 0.3f * h &&
-                    (tallShape(it.glyph, h) == ')' || parenClosing(it.glyph.strokes[0]))
+                    ((it.box.cx > bb.cx && it.box.right <= bb.right + 0.3f * h && (tallShape(it.glyph, h) == ')' || parenClosing(it.glyph.strokes[0]))) ||
+                        // its "(" too, reaching only just through the bar
+                        (it.box.left >= bb.left - 0.1f * h && it.box.bottom - bb.cy < 0.35f * h && bb.cy - it.box.top >= 0.8f * it.box.height &&
+                            (tallShape(it.glyph, h) == '(' || parenOpening(it.glyph.strokes[0]))))
                 fun across(it: Item) = it is G && it.box.top < bb.cy && it.box.bottom > bb.cy &&
                     tallShape(it.glyph, h) in BRACKETS && !closesNumerator(it)
                 // A long bar holds what stands farther from it: under a bar five lines wide

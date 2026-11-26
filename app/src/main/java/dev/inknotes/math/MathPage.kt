@@ -1724,7 +1724,9 @@ object MathPage {
                         (m.isDash && m.width > 0.45f * h && c.cx in m.left - 0.15f * h..m.right + 0.15f * h &&
                             max(c.top - m.bottom, m.top - c.bottom) < 0.8f * h && c !in otherLine &&
                             // a root with its long bar holds what is under the bar, not the line below its foot
-                            (Tune.rootFoot <= 0f || m.height < 0.6f * h || c.top < m.bottom)) ||
+                            (Tune.rootFoot <= 0f || m.height < 0.6f * h || (c.top < m.bottom &&
+                                // nor the line over its bar, short of its end (an exponent is past it)
+                                (c.bottom > m.top - 0.1f * h || c.left > m.right - 0.3f * h)))) ||
                         // an exponent; not the foot of the line above (dense notes: its denominators)
                         (c.left in m.right - 0.3f * h..m.right + 0.8f * h && c.bottom in m.top - 0.5f * h..m.cy + 0.25f * h && c.height < 1.3f * h && c !in otherLine) ||
                         // the next or previous symbol of an exponent already taken (the − and 1 of ⁻¹)
