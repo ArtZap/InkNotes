@@ -75,6 +75,9 @@ internal class PageCache(private val invalidate: () -> Unit) {
         var rendering = false
         var again = false
         var lastUse = 0L
+
+        /** After a picture that could not be made (out of memory): not before this (uptime). */
+        var retryAt = 0L
     }
 
     private val entries = IdentityHashMap<PageDocument, Entry>()
@@ -417,6 +420,7 @@ internal class PageCache(private val invalidate: () -> Unit) {
     }
 
     private fun render(doc: PageDocument, e: Entry, look: Look, scale: Float, excluded: Set<Any>, picture: (String) -> Bitmap?) {
+        if (android.os.SystemClock.uptimeMillis() < e.retryAt) return
         if (e.rendering) {
             e.again = true
             return
@@ -430,34 +434,53 @@ internal class PageCache(private val invalidate: () -> Unit) {
         val pictures = images.associate { it.file to picture(it.file) }
         runCatching {
             exec.execute {
-                val bitmap = runCatching {
-                    val w = max(1, (look.width * scale).toInt())
-                    val h = max(1, (look.height * scale).toInt())
-                    val whole = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-                    val canvas = Canvas(whole)
-                    canvas.scale(scale, scale)
-                    paint(canvas, renderer, look, strokes, fills, images, ex, { pictures[it] }, null, Matrix().apply { setScale(scale, scale) }, null, null)
-                    // Mutable strips (a later change is drawn into them).
-                    val strips = (0 until h step STRIP_PX).map { y ->
-                        val sh = min(STRIP_PX, h - y)
-                        Bitmap.createBitmap(w, sh, Bitmap.Config.ARGB_8888).also { strip ->
-                            Canvas(strip).drawBitmap(whole, Rect(0, y, w, y + sh), Rect(0, 0, w, sh), null)
+                // Out of memory at this scale: half of it (a less sharp page beats none).
+                fun draw(at: Float): Tiles? {
+                    val w = max(1, (look.width * at).toInt())
+                    val h = max(1, (look.height * at).toInt())
+                    var whole: Bitmap? = null
+                    val strips = ArrayList<Bitmap>()
+                    return try {
+                        val full = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888).also { whole = it }
+                        val canvas = Canvas(full)
+                        canvas.scale(at, at)
+                        paint(canvas, renderer, look, strokes, fills, images, ex, { pictures[it] }, null, Matrix().apply { setScale(at, at) }, null, null)
+                        // Mutable strips (a later change is drawn into them).
+                        for (y in 0 until h step STRIP_PX) {
+                            val sh = min(STRIP_PX, h - y)
+                            strips += Bitmap.createBitmap(w, sh, Bitmap.Config.ARGB_8888).also { strip ->
+                                Canvas(strip).drawBitmap(full, Rect(0, y, w, y + sh), Rect(0, 0, w, sh), null)
+                            }
                         }
+                        Tiles(strips, STRIP_PX)
+                    } catch (t: Throwable) {
+                        // Nothing half made is kept.
+                        for (b in strips) b.recycle()
+                        null
+                    } finally {
+                        whole?.recycle()
                     }
-                    whole.recycle()
-                    Tiles(strips, STRIP_PX)
-                }.getOrNull()
+                }
+                var drawnAt = scale
+                val bitmap = draw(scale) ?: draw(scale / 2f).also { drawnAt = scale / 2f }
                 main.post {
                     e.rendering = false
                     if (entries[doc] !== e) return@post
-                    if (bitmap != null) {
-                        e.bitmap = bitmap
-                        e.scale = scale
-                        e.strokes = strokes
-                        e.fills = fills
-                        e.images = images
-                        e.excluded = ex
+                    if (bitmap == null) {
+                        // Not drawn even smaller: tried again a little later, not on every frame
+                        // (each try failing again); the old picture and its look stay.
+                        e.retryAt = android.os.SystemClock.uptimeMillis() + RETRY_MS
+                        main.postDelayed({ invalidate() }, RETRY_MS)
+                        return@post
                     }
+                    // Only half as sharp (memory): not asked for full sharpness again at once.
+                    if (drawnAt < scale) e.retryAt = android.os.SystemClock.uptimeMillis() + 10 * RETRY_MS
+                    e.bitmap = bitmap
+                    e.scale = drawnAt
+                    e.strokes = strokes
+                    e.fills = fills
+                    e.images = images
+                    e.excluded = ex
                     e.look = look
                     // Changes made meanwhile are drawn over it on the next frame.
                     e.again = false
@@ -536,6 +559,9 @@ internal class PageCache(private val invalidate: () -> Unit) {
 
         private const val MAX_ENTRIES = 5
         private const val STRIP_PX = 256
+
+        /** How long after a picture that could not be made the next try waits (ms). */
+        private const val RETRY_MS = 2_000L
         private const val MAX_PIXELS = 7_000_000f
         private const val MAX_SIDE = 4096f
         private const val RESCALE = 1.4f

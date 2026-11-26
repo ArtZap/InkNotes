@@ -112,18 +112,27 @@ object Numeric {
         return Scalar(pow(b, x))
     }
 
-    /** Real power; an odd root of a negative number stays real: (−8)^(1/3) = −2. */
+    /**
+     * Real power; an odd root of a negative number stays real: (−8)^(1/3) = −2,
+     * (−8)^(2/3) = 4. The exponent is taken as a fraction p/q with a small odd q.
+     */
     fun pow(b: Double, x: Double): Double {
         if (b < 0 && x != round(x)) {
-            val q = round(1 / x)
-            if (abs(1 / x - q) < 1e-9 && q.toLong() % 2L != 0L) return -Math.pow(-b, x)
-            val r3 = round(3 / x)
-            if (abs(3 / x - r3) < 1e-9 && r3.toLong() % 2L != 0L) return -Math.pow(-b, x)
+            for (q in 3..MAX_ROOT step 2) {
+                val p = round(x * q)
+                if (abs(x * q - p) < 1e-9 * q) {
+                    val m = Math.pow(-b, x)
+                    return if (p.toLong() % 2L != 0L) -m else m
+                }
+            }
             throw MathError(tr("не определено", "undefined"))
         }
         if (b == 0.0 && x < 0) throw MathError(tr("деление на ноль", "division by zero"))
         return Math.pow(b, x)
     }
+
+    /** The largest odd root of a negative number taken as real. */
+    private const val MAX_ROOT = 99
 
     fun function(name: String, a: List<Double>): Double {
         val x = a.last()

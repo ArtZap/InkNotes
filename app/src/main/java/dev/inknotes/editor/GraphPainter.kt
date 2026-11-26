@@ -8,6 +8,7 @@ import android.graphics.Path
 import android.graphics.RectF
 import dev.inknotes.math.GraphMath
 import dev.inknotes.math.GraphSpec
+import kotlin.math.max
 import kotlin.math.roundToInt
 
 /**
@@ -72,8 +73,9 @@ class GraphPainter(private val unit: Float) {
         text.color = (colors.ink and 0x00FFFFFF) or 0xB0000000.toInt()
         val sx = GraphMath.step(v.w, (w / (70 * unit)).roundToInt().coerceIn(3, 12))
         val sy = if (square) sx else GraphMath.step(v.h, (h / (50 * unit)).roundToInt().coerceIn(3, 10))
-        val axisY = py(0.0).coerceIn(0f, h - text.textSize - 2)
-        val axisX = px(0.0).coerceIn(0f, w - 4 * text.textSize)
+        // (a graph smaller than its labels: the range would be empty)
+        val axisY = py(0.0).coerceIn(0f, max(0f, h - text.textSize - 2))
+        val axisX = px(0.0).coerceIn(0f, max(0f, w - 4 * text.textSize))
         line.pathEffect = null
         line.color = colors.grid
         line.strokeWidth = 1f

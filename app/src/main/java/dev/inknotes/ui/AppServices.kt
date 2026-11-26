@@ -12,14 +12,17 @@ import dev.inknotes.search.HandwritingIndex
  * survive activity recreation (rotation, theme change) instead of being duplicated.
  */
 object AppServices {
-    private var instance: Services? = null
+    @Volatile private var instance: Services? = null
 
     /** How long after the start background work (indexing, sync) waits for the first notebook. */
     const val QUIET_START_MS = 8_000L
 
     class Services(val repo: NotebookRepository, val prefs: AppPrefs, val handwriting: HandwritingIndex, val math: MathNotes, val backup: Backup, val previews: CoverPreviews, val cloud: CloudSync)
 
-    fun get(context: Context): Services = instance ?: run {
+    // Made once: a second thread (a widget, a service) waits rather than making a second set.
+    fun get(context: Context): Services = instance ?: synchronized(this) { instance ?: make(context) }
+
+    private fun make(context: Context): Services = run {
         val app = context.applicationContext
         // Before any text is made: the interface language of this run.
         Language.init(app)

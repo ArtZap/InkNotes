@@ -140,6 +140,7 @@ object PageEdits {
     /** The outline of [f], closed, as a line for [Trim]. */
     fun trimLine(f: PageFill): Trim.Line {
         val n = f.outline.size / 2
+        if (n == 0) return Trim.Line(FloatArray(0), FloatArray(0))
         return Trim.Line(FloatArray(n + 1) { f.outline[2 * (it % n)] }, FloatArray(n + 1) { f.outline[2 * (it % n) + 1] })
     }
 

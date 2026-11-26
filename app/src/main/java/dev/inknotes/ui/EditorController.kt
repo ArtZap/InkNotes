@@ -319,10 +319,9 @@ class EditorController(
         when (math.state) {
             MathNotes.State.Ready -> Unit
             MathNotes.State.Downloading -> return showStatus(tr("Скачивается распознавание, подождите немного", "Recognition is downloading, wait a little"))
-            else -> {
-                math.enable()
-                return showStatus(tr("Скачиваю распознавание (один раз) — нажмите «Итоги» ещё раз через минуту", "Downloading recognition (once) — press “Totals” again in a minute"))
-            }
+            // Turning recognition on also turns on answers on every page: the user's choice,
+            // not a side effect of one button.
+            else -> return showStatus(tr("Итогам нужно распознавание: включите «Ответы после „=“» и нажмите «Итоги» снова", "Totals need recognition: turn on “Answers after =” and press “Totals” again"))
         }
         val color = v.selectedInk().groupingBy { it.stroke.brush.colorIntArgb }.eachCount().maxByOrNull { it.value }?.key ?: penColor
         status = tr("Читаю таблицу…", "Reading the table…")
@@ -3157,10 +3156,7 @@ class EditorController(
         when (math.state) {
             MathNotes.State.Ready -> Unit
             MathNotes.State.Downloading -> return showStatus(tr("Скачивается распознавание формул, подождите немного", "Formula recognition is downloading, wait a little"))
-            else -> {
-                math.enable()
-                return showStatus(tr("Скачиваю распознавание формул (один раз) — нажмите «Формула» ещё раз через минуту", "Downloading formula recognition (once) — press “Formula” again in a minute"))
-            }
+            else -> return showStatus(tr("Формуле нужно распознавание: включите «Ответы после „=“» и нажмите «Формула» снова", "The formula needs recognition: turn on “Answers after =” and press “Formula” again"))
         }
         status = tr("Читаю формулу…", "Reading the formula…")
         math.readFormula(ink) { source ->

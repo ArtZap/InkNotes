@@ -196,7 +196,9 @@ class HandwritingIndex(
             for ((nb, pages) in todo) {
                 var changed = false
                 for ((pageId, stamp) in pages) {
-                    changed = indexPage(nb.id, pageId, repo.loadPage(nb, pageId), stamp, save = false) || changed
+                    // A page that could not be read this time keeps its old text (not emptied).
+                    val content = repo.readPage(nb, pageId)
+                    if (content != null) changed = indexPage(nb.id, pageId, content, stamp, save = false) || changed
                     main.post { pendingPages = (pendingPages - 1).coerceAtLeast(0) }
                 }
                 // Each notebook's text is written once, not once a page.
@@ -244,7 +246,8 @@ class HandwritingIndex(
     /** Returns whether the notebook's text changed (and was saved, if [save]). */
     private fun indexPage(nbId: String, pageId: String, content: PageContent, stamp: String? = null, save: Boolean = true): Boolean {
         val pen = content.strokes.filter { it.kind.isInk }
-        val signature = signature(pen)
+        // Text read in the other language is read again, though the ink is the same.
+        val signature = signature(pen) + langMark
         val text = load(nbId)
         val old = text[pageId]
         if (old?.signature == signature) {

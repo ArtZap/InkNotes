@@ -18,6 +18,15 @@ class CalcTest {
     }
 
     @Test
+    fun aRootOfANegativeNumberStaysReal() {
+        assertEquals(4.0, Numeric.pow(-8.0, 2.0 / 3), 1e-9)
+        assertEquals(-2.0, Numeric.pow(-8.0, 1.0 / 3), 1e-9)
+        assertEquals(-32.0, Numeric.pow(-8.0, 5.0 / 3), 1e-9)
+        assertEquals(0.25, Numeric.pow(-8.0, -2.0 / 3), 1e-9)
+        assertTrue(runCatching { Numeric.pow(-8.0, 0.5) }.isFailure)
+    }
+
+    @Test
     fun arithmetic() {
         assertEquals("14", eval("2+3*4"))
         assertEquals("14", eval("2+3·4"))

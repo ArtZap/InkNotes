@@ -1380,7 +1380,7 @@ object Tune {
      * multiplication wherever it sits (Russian handwriting: decimals take a comma, and a low
      * dot is a hasty ·). Set by the app from the handwriting language.
      */
-    @JvmField var decimalPoint = 0f
+    @JvmField @Volatile var decimalPoint = 0f
 
     /** An index measured on the symbol before it: smaller than this part of it, its top this far down it, its bottom this far below its foot. */
     @JvmField var subRelSize = 0.7f

@@ -182,7 +182,11 @@ fun EditorScreen(
     // The microphone, and on Android 13+ the notification that a recording is on (it shows how
     // long it has run and stops it; without it the recording still works).
     val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { granted ->
-        if (granted[android.Manifest.permission.RECORD_AUDIO] == true) controller.startRecording(context) else controller.showStatus(tr("Без доступа к микрофону записать звук нельзя", "Sound can't be recorded without microphone access"))
+        // The microphone may have been allowed before (only the notification was asked now).
+        val mic = granted[android.Manifest.permission.RECORD_AUDIO] ?: (
+            androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            )
+        if (mic) controller.startRecording(context) else controller.showStatus(tr("Без доступа к микрофону записать звук нельзя", "Sound can't be recorded without microphone access"))
     }
     val record = {
         fun has(p: String) = androidx.core.content.ContextCompat.checkSelfPermission(context, p) == android.content.pm.PackageManager.PERMISSION_GRANTED

@@ -50,7 +50,7 @@ class MathNotes(
     /** Called on the main thread when the feature becomes ready (to compute open pages). */
     var onReady: (() -> Unit)? = null
 
-    private val exec = Executors.newSingleThreadExecutor { r -> Thread(r, "math") }
+    private val exec = Executors.newSingleThreadExecutor { r -> Thread(r, "math").apply { isDaemon = true } }
     private val main = Handler(Looper.getMainLooper())
     private val model = DigitalInkRecognitionModel.builder(DigitalInkRecognitionModelIdentifier.EN_US).build()
 
@@ -108,6 +108,8 @@ class MathNotes(
     fun disable() {
         setEnabledPref(false)
         state = State.Off
+        // The recognizer holds the model in memory: let it go until turned on again.
+        runCatching { exec.execute { recognizer?.close(); recognizer = null } }
     }
 
     /**

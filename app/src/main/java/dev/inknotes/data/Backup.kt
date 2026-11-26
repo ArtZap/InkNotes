@@ -90,7 +90,14 @@ class Backup(private val context: Context, private val repo: NotebookRepository,
             created?.let { resolver.openOutputStream(it, "wt") }?.let { Counting(it, written) }
         }
         // Whether anything changed is read off the main thread too; then the copy on its own.
+        // Whatever fails on the way, the next copy is not refused as "already running".
+        val failed = { e: Throwable ->
+            Log.w("Backup", "backup failed", e)
+            running.set(false)
+            done(Result.Failed(tr("Не удалось записать копию в папку", "Could not write the copy to the folder")))
+        }
         Thread {
+          try {
             val changed = force || runCatching { repo.lastChange() }.getOrDefault(Long.MAX_VALUE) > last
             if (!changed) {
                 running.set(false)
@@ -98,6 +105,7 @@ class Backup(private val context: Context, private val repo: NotebookRepository,
             }
             repo.backupAsync(open) { ok ->
                 Thread {
+                  try {
                     val doc = created
                     var final: Uri? = null
                     if (ok && doc != null && isWhole(doc, written.get())) {
@@ -115,8 +123,14 @@ class Backup(private val context: Context, private val repo: NotebookRepository,
                     prune(tree)
                     running.set(false)
                     done(Result.Done)
+                  } catch (e: Throwable) {
+                    failed(e)
+                  }
                 }.start()
             }
+          } catch (e: Throwable) {
+            failed(e)
+          }
         }.start()
     }
 

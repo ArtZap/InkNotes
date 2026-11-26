@@ -45,6 +45,14 @@ private class Topic(val title: String, val entries: List<Pair<String, String>>)
 
 private val TOPICS = listOf(
     Topic(
+        tr("Новое в 0.85", "What's new in 0.85"),
+        listOf(
+            tr("Надёжность", "Reliability") to tr("Исправлено найденное проверкой кода: синхронизация не удаляет тетрадь, изменённую на другом устройстве; WebDAV не отправляет пароль на чужой адрес; исправления формул не теряются при быстром запуске; при замене тетради её копией сохраняются повторение карточек и поиск по почерку; перо, поднятое вторым пальцем, не оставляет инструмент «висеть».", "Fixed what a code review found: sync no longer deletes a notebook changed on another device; WebDAV never sends the password to another address; formula corrections are not lost at a quick start; replacing a notebook with its copy keeps card reviews and handwriting search; a tool no longer stays \"stuck\" when a second finger lifts."),
+            tr("Формулы", "Formulas") to tr("x = 2x − 3 решается как уравнение; 1/(x − 1) = 2 даёт x = 1,5; (−8)^(2/3) = 4. «Итоги» таблицы и «Формула» больше не включают ответы на всех страницах сами — просят включить «Ответы после „=“».", "x = 2x − 3 is solved as an equation; 1/(x − 1) = 2 gives x = 1.5; (−8)^(2/3) = 4. Table \"Totals\" and \"Formula\" no longer turn on answers on every page by themselves: they ask to turn on \"Answers after =\"."),
+            tr("Запись звука", "Sound recording") to tr("Если микрофон уже разрешён, запись начинается, даже когда спрашивали только про уведомления.", "With the microphone already allowed, recording starts even when only notifications were asked about."),
+        ),
+    ),
+    Topic(
         tr("Новое в 0.84", "What's new in 0.84"),
         listOf(
             tr("Заставка", "The start") to tr("Переливание по буквам названия вернулось. Движения заставки идут внахлёст с одним плавным замедлением, а тетрадь строится, когда на заставке уже ничего не движется, — рывков нет.", "The gleam over the letters of the name is back. The movements of the start overlap with one smooth slowing, and the notebook is made when nothing on the start moves any more, so nothing jerks."),

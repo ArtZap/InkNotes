@@ -1409,8 +1409,10 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                 Mode.ERASE -> forEachSample(e) { x, y, _ -> eraseTo(x, y) }
                 Mode.PATH -> forEachSample(e) { x, y, _ -> traceTo(x, y) }
                 Mode.MOVE -> {
-                    // Small jitter of a tap does not nudge the selection.
-                    if (!moveTravelled && hypot(e.x - downX, e.y - downY) > touchSlop) moveTravelled = true
+                    // Small jitter of a tap does not nudge the selection. (The pointer that
+                    // moves it, not the first one down: that may be the palm.)
+                    val mi = e.findPointerIndex(activePointerId).takeIf { it >= 0 } ?: 0
+                    if (!moveTravelled && hypot(e.getX(mi) - downX, e.getY(mi) - downY) > touchSlop) moveTravelled = true
                     if (moveTravelled) forEachSample(e) { x, y, _ -> dragTo(x, y) }
                 }
                 Mode.GESTURE -> {
@@ -1444,7 +1446,24 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                 Mode.DRAW -> if (e.getPointerId(index) == activePointerId) endDraw(e, index)
                 Mode.GESTURE -> gesture.pointersChanged(e, excludeIndex = index)
                 Mode.RULER -> rulerPointersChanged(e, excludeIndex = index)
-                else -> Unit
+                // The pen (or the finger) that erases, selects, moves… is lifted while the palm
+                // stays down: it ends here, as when it is the last one up.
+                Mode.NONE, Mode.SNAPPED -> Unit
+                else -> if (e.getPointerId(index) == activePointerId) {
+                    holdHandler.removeCallbacks(longPressRunnable)
+                    when (mode) {
+                        Mode.ERASE -> endErase()
+                        Mode.PATH -> endTrace()
+                        Mode.MOVE -> if (isSelectionTap(e)) tapOnSelection(e.getX(index), e.getY(index)) else endMove()
+                        Mode.LASER -> laser.end()
+                        Mode.RULER_DRAW -> endRulerDraw()
+                        Mode.COMPASS -> endCompass()
+                        Mode.PDF_TEXT -> endPdfText()
+                        Mode.SPACE -> endSpace()
+                        else -> Unit
+                    }
+                    mode = Mode.NONE
+                }
             }
 
             MotionEvent.ACTION_UP -> {
@@ -1453,7 +1472,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                     Mode.DRAW -> endDraw(e, index)
                     Mode.ERASE -> endErase()
                     Mode.PATH -> endTrace()
-                    Mode.MOVE -> if (isSelectionTap(e)) tapOnSelection(e.x, e.y) else endMove()
+                    Mode.MOVE -> if (isSelectionTap(e)) tapOnSelection(e.getX(index), e.getY(index)) else endMove()
                     Mode.GESTURE -> gesture.end(e)
                     Mode.LASER -> laser.end()
                     Mode.RULER -> endRulerMove()
@@ -2071,7 +2090,8 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
             val head = arrowHead(tail.x, tail.y, tip.x, tip.y, len)
             shapeFills += PageFill(head, FillPattern.INK, wet.color)
             val d = ShapeRecognizer.dist(tail, tip)
-            val k = ((d - len * 0.6f) / d).coerceAtLeast(0f)
+            // (a shaft of no length, its ends pulled together by the magnet: no shaft)
+            val k = if (d > 1e-3f) ((d - len * 0.6f) / d).coerceAtLeast(0f) else 0f
             paths = listOf(listOf(tail, ShapeRecognizer.P(tail.x + (tip.x - tail.x) * k, tail.y + (tip.y - tail.y) * k)))
         }
         val shapeStrokes = paths.map { path -> PageStroke(kind, Stroke(brush, shapeInputs(path, pressure)), if (kind == InkKind.DASHED) wet.dash else null) }
@@ -2124,10 +2144,15 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
     /** Pieces left by trimming in this stroke of the eraser: not trimmed again until it is lifted. */
     private val trimmedNow: MutableSet<PageStroke> = Collections.newSetFromMap(IdentityHashMap())
 
+    // The lines of the strokes and fills met during one stroke of the eraser, made once each
+    // (on a dense page they were all made again at every point of the gesture).
+    private val trimLines = IdentityHashMap<Any, Trim.Line>()
+
     private fun startErase(e: MotionEvent, index: Int) {
         val doc = doc(activePage) ?: return
         doc.beginSession()
         trimmedNow.clear()
+        trimLines.clear()
         activePointerId = e.getPointerId(index)
         val p = toPage(activePage, e.getX(index), e.getY(index))
         lastX = p[0]
@@ -2170,7 +2195,8 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                 val b = PageCache.strokeBounds(s)?.let { RectF(it).apply { inset(-8f, -8f) } }
                 val others = doc.strokes.filter { o ->
                     o !== s && o.kind != InkKind.HIGHLIGHTER && (b == null || PageCache.strokeBounds(o)?.let { RectF.intersects(it, b) } != false)
-                }.map(PageEdits::trimLine) + doc.fills.filter { b == null || RectF.intersects(it.bounds, b) }.map(PageEdits::trimLine)
+                }.map { o -> trimLines.getOrPut(o) { PageEdits.trimLine(o) } } +
+                    doc.fills.filter { b == null || RectF.intersects(it.bounds, b) }.map { f -> trimLines.getOrPut(f) { PageEdits.trimLine(f) } }
                 val pieces = PageEdits.trimStroke(s, others, bx, by, r)
                 if (pieces == null) {
                     kept += s
@@ -2534,7 +2560,7 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
         val t = PageEdits.Transform.translation(0f, dy)
         val height = source?.pageHeight(page) ?: PAGE_H
         val bottomOf = { x: Any -> when (x) { is PageStroke -> PageCache.strokeBounds(x)?.bottom ?: 0f; is PageFill -> x.bounds.bottom; else -> PageEdits.bounds(x as PageImage).bottom } }
-        val over: Set<Any> = Collections.newSetFromMap<Any>(IdentityHashMap()).apply {
+        val over: MutableSet<Any> = Collections.newSetFromMap<Any>(IdentityHashMap()).apply {
             if (dy > 0f) for (x in s + f + i) if (bottomOf(x) + dy > height - SPACE_GAP) add(x)
         }
         val moved = Collections.newSetFromMap<Any>(IdentityHashMap()).apply { addAll(s); addAll(f); addAll(i) }
@@ -2543,6 +2569,9 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
                 // What no longer fits keeps its layout at the top of a new page.
                 val next = listener?.addPageAfter(page)
                 val dst = next?.let(::doc)
+                // No new page (a PDF notebook): nothing leaves this page; it is moved down
+                // as far as it goes instead of being lost.
+                if (next == null || dst == null) over.clear()
                 if (next != null && dst != null) {
                     val topOf = { x: Any -> when (x) { is PageStroke -> PageCache.strokeBounds(x)?.top ?: 0f; is PageFill -> x.bounds.top; else -> PageEdits.bounds(x as PageImage).top } }
                     val top = over.minOf(topOf)
@@ -3457,6 +3486,8 @@ class PageEditorView(context: Context) : FrameLayout(context), InProgressStrokes
 
     override fun onDetachedFromWindow() {
         stopFling()
+        // A long press or hold waiting would run on a view that is gone.
+        holdHandler.removeCallbacksAndMessages(null)
         super.onDetachedFromWindow()
     }
 

@@ -1520,6 +1520,7 @@ class NotebookRepository(filesDir: File) {
                 val again = !taken.add(ready.notebook.id)
                 val nb = runCatching {
                     if (!again && (replace || existing == null)) {
+                        keepDeviceFiles(ready.staging, dir(ready.notebook.id))
                         SafeFiles.replaceDir(ready.staging, dir(ready.notebook.id))
                         ready.notebook.copy(folder = folder, favorite = existing?.favorite == true).also { writeMetaNow(it) }
                     } else {
@@ -1713,6 +1714,7 @@ class NotebookRepository(filesDir: File) {
             val folder = SafeFiles.importFolder(null, into?.takeIf { id -> readFoldersOrNull().orEmpty().any { it.id == id } }, existing?.folder)
             val nb = runCatching {
                 if (replace || existing == null) {
+                    keepDeviceFiles(ready.staging, dir(ready.notebook.id))
                     SafeFiles.replaceDir(ready.staging, dir(ready.notebook.id))
                     // Folder and star belong to this device (not in shared files): replacing keeps them.
                     ready.notebook.copy(folder = folder, favorite = existing?.favorite == true).also { writeMetaNow(it) }
@@ -1879,6 +1881,7 @@ class NotebookRepository(filesDir: File) {
             // it is, which the editor says.
             val overShared = PageCodec.tooComplex(content)
             try {
+                file.parentFile?.mkdirs()
                 atomicWrite(file) { out -> PageCodec.write(out, content, PageCodec.Limits.OWN) }
                 if (overShared != null && onTooComplex != null) main.post { onTooComplex(overShared, true) }
             } catch (e: PageTooComplexException) {
@@ -1904,6 +1907,19 @@ class NotebookRepository(filesDir: File) {
         if (names.size <= PageCopies.KEEP) return
         val ok = runCatching { PageCodec.read(file, PageCodec.Limits.OWN) }.isSuccess
         for (n in PageCopies.toDelete(names, file.name, ok)) File(file.parentFile, n).delete()
+    }
+
+    /**
+     * Card reviews and the text index belong to this device and are not in shared files: a
+     * notebook replaced by its newer copy (sync, import) keeps them. The index is checked page
+     * by page against the new pages, so old entries are redone, not trusted.
+     */
+    private fun keepDeviceFiles(staging: File, old: File) {
+        for (name in listOf(CARDS, TEXT_INDEX)) {
+            val from = File(old, name)
+            val to = File(staging, name)
+            if (from.isFile && !to.exists()) runCatching { from.copyTo(to) }
+        }
     }
 
     // ------------------------------------------------- flash cards
@@ -2000,7 +2016,8 @@ class NotebookRepository(filesDir: File) {
     private fun dir(id: String) = File(root, id)
 
     private fun pageFile(nbId: String, pageId: String) =
-        File(File(dir(nbId), "pages").apply { mkdirs() }, "$pageId.ink")
+        // Reading never makes folders: a deleted notebook is not brought back as an empty one.
+        File(File(dir(nbId), "pages"), "$pageId.ink")
 
     private fun readMeta(dir: File): Notebook {
         val metaFile = File(dir, META)
