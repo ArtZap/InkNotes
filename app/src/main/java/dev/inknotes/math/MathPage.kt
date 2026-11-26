@@ -1634,7 +1634,15 @@ object MathPage {
                                 (if (side < 0) m.cx < c.left && c.left - m.right < 0.5f * o.h else m.cx > c.right && m.left - c.right < 0.6f * o.h)
                         }
                     }
-            }
+            } || (Tune.otherCommas > 0f && c.top < eq.cy - 0.3f * h &&
+                // or of digits above the side's reach (a denominator over this line): between two of them, at their feet
+                listOf(-1, 1).all { side ->
+                    ink.any { m ->
+                        m !== c && m.bottom < eq.cy - 0.8f * h && c.bottom < eq.cy - 0.6f * h && m.height in 0.5f * h..1.4f * h && m.bottom < c.top + 0.15f * h &&
+                            c.top in m.bottom - 0.4f * m.height..m.bottom + 0.3f * h &&
+                            (if (side < 0) m.cx < c.left && c.left - m.right < 0.5f * h else m.cx > c.right && m.left - c.right < 0.6f * h)
+                    }
+                })
         } else emptyList()
         val chain = ArrayList<Ink>()
         var frontier = if (dir < 0) eq.left else eq.right
