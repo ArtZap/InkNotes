@@ -939,7 +939,15 @@ object MathLayout {
                 st.xs[rightEnd] > b.right - 0.2f * b.width
         }
 
-        private fun vGap(a: Box, b: Box) = max(0f, max(a.top, b.top) - min(a.bottom, b.bottom))
+        /** A ")" drawn as one stroke: its middle bulges right of its two ends. */
+    private fun parenClosing(s: Ink): Boolean {
+        if (s.height < 2f * s.width || s.xs.size < 5) return false
+        val mid = s.xs.indices.filter { s.ys[it] in s.top + 0.35f * s.height..s.bottom - 0.35f * s.height }.map { s.xs[it] }
+        if (mid.isEmpty()) return false
+        return mid.average() > (s.xs.first() + s.xs.last()) / 2 + 0.15f * s.width
+    }
+
+    private fun vGap(a: Box, b: Box) = max(0f, max(a.top, b.top) - min(a.bottom, b.bottom))
 
         private fun fractions(pool: MutableList<Item>): MutableList<Item> {
             val inks = pool.filterIsInstance<G>().flatMap { it.glyph.strokes }
@@ -953,8 +961,14 @@ object MathLayout {
                 val bb = bar.box
                 // A tall bracket reaching across the bar ((22)^½ written tight) is beside the
                 // fraction, not in it; brackets wholly under the bar, 1/(x + 1), are in it.
+                // A ")" that closes the numerator and only reaches a little through the bar
+                // (6·1,5·(6,24 + 1,5·3,12) over 1·1,3): the numerator's.
+                fun closesNumerator(it: Item) = Tune.closingParen > 0f && it is G && it.glyph.strokes.size == 1 &&
+                    it.box.top < bb.cy - 0.5f * h && bb.cy - it.box.top >= 0.65f * it.box.height && it.box.bottom > bb.cy &&
+                    it.box.cx > bb.cx && it.box.right <= bb.right + 0.3f * h &&
+                    (tallShape(it.glyph, h) == ')' || parenClosing(it.glyph.strokes[0]))
                 fun across(it: Item) = it is G && it.box.top < bb.cy && it.box.bottom > bb.cy &&
-                    tallShape(it.glyph, h) in BRACKETS
+                    tallShape(it.glyph, h) in BRACKETS && !closesNumerator(it)
                 // A long bar holds what stands farther from it: under a bar five lines wide
                 // nothing but its denominator stands.
                 val reach = max(Tune.fracReach * h, min(Tune.longBarReach * bb.width, LONG_BAR_REACH_MAX * h))
@@ -969,7 +983,7 @@ object MathLayout {
                                 it.glyph.strokes.single { s -> s.bottom > bb.cy }.let { s -> max(s.width, s.height) < 0.5f * h && s.top < bb.cy }))
                     val cand = pool.filter {
                         it !== bar && it.box.cx in bb.left - 0.15f * h..bb.right + 0.15f * h && !across(it) &&
-                            (if (up) it.box.bottom <= bb.cy + 0.15f * h || commaAcross(it) else it.box.top >= bb.cy - 0.15f * h && !commaAcross(it))
+                            (if (up) it.box.bottom <= bb.cy + 0.15f * h || commaAcross(it) || closesNumerator(it) else it.box.top >= bb.cy - 0.15f * h && !commaAcross(it) && !closesNumerator(it))
                     }
                     val got = ArrayList<Item>()
                     var grew = true
@@ -1285,6 +1299,8 @@ object Tune {
 
     /** Above 0: a small stroke begun above a fraction bar and hanging across it is the numerator's (its comma). */
     @JvmField var commaAcross = 1f
+    /** A ")" mostly over a fraction bar, at its right, closes the numerator. */
+    @JvmField var closingParen = 1f
     /** A √ in one stroke turns up and down at most three times (not "60" written in one). */
     @JvmField var radicalTurns = 1f
     /** A comma seen under a run puts first the reading that has it (MathPage.holeTexts). */
