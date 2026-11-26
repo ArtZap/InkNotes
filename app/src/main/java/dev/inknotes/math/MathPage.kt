@@ -1617,6 +1617,26 @@ object MathPage {
         // Strokes of another formula line just above or below (dense notes, the lines of a
         // system) are not attached, even when a long tail (of a y) reaches into this line.
         val otherLines = eqs.filter { it !== eq && abs(it.cy - eq.cy) > 0.8f * h && abs(it.left - eq.left) < 15 * h }
+        fun above(r: Ink) = r.bottom < eq.cy - 0.8f * h && r.height in 0.4f * h..1.4f * h
+        fun gapUnder(r: Ink) = cand.any { u -> u !== r && u.height >= 0.4f * h && min(u.right, r.right) - max(u.left, r.left) > 0f && u.top in r.bottom + 0.2f * h..r.bottom + 1.2f * h }
+        // a fraction's bar under them makes them its numerator
+        // (nearer than the symbols under them: a bar under those is theirs)
+        fun barUnder(r: Ink): Boolean {
+            val below = cand.filter { u -> u !== r && !u.isDash && u.height >= 0.4f * h && min(u.right, r.right) - max(u.left, r.left) > 0f && u.top > r.bottom }.minOfOrNull { it.top } ?: Float.MAX_VALUE
+            return ink.any { u -> u.isDash && u.width > 0.5f * h && u.left < r.right && u.right > r.left && u.cy > r.bottom - 0.1f * h && u.cy < r.bottom + 1.5f * h && u.cy < below }
+        }
+        // Strokes that could be such digits: just over the side, within its reach.
+        val upper = if (Tune.otherCommas > 0f && cand.isNotEmpty()) {
+            val l = cand.minOf { it.left } - 6f * h
+            val r = cand.maxOf { it.right } + 6f * h
+            ink.filter { it.bottom < eq.cy - 0.8f * h && it.top > eq.cy - 6f * h && it.right > l && it.left < r }
+        } else emptyList()
+        val rowMemo = HashMap<Ink, Boolean>()
+        fun rowAbove(c: Ink): Boolean = rowMemo.getOrPut(c) {
+            if (!above(c) || c.height < 0.5f * h) return@getOrPut false
+            val row = upper.filter { r -> above(r) && abs(r.cy - c.cy) < 0.4f * h && abs(r.cx - c.cx) < 3f * h }
+            row.size >= 3 && row.count(::gapUnder) >= 2 && row.none(::barUnder) && row.none { r -> cand.any { u -> u !== r && u !in row && min(u.right, r.right) - max(u.left, r.left) > 0f && u.top in r.bottom - 0.3f * h..r.bottom + 0.2f * h } }
+        }
         val otherLine = cand.filter { c ->
             otherLines.any { o ->
                 abs(c.cy - o.cy) < 0.9f * o.h && abs(c.cy - o.cy) < abs(c.cy - eq.cy) - 0.3f * h &&
@@ -1642,7 +1662,14 @@ object MathPage {
                             c.top in m.bottom - 0.4f * m.height..m.bottom + 0.3f * h &&
                             (if (side < 0) m.cx < c.left && c.left - m.right < 0.5f * h else m.cx > c.right && m.left - c.right < 0.6f * h)
                     }
-                })
+                } ||
+                // or a small part (the bar of a crossed 7) inside a digit wholly above the side
+                (max(c.width, c.height) < 0.6f * h && c.bottom < eq.cy - 0.6f * h && upper.any { m ->
+                    m !== c && rowAbove(m) &&
+                        c.left > m.left - 0.15f * h && c.right < m.right + 0.15f * h && c.top > m.top - 0.15f * h && c.bottom < m.bottom + 0.15f * h
+                }) ||
+                // or a digit of a row of them wholly above the side, with a gap under it (160,79 over 2446,59)
+                rowAbove(c))
         } else emptyList()
         val chain = ArrayList<Ink>()
         var frontier = if (dir < 0) eq.left else eq.right
