@@ -412,6 +412,8 @@ object MathLayout {
             }
         }
         if (leftN == 0 || topMax - topMin < 0.5f * s.width) return false
+        // Down the tick and up again, then along the bar: not the loops of "60" in one stroke.
+        if (Tune.radicalTurns > 0f && verticalTurns(s) > 3) return false
         // The tick goes down and back up to the bar; a 7 ends at its lowest point.
         var low = 0
         for (k in s.ys.indices) if (s.ys[k] > s.ys[low]) low = k
@@ -1283,6 +1285,8 @@ object Tune {
 
     /** Above 0: a small stroke begun above a fraction bar and hanging across it is the numerator's (its comma). */
     @JvmField var commaAcross = 1f
+    /** A √ in one stroke turns up and down at most three times (not "60" written in one). */
+    @JvmField var radicalTurns = 1f
     /** A comma seen under a run puts first the reading that has it (MathPage.holeTexts). */
     @JvmField var commaSeen = 1f
     /** Strokes whose middles are on the two sides of a long fraction bar are not one symbol. */
