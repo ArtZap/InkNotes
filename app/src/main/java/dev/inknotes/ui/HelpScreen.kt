@@ -45,6 +45,13 @@ private class Topic(val title: String, val entries: List<Pair<String, String>>)
 
 private val TOPICS = listOf(
     Topic(
+        tr("Новое в 0.82", "What's new in 0.82"),
+        listOf(
+            tr("Скобки в дроби", "Brackets in a fraction") to tr("«(» числителя, чуть заходящая за черту дроби, остаётся в числителе; «(», прочитанная как 1 или потерянная перед числом, возвращается: ∛(6·1,5·(13,5 + 1,5·1,8)/(1·1,3))·10² считается.", "The \"(\" of a numerator reaching a little through the fraction bar stays in the numerator; a \"(\" read as 1 or lost before a number is put back: ∛(6·1.5·(13.5 + 1.5·1.8)/(1·1.3))·10² is computed."),
+            tr("Над корнем", "Over a root") to tr("Строка над чертой корня больше не становится его показателем.", "A line over the bar of a root no longer becomes its exponent."),
+        ),
+    ),
+    Topic(
         tr("Новое в 0.81", "What's new in 0.81"),
         listOf(
             tr("Длинные запятые", "Long commas") to tr("Запятая длиной до двух третей строки перед следующей цифрой (2446,59) — запятая, а не индекс.", "A comma up to two thirds of a line long before the next digit (2446.59) is a comma, not an index."),
