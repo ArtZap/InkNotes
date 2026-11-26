@@ -1455,7 +1455,7 @@ object MathPage {
      */
     private fun letterBars(a: Ink, b: Ink, ink: List<Ink>): Boolean {
         val gap = b.cy - a.cy
-        val tol = max(0.2f * max(a.width, b.width), 1.5f)
+        val tol = max(0.2f * max(a.width, b.width), 2f)
         fun near(o: Ink, x: Float, y: Float) = o.xs.indices.any { k -> abs(o.xs[k] - x) < tol && abs(o.ys[k] - y) < tol }
         fun leftEnd(d: Ink): Pair<Float, Float> = d.xs.indices.minBy { d.xs[it] }.let { d.xs[it] to d.ys[it] }
         val (ax, ay) = leftEnd(a)
