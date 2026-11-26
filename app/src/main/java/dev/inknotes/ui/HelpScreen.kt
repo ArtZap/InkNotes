@@ -45,6 +45,14 @@ private class Topic(val title: String, val entries: List<Pair<String, String>>)
 
 private val TOPICS = listOf(
     Topic(
+        tr("Новое в 0.81", "What's new in 0.81"),
+        listOf(
+            tr("Длинные запятые", "Long commas") to tr("Запятая длиной до двух третей строки перед следующей цифрой (2446,59) — запятая, а не индекс.", "A comma up to two thirds of a line long before the next digit (2446.59) is a comma, not an index."),
+            tr("Не корень", "Not a root") to tr("«60», написанное одним штрихом с петлями, больше не принимается за знак корня (160,79 / 19,37).", "\"60\" written in one looping stroke is no longer taken for a root sign (160.79 / 19.37)."),
+            tr("Скобка у черты", "A bracket at the bar") to tr("Закрывающая скобка числителя, чуть заходящая за черту дроби, остаётся в числителе.", "The closing bracket of a numerator that reaches a little through the fraction bar stays in the numerator."),
+        ),
+    ),
+    Topic(
         tr("Новое в 0.80", "What's new in 0.80"),
         listOf(
             tr("Запятые", "Commas") to tr("Запятая, целиком висящая под цифрой (−31,63), запятая, касающаяся черты дроби сверху (269,15 над чертой), и запятая чуть ниже ног цифр (2446,59 в знаменателе) остаются в своём числе. Если запятая нарисована, а распознавание её пропустило, берётся прочтение с запятой.", "A comma hanging wholly under a digit (−31.63), one touching a fraction bar from above (269.15 over the bar) and one a little below the feet of the digits (2446.59 in a denominator) stay in their number. When a comma is drawn but the reading left it out, the reading with it is taken."),
