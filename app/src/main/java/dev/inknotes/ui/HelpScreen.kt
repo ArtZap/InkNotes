@@ -45,6 +45,12 @@ private class Topic(val title: String, val entries: List<Pair<String, String>>)
 
 private val TOPICS = listOf(
     Topic(
+        tr("Новое в 0.84", "What's new in 0.84"),
+        listOf(
+            tr("Заставка", "The start") to tr("Переливание по буквам названия вернулось. Движения заставки идут внахлёст с одним плавным замедлением, а тетрадь строится, когда на заставке уже ничего не движется, — рывков нет.", "The gleam over the letters of the name is back. The movements of the start overlap with one smooth slowing, and the notebook is made when nothing on the start moves any more, so nothing jerks."),
+        ),
+    ),
+    Topic(
         tr("Новое в 0.83", "What's new in 0.83"),
         listOf(
             tr("Быстрый запуск", "A quick start") to tr("Заставка короче (около секунды) и плавная: пока поднимается перо, приложение больше ничем не занято. Тетрадь открывается первой: поиск по почерку и синхронизация начинают работу через несколько секунд после запуска, файлы исправлений формул читаются в фоне.", "The start is shorter (about a second) and smooth: while the pen rises the app does nothing else. The notebook opens first: handwriting search and sync start a few seconds after the start, and the formula corrections are read in the background."),

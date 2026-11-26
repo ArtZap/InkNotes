@@ -28,6 +28,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -47,12 +50,15 @@ import kotlinx.coroutines.launch
 /** A long, soft settle: quick start, very gentle landing (no visible stop). */
 private val Smooth = CubicBezierEasing(0.2f, 0f, 0f, 1f)
 
+/** Even in and out: for the gleam and the fade. */
+private val Glide = CubicBezierEasing(0.4f, 0f, 0.2f, 1f)
+
 /**
  * The start of the app. The system window already shows the pen of the icon in the middle of
  * the paper (themes.xml, splash_window.xml); the first frame here is exactly that picture, so
- * nothing jumps. Then, in under half a second, the paper turns to the chosen style, the pen
- * rises and shrinks and the name comes in under it; [onRisen] then lets what is under it be
- * made, and the start fades away by itself (a tap skips it).
+ * nothing jumps. Then the paper turns to the chosen style, the pen rises and shrinks, the name
+ * comes in under it with a gleam running across; once nothing moves, [onRisen] lets what is
+ * under it be made, and the start fades away by itself (a tap skips it).
  *
  * Every moving value is read only where it is drawn (graphicsLayer, drawBehind), never while
  * composing: a frame of the start is only drawn again, nothing is laid out, so it stays smooth.
@@ -65,24 +71,30 @@ fun Splash(onRisen: () -> Unit = {}, onDone: () -> Unit) {
     val startInk = colorResource(R.color.splash_ink)
     val rise = remember { Animatable(0f) }
     val words = remember { Animatable(0f) }
+    val gleam = remember { Animatable(-0.3f) }
     val gone = remember { Animatable(0f) }
     LaunchedEffect(Unit) {
-        launch { words.animateTo(1f, tween(320, delayMillis = 120, easing = Smooth)) }
-        rise.animateTo(1f, tween(440, easing = Smooth))
+        // One easing for everything that moves, the parts overlapping: no visible step.
+        launch { words.animateTo(1f, tween(520, delayMillis = 200, easing = Smooth)) }
+        launch { gleam.animateTo(1.3f, tween(900, delayMillis = 380, easing = Glide)) }
+        rise.animateTo(1f, tween(640, easing = Smooth))
+        // The page underneath is made only when nothing moves any more (making it holds the
+        // main thread for a moment: a moving frame would stop there).
+        kotlinx.coroutines.delay(660)
         onRisen()
-        // A moment for the name, while the page underneath is made.
-        kotlinx.coroutines.delay(260)
-        gone.animateTo(1f, tween(280, easing = FastOutSlowInEasing))
+        // Its first frames drawn, then the start fades away over it.
+        repeat(3) { androidx.compose.runtime.withFrameNanos { } }
+        gone.animateTo(1f, tween(380, easing = Glide))
         onDone()
     }
     // Gold in the gilded styles, the accent in the classic one, graphite in the minimal.
-    val ink = when (style) {
-        UiStyle.PREMIUM -> Color(0xFFB8914A)
-        UiStyle.MYSTIC -> Color(0xFFAD8C4C)
-        UiStyle.CLASSIC -> colors.primary
-        UiStyle.MINIMAL -> colors.onBackground
-        UiStyle.GLASS -> colors.primary
-        UiStyle.NOTEBOOK -> colors.primary
+    val (ink, shine) = when (style) {
+        UiStyle.PREMIUM -> Color(0xFFB8914A) to Color(0xFFF6E7BE)
+        UiStyle.MYSTIC -> Color(0xFFAD8C4C) to Color(0xFFEFDDAE)
+        UiStyle.CLASSIC -> colors.primary to lerp(colors.primary, Color.White, 0.7f)
+        UiStyle.MINIMAL -> colors.onBackground to colors.onSurfaceVariant
+        UiStyle.GLASS -> colors.primary to Color.White
+        UiStyle.NOTEBOOK -> colors.primary to Color(0xFFFFD6E8)
     }
     val paper = colors.background
     Box(
@@ -122,7 +134,29 @@ fun Splash(onRisen: () -> Unit = {}, onDone: () -> Unit) {
                 translationY = (62f + 16f * (1f - words.value)).dp.toPx()
             },
         ) {
-            Row(verticalAlignment = Alignment.Bottom) {
+            // The gleam runs over the letters only: drawn over them in the draw phase (the
+            // letters are not laid out again each frame).
+            Row(
+                verticalAlignment = Alignment.Bottom,
+                modifier = Modifier
+                    .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+                    .drawWithContent {
+                        drawContent()
+                        val g = gleam.value
+                        if (g > -0.25f && g < 1.25f) {
+                            val w = size.width
+                            val x = g * w
+                            drawRect(
+                                Brush.linearGradient(
+                                    listOf(Color.Transparent, shine, Color.Transparent),
+                                    start = Offset(x - 0.16f * w, 0f),
+                                    end = Offset(x + 0.16f * w, size.height * 0.6f),
+                                ),
+                                blendMode = BlendMode.SrcAtop,
+                            )
+                        }
+                    },
+            ) {
                 Text(
                     "Ink",
                     color = ink,
