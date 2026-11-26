@@ -1283,6 +1283,8 @@ object Tune {
 
     /** Above 0: a small stroke begun above a fraction bar and hanging across it is the numerator's (its comma). */
     @JvmField var commaAcross = 1f
+    /** A comma seen under a run puts first the reading that has it (MathPage.holeTexts). */
+    @JvmField var commaSeen = 1f
     /** Strokes whose middles are on the two sides of a long fraction bar are not one symbol. */
     @JvmField var barBetween = 1f
     /** A flat stroke going up and down three times or more is no minus. */

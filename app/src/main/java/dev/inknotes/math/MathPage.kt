@@ -948,9 +948,26 @@ object MathPage {
         return out
     }
 
+    /** A small tick under the foot of the digits around it, with digits on both sides: a decimal comma. */
+    private fun hasComma(strokes: List<Ink>, h: Float): Boolean {
+        val big = strokes.filter { it.height > 0.5f * h }
+        if (big.size < 2) return false
+        val foot = big.map { it.bottom }.sorted()[big.size / 2]
+        return strokes.any { c ->
+            max(c.width, c.height) < 0.45f * h && c.width < 0.8f * c.height + 1f && c.top > foot - 0.25f * h && c.bottom > foot + 0.05f * h &&
+                big.any { it.right <= c.left + 0.2f * h } && big.any { it.left >= c.right - 0.2f * h }
+        }
+    }
+
     /** The texts a run is read as, best first, for [readings]; empty when the reader saw nothing. */
     private fun holeTexts(hole: Piece.Hole, reader: RunReader, prefer: Prefer, known: (String) -> Boolean): List<String> {
-        val texts = reader.read(hole.strokes, hole.h).map(MathText::normalize).filter { it.isNotEmpty() }.map(::digitIndex)
+        val read = reader.read(hole.strokes, hole.h).map(MathText::normalize).filter { it.isNotEmpty() }.map(::digitIndex)
+        // A comma drawn between digits, under their foot, that the first reading left out
+        // (2446,59 read 244659 first): the next reading with it goes first.
+        val texts = if (Tune.commaSeen > 0f && read.size > 1 && read[0].none { it == ',' || it == '.' } && hasComma(hole.strokes, hole.h)) {
+            val withIt = read.take(3).firstOrNull { t -> Regex("\\d[,.]\\d").containsMatchIn(t) && t.filter { it.isDigit() } == read[0].filter { it.isDigit() } }
+            if (withIt != null) listOf(withIt) + (read - withIt) else read
+        } else read
         // A lone upright read as l or I is a 1 nine times in ten (CROHME, read by ML Kit on
         // the emulator: l 47 of 51, I 33 of 38), so 1 is tried first; not when the page has
         // that letter already (l = 2 м above: the length).
@@ -1725,7 +1742,9 @@ object MathPage {
                     members.any { c.cy in it.top..it.bottom && it.left >= c.right - 0.1f * h && it.left - c.right < 0.8f * h && it.height < 1.3f * h }
                 // A decimal comma between two digits taken, hanging just under their foot
                 // (2446,59 in a denominator): small, below the line the band follows.
-                fun foot(m: Ink) = c.top in m.bottom - 0.4f * m.height..m.bottom + 0.3f * h
+                // (the dot of ! right under its stem is no comma)
+                val bangDot by lazy { ink.any { u -> u !== c && u.width < 0.3f * h && u.height > 0.5f * h && c.cx in u.left - 0.1f * h..u.right + 0.1f * h && u.bottom in c.top - 0.6f * h..c.top + 0.05f * h } }
+                fun foot(m: Ink) = c.top in m.bottom - 0.4f * m.height..m.bottom + (if (Tune.commaLow > 0f && !bangDot) 0.4f else 0.3f) * h
                 val small = max(c.width, c.height) < 0.4f * h
                 val before = members.filter { foot(it) && it.right <= c.left + 0.15f * h && c.left - it.right < 0.5f * h }
                 val after = members.filter { foot(it) && it.left >= c.right - 0.15f * h && it.left - c.right < 0.6f * h }
