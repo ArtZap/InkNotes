@@ -177,7 +177,11 @@ object MathLayout {
             // Not the body of a 5 and its own bar, level with a long low √ beside them (325²).
             val fiveBar = Tune.rootNotBar > 0f && (cap(a, b, h) || cap(b, a, h))
             if (!fiveBar && bars.any { bar ->
-                    bar.cy > min(a.bottom, b.bottom) - 0.05f * h && bar.cy < max(a.top, b.top) + 0.05f * h &&
+                    (
+                        (bar.cy > min(a.bottom, b.bottom) - 0.05f * h && bar.cy < max(a.top, b.top) + 0.05f * h) ||
+                            // a comma of the numerator just touching the bar, a digit of the denominator under it
+                            (Tune.barBetween > 0f && bar.cy > min(a.cy, b.cy) && bar.cy < max(a.cy, b.cy) && bar.width > 2f * h)
+                        ) &&
                         bar.left < a.right && bar.right > a.left && bar.left < b.right && bar.right > b.left
                 }
             ) continue
@@ -1279,6 +1283,8 @@ object Tune {
 
     /** Above 0: a small stroke begun above a fraction bar and hanging across it is the numerator's (its comma). */
     @JvmField var commaAcross = 1f
+    /** Strokes whose middles are on the two sides of a long fraction bar are not one symbol. */
+    @JvmField var barBetween = 1f
     /** A flat stroke going up and down three times or more is no minus. */
     @JvmField var wavyNotMinus = 1f
     /** A tall bracket may begin with a hook up to a fifth of its height. */
