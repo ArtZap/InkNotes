@@ -57,8 +57,17 @@ object WebDavListing {
     /** The last part of [href], decoded: the file's name. */
     fun nameOf(href: String): String = URLDecoder.decode(href.trimEnd('/').substringAfterLast('/').replace("+", "%2B"), "UTF-8")
 
-    /** [href] (absolute, or a path on the server of [base]) as a full URL. */
-    fun absolute(base: String, href: String): String = if (href.startsWith("http://") || href.startsWith("https://")) href else URI(base).resolve(href).toString()
+    /**
+     * [href] (absolute, or a path on the server of [base]) as a full URL; null when it points
+     * to another server or scheme (the password is sent with every request to it).
+     */
+    fun absolute(base: String, href: String): String? {
+        val b = URI(base)
+        val u = b.resolve(href)
+        val port = { x: URI -> if (x.port != -1) x.port else if (x.scheme.equals("https", true)) 443 else 80 }
+        if (!u.scheme.equals(b.scheme, true) || !u.host.equals(b.host, true) || port(u) != port(b)) return null
+        return u.toString()
+    }
 
     /** [name] as one part of a URL path. */
     fun encode(name: String): String = URLEncoder.encode(name, "UTF-8").replace("+", "%20")
@@ -79,10 +88,13 @@ data class WebDavAccount(val url: String, val user: String, val password: String
         get() {
             val u = url.trim().lowercase()
             if (u.startsWith("https://")) return false
-            val host = u.removePrefix("http://").substringBefore('/').substringBefore(':')
-            val parts = host.split('.').mapNotNull { it.toIntOrNull() }
+            val host = u.removePrefix("http://").substringBefore('/').substringBefore('?').substringAfterLast('@').substringBefore(':')
+            // An address of four numbers only (192.168.1.1, not 192.168.1.1.example.com).
+            val split = host.split('.')
+            val parts = split.mapNotNull { it.toIntOrNull()?.takeIf { n -> n in 0..255 } }
+            val ip = split.size == 4 && parts.size == 4
             val private = host == "localhost" || host.endsWith(".local") || host.endsWith(".lan") ||
-                parts.size == 4 && (parts[0] == 10 || parts[0] == 127 || parts[0] == 192 && parts[1] == 168 || parts[0] == 172 && parts[1] in 16..31)
+                ip && (parts[0] == 10 || parts[0] == 127 || parts[0] == 192 && parts[1] == 168 || parts[0] == 172 && parts[1] in 16..31)
             return !private
         }
 

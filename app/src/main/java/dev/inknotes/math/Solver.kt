@@ -59,7 +59,8 @@ object Solver {
                 for (q in 0 until n) if (q != j) x[q] = rest[k++]
                 val g0 = at(x, 0.0)
                 val slope = at(x, 1.0) - g0
-                x[j] = -g0 / slope
+                // No x_j for these others ((y − 1)·x = 0 at y = 1): not a point.
+                x[j] = if (abs(slope) > 1e-12 && g0.isFinite()) -g0 / slope else Double.NaN
                 return x
             }
             val reduced = { rest: DoubleArray ->
@@ -67,7 +68,10 @@ object Solver {
                 DoubleArray(m - 1) { k -> y[if (k < i) k else k + 1] }
             }
             return when (val res = solve(reduced, m - 1, n - 1)) {
-                is Result.Points -> Result.Points(res.solutions.map { p -> full(p).map(::clean).toDoubleArray() }, res.more)
+                is Result.Points -> {
+                    val pts = res.solutions.map { p -> full(p).map(::clean).toDoubleArray() }.filter { p -> p.all { it.isFinite() } }
+                    if (pts.isEmpty()) newton(f, n) else Result.Points(pts, res.more)
+                }
                 else -> res
             }
         }
@@ -83,6 +87,8 @@ object Solver {
         val a = Array(m) { DoubleArray(n) }
         for (j in 0 until n) {
             val col = f(DoubleArray(n) { if (it == j) 1.0 else 0.0 })
+            // A pole at the unit point (1/(x − 1) = 2): not linear (NaN would pass every check).
+            if (col.any { !it.isFinite() }) return null
             for (i in 0 until m) a[i][j] = col[i] - c[i]
         }
         for (probe in PROBES) {

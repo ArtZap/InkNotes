@@ -116,6 +116,19 @@ class MathPageTest {
     }
 
     @Test
+    fun xEqualToAFormulaInXIsAnEquation() {
+        // x = 2x − 3: solved (x = 3), not stored as x defined by itself.
+        val s = Sheet()
+        s.glyph("x", 100f, 106f, 12f, 18f)
+        s.equals(122f, 112f)
+        s.glyph("2", 150f, 100f)
+        s.glyph("x", 166f, 106f, 12f, 18f)
+        s.dash(184f, 112f, 12f)
+        s.glyph("3", 202f, 100f)
+        assertEquals("x = 3", s.answers().filter { !it.missing }.joinToString { text(it) })
+    }
+
+    @Test
     fun aLinkOfAChainOfWorkingIsNotSolved() {
         // a + 1 = 5 = 5: the written working of a value, not an equation in a.
         val s = Sheet()

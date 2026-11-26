@@ -162,9 +162,9 @@ object MathPage {
         }
 
         // Writing order: by line, then left to right.
-        val ordered = eqs.sortedWith { a, b ->
-            if (abs(a.cy - b.cy) < 0.5f * max(a.h, b.h)) a.left.compareTo(b.left) else a.cy.compareTo(b.cy)
-        }.take(MAX_EQUALS)
+        // (Lines found first, then sorted: comparing pairs "on one line" is not transitive,
+        // and a sort with such a comparison may throw on a page of many "=".)
+        val ordered = writingOrder(eqs, { it.cy }, { it.h }, { it.left }).take(MAX_EQUALS)
         // First the definitions (a = 5, f(x) = …): they hold for the whole page. A line uses
         // the nearest definition above it, or else the first one below (a = 2 written later).
         /** An equation read off the page; [again] reads it anew with moved thresholds (null: same layout). */
@@ -228,7 +228,12 @@ object MathPage {
                     continue
                 }
             }
-            if (Calc.isDefinition(l)) defs += Def(i, l, r, leftInk = left, rightInk = right) else single += Def(i, l, r, again.takeIf { !pinnedHere }, left, right)
+            // x = 2x − 3 is an equation in x, not a definition of it (it would define x by itself).
+            if (Calc.isDefinition(l) && runCatching { Algebra.freeVars(r).none { it == Calc.definedName(l) } }.getOrDefault(true)) {
+                defs += Def(i, l, r, leftInk = left, rightInk = right)
+            } else {
+                single += Def(i, l, r, again.takeIf { !pinnedHere }, left, right)
+            }
         }
         val definedNames = defs.mapNotNull { Calc.definedName(it.left) }.toSet()
         fun envAt(index: Int): Env {
@@ -957,6 +962,23 @@ object MathPage {
             max(c.width, c.height) < 0.45f * h && c.width < 0.8f * c.height + 1f && c.top > foot - 0.25f * h && c.bottom > foot + 0.05f * h &&
                 big.any { it.right <= c.left + 0.2f * h } && big.any { it.left >= c.right - 0.2f * h }
         }
+    }
+
+    /** [items] by line (top to bottom), then left to right; a line holds what is within half a height of its first. */
+    internal fun <T> writingOrder(items: List<T>, cy: (T) -> Float, h: (T) -> Float, left: (T) -> Float): List<T> {
+        val byY = items.sortedBy(cy)
+        val line = java.util.IdentityHashMap<T, Int>()
+        var n = -1
+        var start: T? = null
+        for (e in byY) {
+            val s = start
+            if (s == null || abs(cy(e) - cy(s)) >= 0.5f * max(h(e), h(s))) {
+                n++
+                start = e
+            }
+            line[e] = n
+        }
+        return byY.sortedWith(compareBy<T>({ line[it] ?: 0 }, { left(it) }))
     }
 
     /** The texts a run is read as, best first, for [readings]; empty when the reader saw nothing. */

@@ -202,7 +202,9 @@ class DriveSync(
 
     /** The notebook of [fileId] here: in place of the one with its id, or as a copy. */
     private suspend fun download(fileId: String, replace: Boolean): Notebook? {
-        val tmp = File(cacheDir, "sync-down-$fileId.inknote")
+        // A WebDAV file id is a whole URL (slashes, "..") and a Drive one a plain id: the name
+        // here is made from its hash, always one file right in the cache folder.
+        val tmp = File(cacheDir, "sync-down-${java.lang.Long.toHexString(fileId.hashCode().toLong() and 0xffffffffL)}-${fileId.length}.inknote")
         try {
             api.download(fileId, tmp)
             val ready = when (val r = suspendCancellableCoroutine { c -> repo.readArchiveAsync({ tmp.inputStream() }) { c.resume(it) } }) {

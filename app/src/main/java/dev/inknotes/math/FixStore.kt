@@ -32,8 +32,10 @@ class FixStore(private val dir: File?, private val background: Boolean = false) 
     // handwriting file made the start of the app wait); whoever needs them first waits.
     private val loaded = java.util.concurrent.CountDownLatch(1)
 
+    // No time limit: a write made before the files were read would put a part of them over
+    // the whole (the pins set earlier lost). Reading always ends (the latch is let go in finally).
     private fun awaitLoad() {
-        if (loaded.count > 0L) runCatching { loaded.await(LOAD_WAIT_MS, java.util.concurrent.TimeUnit.MILLISECONDS) }
+        if (loaded.count > 0L) runCatching { loaded.await() }
     }
 
     private var learnedNow = Learned()
@@ -225,6 +227,7 @@ class FixStore(private val dir: File?, private val background: Boolean = false) 
     /** On the writing thread: the whole file to a side file, then renamed over the old one. */
     private fun put(name: String, text: String) {
         val f = file(name) ?: return
+        f.parentFile?.mkdirs()
         val tmp = File(f.parentFile, f.name + ".tmp")
         runCatching {
             java.io.FileOutputStream(tmp).use { out ->
@@ -302,8 +305,5 @@ class FixStore(private val dir: File?, private val background: Boolean = false) 
         /** What a backup takes (the settings stay with the device). */
         val FILES = listOf(PINS, LEARNED, SAMPLES, PLACES, SCALES, HAND)
         const val MAX_PINS = 5000
-
-        /** The longest anyone waits for the files to be read (then goes on with what is there). */
-        const val LOAD_WAIT_MS = 10_000L
     }
 }

@@ -53,11 +53,13 @@ object SyncPlan {
             val s = synced[id]
             when {
                 l != null && r == null ->
-                    // Synced before and gone there: deleted on the other device.
-                    if (s != null) { if (id !in busy) out += Action.TrashLocal(id) } else out += Action.Upload(id, null)
+                    // Synced before and gone there: deleted on the other device. Changed here
+                    // since then: the changes win, it goes up again (nothing is lost).
+                    if (s != null && l.updatedAt == s.localAt) { if (id !in busy) out += Action.TrashLocal(id) } else out += Action.Upload(id, null)
                 l == null && r != null ->
-                    // Synced before and gone here: deleted on this device.
-                    out += if (s != null) Action.TrashRemote(id, r.fileId) else Action.Download(id, r.fileId)
+                    // Synced before and gone here: deleted on this device. Changed there since
+                    // then: it comes back here instead of going to the trash.
+                    out += if (s != null && r.version == s.remoteVersion && r.fileId == s.fileId) Action.TrashRemote(id, r.fileId) else Action.Download(id, r.fileId)
                 l != null && r != null -> {
                     if (s == null) {
                         // Both have it, never synced from here: the same if the times agree.

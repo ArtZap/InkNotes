@@ -12,6 +12,12 @@ class CalcTest {
         text(Calc.solve(eqs.map { Parser.parse(it.first) to Parser.parse(it.second) }, env))
 
     @Test
+    fun aPoleAtOneIsNoLinearEquation() {
+        // 1/(x − 1) = 2 at x = 1 gave NaN: taken for linear, x = NaN.
+        assertEquals("x = 1,5", solve(Env(), "\\frac{1}{x-1}" to "2"))
+    }
+
+    @Test
     fun arithmetic() {
         assertEquals("14", eval("2+3*4"))
         assertEquals("14", eval("2+3·4"))

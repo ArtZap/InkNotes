@@ -76,8 +76,11 @@ object Steps {
         val rhs = DoubleArray(residuals.size)
         for (i in residuals.indices) {
             val f0 = f(i, DoubleArray(n))
+            if (!f0.isFinite()) return null
             rhs[i] = -f0
             for (j in 0 until n) a[i][j] = f(i, DoubleArray(n) { if (it == j) 1.0 else 0.0 }) - f0
+            // A pole at a unit point: not linear.
+            if (a[i].any { !it.isFinite() }) return null
             // Linear: the same at a point away from the axes.
             val probe = DoubleArray(n) { 1.3 + 0.7 * it }
             val predicted = f0 + (0 until n).sumOf { a[i][it] * probe[it] }

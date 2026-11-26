@@ -58,6 +58,7 @@ class WebDavClient(private val account: WebDavAccount, private val http: OkHttpC
         return WebDavListing.parse(xml).filter { !it.folder }.mapNotNull { e ->
             val name = runCatching { WebDavListing.nameOf(e.href) }.getOrNull() ?: return@mapNotNull null
             val (id, time) = WebDavNames.parse(name) ?: return@mapNotNull null
+            // Only a file on this very server: the password is sent with every request.
             val url = runCatching { WebDavListing.absolute(folderId, e.href) }.getOrNull() ?: return@mapNotNull null
             DriveFile(url, name, time, mapOf(DriveSync.PROP_ID to id, DriveSync.PROP_TIME to time.toString()))
         }
@@ -69,8 +70,10 @@ class WebDavClient(private val account: WebDavAccount, private val http: OkHttpC
         val fileName = WebDavNames.name(name.removeSuffix(".inknote"), id, time)
         val url = folderId + WebDavListing.encode(fileName)
         call(request(url).put(from.asRequestBody(OCTET)).build()).use { r -> if (!r.isSuccessful) fail("PUT", r.code) }
-        // The old file of this notebook goes only once the new one is there.
-        if (fileId != null && fileId != url) trash(fileId)
+        // The old file of this notebook goes only once the new one is there. Not removed (the
+        // server failed): the new one is up all the same; two files of one notebook are sorted
+        // out by the sync, the latest counts, and the old one goes next time.
+        if (fileId != null && fileId != url) runCatching { trash(fileId) }
         return DriveFile(url, fileName, time, props)
     }
 
