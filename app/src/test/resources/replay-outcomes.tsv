@@ -188,9 +188,9 @@ CROHME2012_data/testDataGT/KME1G3_2_sub_25	NONE	NONE
 CROHME2012_data/testDataGT/KME1G3_3_sub_25	NONE	NONE
 CROHME2012_data/testDataGT/KME1G3_4_sub_25	UNSURE	UNSURE
 CROHME2012_data/testDataGT/KME1G3_5_sub_25	NONE	WRONG
-CROHME2012_data/testDataGT/KME1G3_6_sub_25	WRONG	UNSURE
+CROHME2012_data/testDataGT/KME1G3_6_sub_25	WRONG	WRONG
 CROHME2012_data/testDataGT/KME1G3_7_sub_25	NONE	NONE
-CROHME2012_data/testDataGT/KME1G3_8_sub_25	RIGHT	UNSURE
+CROHME2012_data/testDataGT/KME1G3_8_sub_25	RIGHT	RIGHT
 CROHME2012_data/testDataGT/KME1G3_9_sub_25	NONE	NONE
 CROHME2012_data/testDataGT/KME2G3_0_sub_15	WRONG	
 CROHME2012_data/testDataGT/KME2G3_0_sub_3	WRONG	
@@ -393,13 +393,13 @@ synthetic/power-7	RIGHT	RIGHT
 synthetic/power-8	WRONG	UNSURE
 synthetic/power-9	RIGHT	RIGHT
 synthetic/power-10	RIGHT	RIGHT
-synthetic/power-11	WRONG	WRONG
+synthetic/power-11	WRONG	RIGHT
 synthetic/power-12	WRONG	NONE
 synthetic/power-13	RIGHT	RIGHT
 synthetic/power-14	UNSURE	UNSURE
 synthetic/power-15	RIGHT	RIGHT
 synthetic/power-16	NONE	NONE
-synthetic/power-17	RIGHT	WRONG
+synthetic/power-17	RIGHT	RIGHT
 synthetic/power-18	RIGHT	RIGHT
 synthetic/power-19	RIGHT	RIGHT
 synthetic/power-20	RIGHT	RIGHT
@@ -416,7 +416,7 @@ synthetic/power-30	WRONG	WRONG
 synthetic/power-31	RIGHT	RIGHT
 synthetic/power-32	WRONG	RIGHT
 synthetic/power-33	RIGHT	UNSURE
-synthetic/power-34	RIGHT	WRONG
+synthetic/power-34	RIGHT	RIGHT
 synthetic/power-35	RIGHT	UNSURE
 synthetic/power-36	RIGHT	RIGHT
 synthetic/power-37	WRONG	UNSURE

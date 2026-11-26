@@ -973,8 +973,11 @@ object MathPage {
             val first = hole.strokes.minByOrNull { it.left }
             val rest = hole.strokes.filter { it !== first && it.height > 0.4f * hole.h }
             if (Tune.parenInRun > 0f && first != null && rest.size >= 2 && first.height > 1.25f * rest.maxOf { it.height } && first.width > 0.22f * first.height &&
-                MathLayout.parenOpening(first) && texts0.none { it.startsWith("(") }
-            ) (texts0.flatMap { t -> if (t.first() in "1lI|" && t.length > 1) listOf("(" + t.drop(1), t) else listOf(t) } + texts0.take(2).map { "(" + it }).distinct() else texts0
+                MathLayout.parenOpening(first) && texts0.firstOrNull()?.startsWith("(") == false
+            ) {
+                val read = texts0.filter { it.startsWith("(") }
+                (read + texts0.flatMap { t -> if (t.first() in "1lI|" && t.length > 1) listOf("(" + t.drop(1), t) else listOf(t) } + texts0.take(2).map { "(" + it }).distinct()
+            } else texts0
         }
         // A lone upright read as l or I is a 1 nine times in ten (CROHME, read by ML Kit on
         // the emulator: l 47 of 51, I 33 of 38), so 1 is tried first; not when the page has
@@ -994,7 +997,7 @@ object MathPage {
         val all = (main.take(MAX_CANDIDATES) + digits + lookalikes).distinct()
         // Computing: digit readings first, so the combinations tried first are numbers
         // (1/5 · 5/1, not I/s · s/d) — there are too many to try them all.
-        return if (prefer == Prefer.NUMBERS) all.sortedBy { t -> if (t.all { it.isDigit() || it == ',' || it == '.' }) 0 else 1 } else all
+        return if (prefer == Prefer.NUMBERS) all.sortedBy { t -> if (t.all { it.isDigit() || it == ',' || it == '.' || it == '(' || it == ')' }) 0 else 1 } else all
     }
 
     /**
