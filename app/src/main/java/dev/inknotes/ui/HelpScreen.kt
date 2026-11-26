@@ -45,6 +45,12 @@ private class Topic(val title: String, val entries: List<Pair<String, String>>)
 
 private val TOPICS = listOf(
     Topic(
+        tr("Новое в 0.83", "What's new in 0.83"),
+        listOf(
+            tr("Быстрый запуск", "A quick start") to tr("Заставка короче (около секунды) и плавная: пока поднимается перо, приложение больше ничем не занято. Тетрадь открывается первой: поиск по почерку и синхронизация начинают работу через несколько секунд после запуска, файлы исправлений формул читаются в фоне.", "The start is shorter (about a second) and smooth: while the pen rises the app does nothing else. The notebook opens first: handwriting search and sync start a few seconds after the start, and the formula corrections are read in the background."),
+        ),
+    ),
+    Topic(
         tr("Новое в 0.82", "What's new in 0.82"),
         listOf(
             tr("Скобки в дроби", "Brackets in a fraction") to tr("«(» числителя, чуть заходящая за черту дроби, остаётся в числителе; «(», прочитанная как 1 или потерянная перед числом, возвращается: ∛(6·1,5·(13,5 + 1,5·1,8)/(1·1,3))·10² считается.", "The \"(\" of a numerator reaching a little through the fraction bar stays in the numerator; a \"(\" read as 1 or lost before a number is put back: ∛(6·1.5·(13.5 + 1.5·1.8)/(1·1.3))·10² is computed."),

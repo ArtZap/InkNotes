@@ -104,6 +104,8 @@ class MainActivity : ComponentActivity() {
         quickNoteSeen = prefs.quickNoteUsedAt
         // The name of the app greets a fresh start only (not a rotation or a theme change).
         var splash by mutableStateOf(savedInstanceState == null)
+        // What is under the start: made once the pen has risen (at once without a start).
+        var underneath by mutableStateOf(savedInstanceState != null)
         // Edge to edge from the very first frame: the splash then covers the whole window, like
         // the logo of the start window, and its pen lands on the same spot.
         enableEdgeToEdge()
@@ -138,7 +140,11 @@ class MainActivity : ComponentActivity() {
             InkNotesTheme(dark, uiStyle) {
                 val current = editor
                 val saved = androidx.compose.runtime.saveable.rememberSaveableStateHolder()
-                if (current == null) {
+                // While the pen of the start rises the main thread draws only it (smooth);
+                // the library or the notebook is made under the name, then shown.
+                if (!underneath) {
+                    // nothing yet
+                } else if (current == null) {
                     saved.SaveableStateProvider("library") { androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.appear()) { LibraryScreen(
                         repo = repo,
                         backup = AppServices.get(this@MainActivity).backup,
@@ -240,7 +246,7 @@ class MainActivity : ComponentActivity() {
                 }
                 pendingImport?.let { (set, into) -> ImportConflictDialog(set, into) }
                 TabDropOverlay()
-                if (splash) Splash(onDone = { splash = false })
+                if (splash) Splash(onRisen = { underneath = true }, onDone = { splash = false; underneath = true })
                 // Once the start is over the window keeps only the paper of the chosen style
                 // (no logo behind the app; nothing dark either).
                 val paper = androidx.compose.material3.MaterialTheme.colorScheme.background
@@ -780,9 +786,17 @@ class MainActivity : ComponentActivity() {
         super.onDestroy()
     }
 
+    /** The first resume of this activity: the sync waits until the notebook has opened. */
+    private var resumedOnce = false
+
     override fun onResume() {
         super.onResume()
-        AppServices.get(this).cloud.autoSync(openIds())
+        if (resumedOnce) {
+            AppServices.get(this).cloud.autoSync(openIds())
+        } else {
+            resumedOnce = true
+            window.decorView.postDelayed({ if (!isFinishing) AppServices.get(this).cloud.autoSync(openIds()) }, AppServices.QUIET_START_MS)
+        }
         // A quick note was written meanwhile (over the lock screen, from the tile): an open tab
         // of that notebook has the old pages and is closed, so it can't write over the note.
         val at = prefs.quickNoteUsedAt

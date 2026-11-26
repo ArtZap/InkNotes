@@ -28,36 +28,55 @@ class FixStore(private val dir: File?, private val background: Boolean = false) 
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Double>?) = size > MAX_PINS
     }
 
-    val learned: Learned
+    // The files are read on the writing thread, not where the app starts (a large
+    // handwriting file made the start of the app wait); whoever needs them first waits.
+    private val loaded = java.util.concurrent.CountDownLatch(1)
+
+    private fun awaitLoad() {
+        if (loaded.count > 0L) runCatching { loaded.await(LOAD_WAIT_MS, java.util.concurrent.TimeUnit.MILLISECONDS) }
+    }
+
+    private var learnedNow = Learned()
+    private var samplesNow = Samples()
+    private var placementsNow = Placements()
+    private var handNow = HandGlyphs()
+
+    val learned: Learned get() = awaitLoad().let { learnedNow }
 
     /** The writer's own symbols (shape and what it is), a second voice beside ML Kit. */
-    val samples: Samples
+    val samples: Samples get() = awaitLoad().let { samplesNow }
 
     /** Where the writer puts exponents and indexes. */
-    val placements: Placements
+    val placements: Placements get() = awaitLoad().let { placementsNow }
 
     /** The writer's digits and signs for answers in their hand. */
-    val hand: HandGlyphs
+    val hand: HandGlyphs get() = awaitLoad().let { handNow }
 
     /** Answers after "=" are drawn with [hand] where it has every symbol of them. */
     @Volatile
-    var inHand: Boolean = false
+    private var inHandNow = false
+    var inHand: Boolean
+        get() = awaitLoad().let { inHandNow }
         set(value) {
-            field = value
+            inHandNow = value
             saveSettings()
         }
 
     @Volatile
-    var learn: Boolean = true
+    private var learnNow = true
+    var learn: Boolean
+        get() = awaitLoad().let { learnNow }
         set(value) {
-            field = value
+            learnNow = value
             saveSettings()
         }
 
     @Volatile
-    var ask: Ask = Ask.UNSURE
+    private var askNow = Ask.UNSURE
+    var ask: Ask
+        get() = awaitLoad().let { askNow }
         set(value) {
-            field = value
+            askNow = value
             saveSettings()
         }
 
@@ -71,10 +90,31 @@ class FixStore(private val dir: File?, private val background: Boolean = false) 
     }
 
     init {
-        learned = read(LEARNED)?.let { runCatching { Learned.parse(it) }.getOrNull() } ?: Learned()
-        samples = read(SAMPLES)?.let { runCatching { Samples.parse(it) }.getOrNull() } ?: Samples()
-        placements = read(PLACES)?.let { runCatching { Placements.parse(it) }.getOrNull() } ?: Placements()
-        hand = read(HAND)?.let { runCatching { HandGlyphs.parse(it) }.getOrNull() } ?: HandGlyphs()
+        val q = io
+        if (q == null) load() else runCatching { q.execute { load() } }.onFailure { loaded.countDown() }
+    }
+
+    private fun load() = try {
+        learnedNow = read(LEARNED)?.let { runCatching { Learned.parse(it) }.getOrNull() } ?: Learned()
+        samplesNow = read(SAMPLES)?.let { runCatching { Samples.parse(it) }.getOrNull() } ?: Samples()
+        placementsNow = read(PLACES)?.let { runCatching { Placements.parse(it) }.getOrNull() } ?: Placements()
+        handNow = read(HAND)?.let { runCatching { HandGlyphs.parse(it) }.getOrNull() } ?: HandGlyphs()
+        synchronized(this) { readMaps() }
+        read(SETTINGS)?.let { text ->
+            for (line in text.lines()) {
+                val (k, v) = line.split('=', limit = 2).takeIf { it.size == 2 } ?: continue
+                when (k) {
+                    "learn" -> learnNow = v == "1"
+                    "ask" -> askNow = runCatching { Ask.valueOf(v) }.getOrDefault(Ask.UNSURE)
+                    "hand" -> inHandNow = v == "1"
+                }
+            }
+        }
+    } finally {
+        loaded.countDown()
+    }
+
+    private fun readMaps() {
         read(PINS)?.let { text ->
             for (line in text.lines()) {
                 val tab = line.indexOf('\t')
@@ -88,47 +128,49 @@ class FixStore(private val dir: File?, private val background: Boolean = false) 
                 if (tab > 0 && v != null && v.isFinite()) scales[line.substring(0, tab)] = v
             }
         }
-        read(SETTINGS)?.let { text ->
-            for (line in text.lines()) {
-                val (k, v) = line.split('=', limit = 2).takeIf { it.size == 2 } ?: continue
-                when (k) {
-                    "learn" -> learn = v == "1"
-                    "ask" -> ask = Ask.valueOf(v)
-                    "hand" -> inHand = v == "1"
-                }
-            }
-        }
     }
 
     private fun file(name: String) = dir?.let { File(it, name) }
 
     /** The pinned texts, a copy safe to read on another thread. */
-    @Synchronized
-    fun pins(): Map<String, String> = HashMap(pins)
+    fun pins(): Map<String, String> {
+        awaitLoad()
+        return synchronized(this) { HashMap(pins) }
+    }
 
     /** The numbers set on scales, a copy. */
-    @Synchronized
-    fun scales(): Map<String, Double> = HashMap(scales)
+    fun scales(): Map<String, Double> {
+        awaitLoad()
+        return synchronized(this) { HashMap(scales) }
+    }
 
     /** The number written as the strokes of [key] is taken as [value]; null: as written again. */
+    fun scale(key: String, value: Double?) = awaitLoad().let { scaleNow(key, value) }
+
     @Synchronized
-    fun scale(key: String, value: Double?) {
+    private fun scaleNow(key: String, value: Double?) {
         if (value == null) scales.remove(key) else scales[key] = value
         write(SCALES, scales.entries.joinToString("") { (k, v) -> k + "\t" + v + "\n" })
     }
 
     /** The [n] pins set or used last, oldest first (for a saved example). */
-    @Synchronized
-    fun lastPins(n: Int): List<Pair<String, String>> = pins.entries.toList().takeLast(n).map { it.key to it.value }
+    fun lastPins(n: Int): List<Pair<String, String>> {
+        awaitLoad()
+        return synchronized(this) { pins.entries.toList().takeLast(n).map { it.key to it.value } }
+    }
+
+    fun pin(fingerprint: String, text: String) = awaitLoad().let { pinNow(fingerprint, text) }
 
     @Synchronized
-    fun pin(fingerprint: String, text: String) {
+    private fun pinNow(fingerprint: String, text: String) {
         pins[fingerprint] = text
         savePins()
     }
 
+    fun unpin(fingerprint: String) = awaitLoad().let { unpinNow(fingerprint) }
+
     @Synchronized
-    fun unpin(fingerprint: String) {
+    private fun unpinNow(fingerprint: String) {
         if (pins.remove(fingerprint) != null) savePins()
     }
 
@@ -216,6 +258,7 @@ class FixStore(private val dir: File?, private val background: Boolean = false) 
      * Returns whether anything came in.
      */
     fun restore(files: Map<String, String>): Boolean {
+        awaitLoad()
         var any = false
         files[LEARNED]?.takeIf { learned.isEmpty() }?.let { runCatching { Learned.parse(it) }.getOrNull() }?.takeIf { !it.isEmpty() }?.let { learned.absorb(it); write(LEARNED, learned.serialize()); any = true }
         files[SAMPLES]?.takeIf { samples.isEmpty() }?.let { runCatching { Samples.parse(it) }.getOrNull() }?.takeIf { !it.isEmpty() }?.let { samples.absorb(it); write(SAMPLES, samples.serialize()); any = true }
@@ -259,5 +302,8 @@ class FixStore(private val dir: File?, private val background: Boolean = false) 
         /** What a backup takes (the settings stay with the device). */
         val FILES = listOf(PINS, LEARNED, SAMPLES, PLACES, SCALES, HAND)
         const val MAX_PINS = 5000
+
+        /** The longest anyone waits for the files to be read (then goes on with what is there). */
+        const val LOAD_WAIT_MS = 10_000L
     }
 }

@@ -96,6 +96,10 @@ class HandwritingIndex(
         if (enabledPref()) enable()
     }
 
+    /** Until when (uptime) the library is not read through: the start of the app. */
+    @Volatile
+    var quietUntil = 0L
+
     /** Downloads the recognition model if needed (user action), then indexes the library. */
     private var attempt = 0
     private var timeout: Runnable? = null
@@ -113,7 +117,10 @@ class HandwritingIndex(
                 timeout?.let(main::removeCallbacks)
                 setEnabledPref(true)
                 state = State.Ready
-                indexAll()
+                // Right after the start the notebook being opened goes first: the library is
+                // read through later (it shares the disk thread with the opening pages).
+                val wait = quietUntil - android.os.SystemClock.uptimeMillis()
+                if (wait > 0) main.postDelayed({ indexAll() }, wait) else indexAll()
             }
         }
         val failed = {

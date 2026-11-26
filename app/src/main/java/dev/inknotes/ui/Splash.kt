@@ -37,7 +37,6 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -51,36 +50,39 @@ private val Smooth = CubicBezierEasing(0.2f, 0f, 0f, 1f)
 /**
  * The start of the app. The system window already shows the pen of the icon in the middle of
  * the paper (themes.xml, splash_window.xml); the first frame here is exactly that picture, so
- * nothing jumps. Then the paper turns to the chosen style, the pen rises and shrinks, and the
- * name "InkNotes" comes in under it with a gleam running across; all of it fades away by itself
- * (a tap skips it), over the library that loads underneath.
+ * nothing jumps. Then, in under half a second, the paper turns to the chosen style, the pen
+ * rises and shrinks and the name comes in under it; [onRisen] then lets what is under it be
+ * made, and the start fades away by itself (a tap skips it).
+ *
+ * Every moving value is read only where it is drawn (graphicsLayer, drawBehind), never while
+ * composing: a frame of the start is only drawn again, nothing is laid out, so it stays smooth.
  */
 @Composable
-fun Splash(onDone: () -> Unit) {
+fun Splash(onRisen: () -> Unit = {}, onDone: () -> Unit) {
     val style = LocalUiStyle.current
     val colors = MaterialTheme.colorScheme
     val startBg = colorResource(R.color.splash_bg)
     val startInk = colorResource(R.color.splash_ink)
     val rise = remember { Animatable(0f) }
     val words = remember { Animatable(0f) }
-    val gleam = remember { Animatable(-0.4f) }
     val gone = remember { Animatable(0f) }
     LaunchedEffect(Unit) {
-        launch { rise.animateTo(1f, tween(850, delayMillis = 150, easing = Smooth)) }
-        launch { words.animateTo(1f, tween(650, delayMillis = 420, easing = Smooth)) }
-        launch { gleam.animateTo(1.4f, tween(1200, delayMillis = 650, easing = FastOutSlowInEasing)) }
-        kotlinx.coroutines.delay(1750)
-        gone.animateTo(1f, tween(520, easing = FastOutSlowInEasing))
+        launch { words.animateTo(1f, tween(320, delayMillis = 120, easing = Smooth)) }
+        rise.animateTo(1f, tween(440, easing = Smooth))
+        onRisen()
+        // A moment for the name, while the page underneath is made.
+        kotlinx.coroutines.delay(260)
+        gone.animateTo(1f, tween(280, easing = FastOutSlowInEasing))
         onDone()
     }
     // Gold in the gilded styles, the accent in the classic one, graphite in the minimal.
-    val (ink, shine) = when (style) {
-        UiStyle.PREMIUM -> Color(0xFFB8914A) to Color(0xFFF6E7BE)
-        UiStyle.MYSTIC -> Color(0xFFAD8C4C) to Color(0xFFEFDDAE)
-        UiStyle.CLASSIC -> colors.primary to lerp(colors.primary, Color.White, 0.7f)
-        UiStyle.MINIMAL -> colors.onBackground to colors.onSurfaceVariant
-        UiStyle.GLASS -> colors.primary to Color.White
-        UiStyle.NOTEBOOK -> colors.primary to Color(0xFFFFD6E8)
+    val ink = when (style) {
+        UiStyle.PREMIUM -> Color(0xFFB8914A)
+        UiStyle.MYSTIC -> Color(0xFFAD8C4C)
+        UiStyle.CLASSIC -> colors.primary
+        UiStyle.MINIMAL -> colors.onBackground
+        UiStyle.GLASS -> colors.primary
+        UiStyle.NOTEBOOK -> colors.primary
     }
     val paper = colors.background
     Box(
@@ -96,19 +98,22 @@ fun Splash(onDone: () -> Unit) {
             .clickable(remember { MutableInteractionSource() }, indication = null) { onDone() },
         contentAlignment = Alignment.Center,
     ) {
-        // The pen: 240dp in the middle, as in the start window, then up and smaller.
+        // The pen: 240dp in the middle, as in the start window, then up and smaller; its
+        // colour turns from that of the start window to the style's (one over the other).
+        val penLayer = Modifier
+            .size(240.dp)
+            .graphicsLayer {
+                val k = 1f - 0.42f * rise.value
+                scaleX = k
+                scaleY = k
+                translationY = -78.dp.toPx() * rise.value
+            }
+        Image(painterResource(R.drawable.splash_logo), contentDescription = null, colorFilter = ColorFilter.tint(startInk), modifier = penLayer)
         Image(
             painterResource(R.drawable.splash_logo),
             contentDescription = null,
-            colorFilter = ColorFilter.tint(lerp(startInk, ink, rise.value)),
-            modifier = Modifier
-                .size(240.dp)
-                .graphicsLayer {
-                    val s = 1f - 0.42f * rise.value
-                    scaleX = s
-                    scaleY = s
-                    translationY = -78.dp.toPx() * rise.value
-                },
+            colorFilter = ColorFilter.tint(ink),
+            modifier = penLayer.graphicsLayer { alpha = rise.value },
         )
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -117,19 +122,10 @@ fun Splash(onDone: () -> Unit) {
                 translationY = (62f + 16f * (1f - words.value)).dp.toPx()
             },
         ) {
-            val brush = Brush.linearGradient(
-                0f to ink,
-                (gleam.value - 0.15f).coerceIn(0f, 1f) to ink,
-                gleam.value.coerceIn(0f, 1f) to shine,
-                (gleam.value + 0.15f).coerceIn(0f, 1f) to ink,
-                1f to ink,
-                start = Offset(0f, 0f),
-                end = Offset(900f, 120f),
-            )
             Row(verticalAlignment = Alignment.Bottom) {
                 Text(
                     "Ink",
-                    style = TextStyle(brush = brush),
+                    color = ink,
                     fontFamily = FontFamily.Serif,
                     fontStyle = FontStyle.Italic,
                     fontWeight = if (style == UiStyle.MINIMAL) FontWeight.Light else FontWeight.Normal,
@@ -138,7 +134,7 @@ fun Splash(onDone: () -> Unit) {
                 )
                 Text(
                     "Notes",
-                    style = TextStyle(brush = brush),
+                    color = ink,
                     fontFamily = FontFamily.Serif,
                     fontWeight = FontWeight.Light,
                     fontSize = 72.sp,

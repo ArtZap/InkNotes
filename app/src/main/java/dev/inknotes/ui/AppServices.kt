@@ -14,6 +14,9 @@ import dev.inknotes.search.HandwritingIndex
 object AppServices {
     private var instance: Services? = null
 
+    /** How long after the start background work (indexing, sync) waits for the first notebook. */
+    const val QUIET_START_MS = 8_000L
+
     class Services(val repo: NotebookRepository, val prefs: AppPrefs, val handwriting: HandwritingIndex, val math: MathNotes, val backup: Backup, val previews: CoverPreviews, val cloud: CloudSync)
 
     fun get(context: Context): Services = instance ?: run {
@@ -44,9 +47,11 @@ object AppServices {
                         fixes.restore(files)
                     }
                 }
-                repo.purgeOldTrash()
+                it.handwriting.quietUntil = android.os.SystemClock.uptimeMillis() + QUIET_START_MS
+                // Off the main thread: the start of the app does not wait for the disk.
                 // Notes written over the lock screen by a run of the app that was stopped first.
                 Thread {
+                    runCatching { repo.purgeOldTrash() }
                     runCatching {
                         for (note in repo.lockNotes(leftOnly = true)) {
                             repo.mergeLockNote(note, prefs.quickNoteId, QuickNotes.TITLE)?.let { nb -> prefs.quickNoteId = nb.id }
