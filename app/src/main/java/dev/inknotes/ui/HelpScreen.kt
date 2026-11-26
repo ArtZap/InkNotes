@@ -45,6 +45,14 @@ private class Topic(val title: String, val entries: List<Pair<String, String>>)
 
 private val TOPICS = listOf(
     Topic(
+        tr("Новое в 0.80", "What's new in 0.80"),
+        listOf(
+            tr("Запятые", "Commas") to tr("Запятая, целиком висящая под цифрой (−31,63), запятая, касающаяся черты дроби сверху (269,15 над чертой), и запятая чуть ниже ног цифр (2446,59 в знаменателе) остаются в своём числе. Если запятая нарисована, а распознавание её пропустило, берётся прочтение с запятой.", "A comma hanging wholly under a digit (−31.63), one touching a fraction bar from above (269.15 over the bar) and one a little below the feet of the digits (2446.59 in a denominator) stay in their number. When a comma is drawn but the reading left it out, the reading with it is taken."),
+            tr("Строка над формулой", "The line above a formula") to tr("Цифры и запятая знаменателя строкой выше (160,79 над 2446,59) больше не попадают в формулу ниже.", "The digits and comma of a denominator just above (160.79 over 2446.59) no longer get into the formula below."),
+            tr("Буква F", "The letter F") to tr("Две черты F, начатые чуть правее её палочки, больше не принимаются за «=».", "The two bars of an F begun a little right of its stem are no longer taken for \"=\"."),
+        ),
+    ),
+    Topic(
         tr("Новое в 0.79", "What's new in 0.79"),
         listOf(
             tr("Исправление формулы", "Correcting a formula") to tr("После «Готово» в окне «Как прочитано» приложение проверяет, что страница взяла исправление. Если нет — скажет об этом; тогда нажмите на ответ → «Неверно…» → «Сохранить пример»: в пример теперь попадают и набранные формулы.", "After Done in the “How it was read” window the app checks that the page took the correction. If not, it says so; then tap the answer → “Wrong…” → “Save example”: the example now carries the typed formulas too."),
