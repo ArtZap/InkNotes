@@ -598,6 +598,14 @@ object MathLayout {
 
     private enum class Level { BASE, SUP, SUB }
 
+    /** A "(" drawn as one stroke: its middle bulges left of its two ends. */
+    internal fun parenOpening(s: Ink): Boolean {
+        if (s.height < 2f * s.width || s.xs.size < 5) return false
+        val mid = s.xs.indices.filter { s.ys[it] in s.top + 0.35f * s.height..s.bottom - 0.35f * s.height }.map { s.xs[it] }
+        if (mid.isEmpty()) return false
+        return mid.average() < (s.xs.first() + s.xs.last()) / 2 - 0.15f * s.width
+    }
+
     private class Builder(val h: Float, val out: MutableList<Piece>) {
         private fun text(s: String) {
             out += Piece.Text(s)
@@ -940,13 +948,6 @@ object MathLayout {
         }
 
         /** A ")" drawn as one stroke: its middle bulges right of its two ends. */
-    private fun parenOpening(s: Ink): Boolean {
-        if (s.height < 2f * s.width || s.xs.size < 5) return false
-        val mid = s.xs.indices.filter { s.ys[it] in s.top + 0.35f * s.height..s.bottom - 0.35f * s.height }.map { s.xs[it] }
-        if (mid.isEmpty()) return false
-        return mid.average() < (s.xs.first() + s.xs.last()) / 2 - 0.15f * s.width
-    }
-
     private fun parenClosing(s: Ink): Boolean {
         if (s.height < 2f * s.width || s.xs.size < 5) return false
         val mid = s.xs.indices.filter { s.ys[it] in s.top + 0.35f * s.height..s.bottom - 0.35f * s.height }.map { s.xs[it] }
@@ -975,7 +976,7 @@ object MathLayout {
                     ((it.box.cx > bb.cx && it.box.right <= bb.right + 0.3f * h && (tallShape(it.glyph, h) == ')' || parenClosing(it.glyph.strokes[0]))) ||
                         // its "(" too, reaching only just through the bar
                         (it.box.left >= bb.left - 0.1f * h && it.box.bottom - bb.cy < 0.35f * h && bb.cy - it.box.top >= 0.8f * it.box.height &&
-                            (tallShape(it.glyph, h) == '(' || parenOpening(it.glyph.strokes[0]))))
+                            (tallShape(it.glyph, h) == '(' || MathLayout.parenOpening(it.glyph.strokes[0]))))
                 fun across(it: Item) = it is G && it.box.top < bb.cy && it.box.bottom > bb.cy &&
                     tallShape(it.glyph, h) in BRACKETS && !closesNumerator(it)
                 // A long bar holds what stands farther from it: under a bar five lines wide
@@ -1308,6 +1309,8 @@ object Tune {
 
     /** Above 0: a small stroke begun above a fraction bar and hanging across it is the numerator's (its comma). */
     @JvmField var commaAcross = 1f
+    /** A tall "(" at the start of a run, read as 1 or left out, is put back (MathPage.holeTexts). */
+    @JvmField var parenInRun = 1f
     /** A ")" mostly over a fraction bar, at its right, closes the numerator. */
     @JvmField var closingParen = 1f
     /** A √ in one stroke turns up and down at most three times (not "60" written in one). */

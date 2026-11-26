@@ -964,10 +964,18 @@ object MathPage {
         val read = reader.read(hole.strokes, hole.h).map(MathText::normalize).filter { it.isNotEmpty() }.map(::digitIndex)
         // A comma drawn between digits, under their foot, that the first reading left out
         // (2446,59 read 244659 first): the next reading with it goes first.
-        val texts = if (Tune.commaSeen > 0f && read.size > 1 && read[0].none { it == ',' || it == '.' } && hasComma(hole.strokes, hole.h)) {
+        val texts = (if (Tune.commaSeen > 0f && read.size > 1 && read[0].none { it == ',' || it == '.' } && hasComma(hole.strokes, hole.h)) {
             val withIt = read.take(3).firstOrNull { t -> Regex("\\d[,.]\\d").containsMatchIn(t) && t.filter { it.isDigit() } == read[0].filter { it.isDigit() } }
             if (withIt != null) listOf(withIt) + (read - withIt) else read
-        } else read
+        } else read).let { texts0 ->
+            // A run that begins with a drawn "(" taller than its digits (the "(" of (13,5 under a
+            // root), read as 1 or not at all: the "(" goes back in front.
+            val first = hole.strokes.minByOrNull { it.left }
+            val rest = hole.strokes.filter { it !== first && it.height > 0.4f * hole.h }
+            if (Tune.parenInRun > 0f && first != null && rest.size >= 2 && first.height > 1.25f * rest.maxOf { it.height } && first.width > 0.22f * first.height &&
+                MathLayout.parenOpening(first) && texts0.none { it.startsWith("(") }
+            ) (texts0.flatMap { t -> if (t.first() in "1lI|" && t.length > 1) listOf("(" + t.drop(1), t) else listOf(t) } + texts0.take(2).map { "(" + it }).distinct() else texts0
+        }
         // A lone upright read as l or I is a 1 nine times in ten (CROHME, read by ML Kit on
         // the emulator: l 47 of 51, I 33 of 38), so 1 is tried first; not when the page has
         // that letter already (l = 2 м above: the length).
