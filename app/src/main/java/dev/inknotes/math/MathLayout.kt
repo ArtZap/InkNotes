@@ -693,7 +693,7 @@ object MathLayout {
                     val nx = items.getOrNull(items.indexOf(item) + 1)
                     if (Tune.commaBeforeDigit > 0f && lv == Level.SUB && r0 != null && !refStructure && nx is G &&
                         item.glyph.strokes.size == 1 && straight(item.glyph.strokes[0], 0.2f) && b.width < 0.6f * b.height &&
-                        b.height < 0.6f * r0.height && b.top > r0.top + 0.6f * r0.height && b.bottom > r0.bottom &&
+                        b.height < 0.7f * r0.height && b.top > r0.top + 0.6f * r0.height && b.bottom > r0.bottom &&
                         nx.box.height in 0.6f * r0.height..1.4f * r0.height && abs(nx.box.bottom - r0.bottom) < 0.35f * r0.height &&
                         nx.box.left - b.right < 0.6f * h && nx.box.top < b.top
                     ) Level.BASE else lv

@@ -1676,7 +1676,7 @@ object MathPage {
                 listOf(-1, 1).all { side ->
                     ink.any { m ->
                         m !== c && m.bottom < eq.cy - 0.8f * h && c.bottom < eq.cy - 0.6f * h && m.height in 0.5f * h..1.4f * h && m.bottom < c.top + 0.15f * h &&
-                            c.top in m.bottom - 0.4f * m.height..m.bottom + 0.3f * h &&
+                            c.top in m.bottom - 0.4f * m.height..m.bottom + 0.45f * h &&
                             (if (side < 0) m.cx < c.left && c.left - m.right < 0.5f * h else m.cx > c.right && m.left - c.right < 0.6f * h)
                     }
                 } ||
@@ -1753,7 +1753,7 @@ object MathPage {
                 fun hangs(m: Ink) = c.bottom > m.bottom + 0.1f * h
                 // (a tick, taller than wide, between symbols of digit size: not the o of log)
                 fun digitSize(m: Ink) = m.height in 0.5f * h..1.3f * h
-                val long = Tune.longCommas > 0f && !small && max(c.width, c.height) < 0.55f * h && c.height >= 0.8f * c.width &&
+                val long = Tune.longCommas > 0f && !small && max(c.width, c.height) < 0.7f * h && c.height >= 0.8f * c.width &&
                     members.any { digitSize(it) && foot(it) && hangs(it) && it.cx < c.left && c.left - it.right < 0.5f * h } &&
                     members.any { digitSize(it) && foot(it) && hangs(it) && it.cx > c.right && it.left - c.right < 0.6f * h }
                 // A small one may also start under the right edge of the digit before it (2051,0).
