@@ -694,8 +694,10 @@ object MathLayout {
                         nx.box.left - b.right < 0.6f * h && nx.box.top < b.top
                     ) Level.BASE else lv
                 }
-                    afterComma = r0 != null && !refStructure && level == Level.BASE && b.height < max(0.45f, Tune.longCommaSize) * r0.height &&
-                    b.width < 0.8f * max(b.height, 0.5f * b.width + 0.01f) && b.top > r0.top + 0.6f * r0.height && b.left > r0.cx
+                    afterComma = r0 != null && !refStructure && level == Level.BASE && b.width < 0.8f * max(b.height, 0.5f * b.width + 0.01f) && b.left > r0.cx &&
+                    ((b.height < max(0.45f, Tune.longCommaSize) * r0.height && b.top > r0.top + 0.6f * r0.height) ||
+                        // a comma wholly under the digit's foot (31,63)
+                        (Tune.commaLow > 0f && b.height < 0.65f * r0.height && b.top > r0.bottom - 0.1f * r0.height))
                 // A short dash is a minus, not a dot (the − of f⁻¹ read f·1).
                 val tiny = max(b.width, b.height) < 0.22f * h && !(Tune.shortMinus > 0f && b.width >= 3f * max(b.height, 0.5f) && b.width >= Tune.shortMinus * h)
                 val r = ref
