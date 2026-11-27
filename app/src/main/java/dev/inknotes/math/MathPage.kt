@@ -117,6 +117,9 @@ object MathPage {
         var h = 0f
     }
 
+    /** A gap before a unit written close after a number, in line heights. */
+    private const val UNIT_GAP = 0.35f
+
     /** Debug log of every step (set by the probe in tests); null in the app. */
     @Volatile
     var trace: ((String) -> Unit)? = null
@@ -931,6 +934,32 @@ object MathPage {
             }
             val (lv, lt) = value(left, unitsAfter = false)
             var (rv, rt) = value(right, unitsAfter = true)
+            // The unit close after the number (6,24 см, 13,33 кН/см² at a third of a line): the
+            // longest start that is a bare number, with a shorter rest after a clear gap.
+            if (rv == null && right.size > 1) {
+                val sorted = right.sortedBy { it.left }
+                val cuts = ArrayList<Int>()
+                var reach = sorted[0].right
+                for (k in 1 until sorted.size) {
+                    if (sorted[k].left - reach > UNIT_GAP * eq.h) cuts += k
+                    reach = max(reach, sorted[k].right)
+                }
+                val end = sorted.maxOf { it.right }
+                for (k in cuts.asReversed()) {
+                    val head = sorted.take(k)
+                    val headRight = head.maxOf { it.right }
+                    if (end - sorted[k].left >= headRight - sorted[0].left) continue
+                    val e = runCatching { read(head, eq.h, eq.cy, reader, Prefer.NUMBERS) }.getOrNull()
+                    val bare = e is Expr.Num || (e is Expr.Mul && e.factors.size == 2 && e.factors.all { it is Expr.Num } && (e.factors[0] as Expr.Num).v == -1.0)
+                    if (!bare) continue
+                    val (v, t) = value(head, unitsAfter = false)
+                    if (v != null) {
+                        rv = v
+                        rt = t
+                        break
+                    }
+                }
+            }
             // Units written as a fraction (−8,2 кН/см²) leave the side unreadable: the number
             // before the first clear gap.
             if (rv == null) {
@@ -959,7 +988,7 @@ object MathPage {
         if (big.size < 2) return false
         val foot = big.map { it.bottom }.sorted()[big.size / 2]
         return strokes.any { c ->
-            max(c.width, c.height) < 0.45f * h && c.width < 0.8f * c.height + 1f && c.top > foot - 0.25f * h && c.bottom > foot + 0.05f * h &&
+            max(c.width, c.height) < 0.5f * h && c.width < 0.8f * c.height + 1f && c.top > foot - 0.25f * h && c.bottom > foot + 0.05f * h &&
                 big.any { it.right <= c.left + 0.2f * h } && big.any { it.left >= c.right - 0.2f * h }
         }
     }
@@ -1787,7 +1816,7 @@ object MathPage {
                 // edge of the digit before it, hanging below the feet of the digits on both sides.
                 fun hangs(m: Ink) = c.bottom > m.bottom + 0.1f * h
                 // (a tick, taller than wide, between symbols of digit size: not the o of log)
-                fun digitSize(m: Ink) = m.height in 0.5f * h..1.3f * h
+                fun digitSize(m: Ink) = m.height in 0.5f * h..1.4f * h
                 val long = Tune.longCommas > 0f && !small && max(c.width, c.height) < 0.7f * h && c.height >= 0.8f * c.width &&
                     members.any { digitSize(it) && foot(it) && hangs(it) && it.cx < c.left && c.left - it.right < 0.5f * h } &&
                     members.any { digitSize(it) && foot(it) && hangs(it) && it.cx > c.right && it.left - c.right < 0.6f * h }
