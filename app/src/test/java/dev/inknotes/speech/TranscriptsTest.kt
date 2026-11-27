@@ -27,6 +27,8 @@ class TranscriptsTest {
         val w = Transcripts.words(json, offsetMs = 60_000)
         assertEquals(listOf(Word("производная", 60_840, 61_110), Word("\"x\"", 61_110, 61_530)), w)
         assertTrue(Transcripts.words("""{"text" : ""}""").isEmpty())
+        val comma = "{\"result\" : [{\"conf\" : 1,000000, \"end\" : 2,5, \"start\" : 1,25, \"word\" : \"да\"}], \"text\" : \"да\"}"
+        assertEquals(listOf(Word("да", 1_250, 2_500)), Transcripts.words(comma))
     }
 
     @Test

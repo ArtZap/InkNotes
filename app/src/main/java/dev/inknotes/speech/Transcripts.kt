@@ -86,8 +86,12 @@ object Transcripts {
         return out
     }
 
-    private fun number(o: String, key: String): Double? =
-        Regex("\"$key\"\\s*:\\s*(-?[0-9]+(?:\\.[0-9]+)?(?:[eE][-+]?[0-9]+)?)").find(o)?.groupValues?.get(1)?.toDoubleOrNull()
+    // A decimal comma too (0,840000): older Vosk printed floats in the C library's locale.
+    private fun number(o: String, key: String): Double? {
+        val m = Regex("\"$key\"\\s*:\\s*(-?[0-9]+)(?:[.,]([0-9]+))?([eE][-+]?[0-9]+)?(?=\\s*[,}])").find(o) ?: return null
+        val (whole, frac, exp) = m.destructured
+        return (whole + (if (frac.isNotEmpty()) ".$frac" else "") + exp).toDoubleOrNull()
+    }
 
     private fun string(o: String, key: String): String? {
         val m = Regex("\"$key\"\\s*:\\s*\"").find(o) ?: return null

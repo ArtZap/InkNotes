@@ -138,9 +138,10 @@ dependencies {
     implementation(libs.okhttp)
     // Lecture transcripts on the device. Only the engine is in the app: the speech model
     // (40–45 MB) is downloaded when the user first asks for a transcript. The AARs without
-    // their POM dependencies: Vosk's POM asks for the desktop JNA jar.
-    implementation("net.java.dev.jna:jna:5.13.0@aar")
-    implementation("com.alphacephei:vosk-android:0.3.47@aar")
+    // their POM dependencies: Vosk's POM asks for the desktop JNA jar. 0.3.70+ is built for
+    // 16 KB memory pages (Google Play).
+    implementation("net.java.dev.jna:jna:5.18.1@aar")
+    implementation("com.alphacephei:vosk-android:0.3.75@aar")
 
     testImplementation(libs.junit)
     // Android's org.json is only a stub in unit tests: the real one.
