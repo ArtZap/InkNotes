@@ -31,6 +31,8 @@ object Inequality {
     private const val GRID = 20_000
     private const val MAX_POINTS = 40
     private const val RANGE = 1e6
+    /** How many times higher than beside it the top of a pole is, at the least. */
+    private const val POLE = 1e6
 
     /** Where `[residual] rel 0` holds, as "x ∈ …"; a [MathError] when it can't be told. */
     fun solve(residual: Expr, x: String, rel: Rel): String {
@@ -67,6 +69,29 @@ object Inequality {
             }
             breaks += Solver.clean((lo + hi) / 2)
         }
+        // A pole where the sign stays (1/(x − 1)² at 1): no sign change and no edge on the
+        // grid, only |f| climbing to a peak between grid points. Its top is looked for; a
+        // pole there is a point, else the peak was an ordinary maximum.
+        val poles = ArrayList<Double>()
+        for (k in 1 until GRID) {
+            val a = ys[k - 1]
+            val m = ys[k]
+            val b = ys[k + 1]
+            if (!a.isFinite() || !m.isFinite() || !b.isFinite()) continue
+            if ((a < 0) != (m < 0) || (m < 0) != (b < 0)) continue
+            if (abs(m) <= abs(a) || abs(m) <= abs(b)) continue
+            fun size(t: Double) = f(t).let { if (it.isFinite()) abs(it) else Double.POSITIVE_INFINITY }
+            var lo = xs[k - 1]
+            var hi = xs[k + 1]
+            repeat(200) {
+                val l = lo + (hi - lo) / 3
+                val r = hi - (hi - lo) / 3
+                if (size(l) < size(r)) lo = l else hi = r
+            }
+            val top = (lo + hi) / 2
+            val near = max(1.0, max(abs(a), abs(b)))
+            if (size(top) > POLE * near) Solver.clean(top).let { breaks += it; poles += it }
+        }
         val points = (roots + breaks).sorted().fold(ArrayList<Double>()) { acc, p ->
             if (acc.isEmpty() || abs(acc.last() - p) > 1e-9 * max(1.0, abs(p))) acc += p
             acc
@@ -86,7 +111,7 @@ object Inequality {
         // A point belongs when the relation holds there: a root of ≤ or ≥, the edge of the
         // domain where the value fits (√x < 2 at 0); never a pole.
         val atPoint = BooleanArray(points.size) { i ->
-            f(points[i]).let { v -> v.isFinite() && rel.holds(if (abs(v) < 1e-9) 0.0 else v) }
+            poles.none { it == points[i] } && f(points[i]).let { v -> v.isFinite() && rel.holds(if (abs(v) < 1e-9) 0.0 else v) }
         }
 
         // Runs of intervals glued through the points that belong too.

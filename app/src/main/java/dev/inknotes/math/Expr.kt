@@ -504,13 +504,16 @@ class Parser private constructor(private val toks: List<Tok>) {
             // tg^{10°} with nothing after it: the "exponent" is the argument, written small
             // beside a name with a descender (tg 10°).
             val nothingAfter = toks.getOrNull(pos).let { it == null || (it is Tok.Op && it.s in setOf("+", "-", "*", "/", "=", ")", "}", "&", "\\")) }
-            // Not a power: cos²·x read with the x elsewhere stays an error.
-            val power = exp is Expr.Num && exp.v == Math.floor(exp.v) && exp.v in -1.0..3.0
-            if (exp != null && nothingAfter && name in FN_ARG_RAISED && !power) {
-                // its degree sign raised once more: 10⁰ for 10°
-                val arg = if (exp is Expr.Pow && exp.base is Expr.Num && (exp.exp as? Expr.Num)?.v == 0.0) Expr.Fn("deg", listOf(exp.base)) else exp
-                return Expr.Fn(name, listOf(arg))
+            // A bare number is no argument: sin^{10} with nothing after is an unfinished
+            // sin¹⁰…, not sin of 10 radians (a wrong answer is worse than none). An angle in
+            // degrees is (its degree sign may be raised once more: 10⁰ for 10°), and so is a
+            // letter (sin B written high).
+            val arg = when {
+                exp is Expr.Pow && exp.base is Expr.Num && (exp.exp as? Expr.Num)?.v == 0.0 -> Expr.Fn("deg", listOf(exp.base))
+                exp is Expr.Num -> null
+                else -> exp
             }
+            if (arg != null && nothingAfter && name in FN_ARG_RAISED) return Expr.Fn(name, listOf(arg))
             if (trig) trigDepth++
             val a = try {
                 if (isOp("(")) args() else listOf(implicitChain())

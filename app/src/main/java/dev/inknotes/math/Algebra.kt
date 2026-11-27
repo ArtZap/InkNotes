@@ -275,12 +275,17 @@ object Algebra {
             }
         }
         is Fn -> {
-            val u = e.args.last()
-            val du = d(u, v)
-            if (isNum(simplify(du), 0.0)) {
-                Expr.ZERO
+            // log_a u with a base in v: ln u / ln a, both parts differentiated.
+            if (e.name == "log" && e.args.size == 2 && !isNum(simplify(d(e.args[0], v)), 0.0)) {
+                d(mul(listOf(Fn("ln", listOf(e.args[1])), Pow(Fn("ln", listOf(e.args[0])), Expr.MINUS_ONE))), v)
             } else {
-                mul(listOf(outer(e, u), du))
+                val u = e.args.last()
+                val du = d(u, v)
+                if (isNum(simplify(du), 0.0)) {
+                    Expr.ZERO
+                } else {
+                    mul(listOf(outer(e, u), du))
+                }
             }
         }
         is Mat -> Mat(e.rows.map { r -> r.map { d(it, v) } })

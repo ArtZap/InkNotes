@@ -18,6 +18,21 @@ class CalcTest {
     }
 
     @Test
+    fun aRaisedNumberAfterSinIsNoAngle() {
+        // sin^{10} with nothing after: an unfinished sin¹⁰…, not sin of 10 radians.
+        assertTrue(runCatching { Parser.parse("sin^{10}") }.isFailure)
+        assertTrue(runCatching { Parser.parse("tg^{45}") }.isFailure)
+        assertEquals("1", eval("tg^{45^{0}}"))
+        assertEquals(Parser.parse("sin(B)"), Parser.parse("sin^{B}"))
+    }
+
+    @Test
+    fun aLogarithmWithTheVariableInItsBase() {
+        val d = Algebra.derivative(Parser.parse("log_{x}8"), "x")
+        assertEquals(-Math.log(8.0) / (2 * Math.log(2.0) * Math.log(2.0)), Numeric.scalar(d, mapOf("x" to 2.0)), 1e-9)
+    }
+
+    @Test
     fun aRootOfANegativeNumberStaysReal() {
         assertEquals(4.0, Numeric.pow(-8.0, 2.0 / 3), 1e-9)
         assertEquals(-2.0, Numeric.pow(-8.0, 1.0 / 3), 1e-9)
@@ -241,6 +256,12 @@ class CalcTest {
         assertEquals("нет решений", ineq("x^2+1", Inequality.Rel.LT, "0"))
         assertEquals("x = 3", ineq("(x-3)^2", Inequality.Rel.LE, "0"))
         assertEquals("x ∈ [0; 4)", ineq("sqrt(x)", Inequality.Rel.LT, "2"))
+        // A pole where the sign stays, between the points of the grid.
+        assertEquals("x ∈ (−∞; 1) ∪ (1; +∞)", ineq("1/(x-1)^2", Inequality.Rel.GT, "0"))
+        assertEquals("x ∈ (0; 1) ∪ (1; 2)", ineq("1/(x-1)^2", Inequality.Rel.GT, "1"))
+        assertEquals("x ∈ (−∞; 0,3) ∪ (0,3; +∞)", ineq("1/(x-0.3)^2", Inequality.Rel.GT, "0"))
+        // An ordinary peak is no pole.
+        assertEquals("x — любое число", ineq("1/(x^2+1)", Inequality.Rel.GT, "0"))
     }
 
     @Test
