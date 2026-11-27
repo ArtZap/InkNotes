@@ -45,6 +45,12 @@ private class Topic(val title: String, val entries: List<Pair<String, String>>)
 
 private val TOPICS = listOf(
     Topic(
+        tr("Новое в 0.88", "What's new in 0.88"),
+        listOf(
+            tr("Лицензии", "Licenses") to tr("В справке появилась тема «Лицензии»: какие открытые библиотеки внутри приложения и на каких условиях.", "Help has a new topic, “Licenses”: which open libraries are inside the app and on what terms."),
+        ),
+    ),
+    Topic(
         tr("Новое в 0.87", "What's new in 0.87"),
         listOf(
             tr("Маленький «=»", "A tiny \"=\"") to tr("«=» из совсем коротких чёрточек (в 3–5 точек, чуть наклонных) теперь находится: значения вроде W = 49,08 после него читаются и используются ниже.", "An \"=\" of very short dashes (3–5 points, a little slanted) is now found: values such as W = 49.08 after it are read and used below."),
@@ -615,6 +621,17 @@ private val TOPICS = listOf(
             tr("Вид обложки", "Cover look") to tr("В стилях «Загадочный» и «Тетрадки» для каждой тетради выбирается свой вид обложки — в окнах «Новая тетрадь» и «Тетрадь».", "In the “Mystic” and “Copybooks” styles each notebook gets its own cover look — in the “New notebook” and “Notebook” windows."),
             tr("Полупрозрачные обложки", "See-through covers") to tr("Переключатель в настройках: обложка становится цветным стеклом или плёнкой, сквозь которую видна первая страница.", "A switch in the settings: the cover becomes coloured glass or film with the first page showing through."),
             tr("Тема", "Theme") to tr("Системная, светлая или тёмная — кнопкой в библиотеке или «Ещё → Тема» в редакторе.", "System, light or dark — with the button in the library or “More → Theme” in the editor."),
+        ),
+    ),
+    Topic(
+        tr("Лицензии", "Licenses"),
+        listOf(
+            "AndroidX, Jetpack Compose, Material 3, Ink, Motion Prediction" to tr("© The Android Open Source Project. Лицензия Apache 2.0.", "© The Android Open Source Project. Apache License 2.0."),
+            "Kotlin, kotlinx.coroutines" to tr("© JetBrains s.r.o. и участники. Лицензия Apache 2.0.", "© JetBrains s.r.o. and contributors. Apache License 2.0."),
+            "OkHttp, Okio" to tr("© Square, Inc. Лицензия Apache 2.0.", "© Square, Inc. Apache License 2.0."),
+            "PdfBox-Android" to tr("© Tom Roush, на основе Apache PDFBox (© The Apache Software Foundation). Лицензия Apache 2.0. Встроенные шрифты Liberation — SIL Open Font License 1.1.", "© Tom Roush, based on Apache PDFBox (© The Apache Software Foundation). Apache License 2.0. The bundled Liberation fonts: SIL Open Font License 1.1."),
+            "ML Kit Digital Ink Recognition" to tr("© Google LLC. Используется по условиям ML Kit (developers.google.com/ml-kit/terms). Модели распознавания скачиваются один раз и работают без интернета.", "© Google LLC. Used under the ML Kit terms (developers.google.com/ml-kit/terms). The recognition models are downloaded once and work offline."),
+            tr("Текст лицензии Apache 2.0", "The Apache License 2.0 text") to "www.apache.org/licenses/LICENSE-2.0",
         ),
     ),
 )
