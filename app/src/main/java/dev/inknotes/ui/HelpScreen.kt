@@ -45,6 +45,13 @@ private class Topic(val title: String, val entries: List<Pair<String, String>>)
 
 private val TOPICS = listOf(
     Topic(
+        tr("Новое в 0.86", "What's new in 0.86"),
+        listOf(
+            tr("Неравенства", "Inequalities") to tr("Точка, где выражение уходит в бесконечность без смены знака, выкалывается: 1/(x − 1)² > 0 даёт x ∈ (−∞; 1) ∪ (1; +∞), а 1/(x − 1)² > 1 — x ∈ (0; 1) ∪ (1; 2) (раньше — «нет решений»).", "A point where the expression goes to infinity without changing sign is left out: 1/(x − 1)² > 0 gives x ∈ (−∞; 1) ∪ (1; +∞), and 1/(x − 1)² > 1 gives x ∈ (0; 1) ∪ (1; 2) (it was \"no solutions\")."),
+            tr("Производные и функции", "Derivatives and functions") to tr("Производная log_x 8 считается (раньше получался 0). sin¹⁰ без аргумента больше не считается как синус 10 радиан — ответа нет, пока запись не закончена; tg 10° и sin B, написанные высоко, читаются как раньше.", "The derivative of log_x 8 is computed (it gave 0). sin¹⁰ with nothing after is no longer taken as the sine of 10 radians: no answer until it is finished; tg 10° and sin B written high are read as before."),
+        ),
+    ),
+    Topic(
         tr("Новое в 0.85", "What's new in 0.85"),
         listOf(
             tr("Надёжность", "Reliability") to tr("Исправлено найденное проверкой кода: синхронизация не удаляет тетрадь, изменённую на другом устройстве; WebDAV не отправляет пароль на чужой адрес; исправления формул не теряются при быстром запуске; при замене тетради её копией сохраняются повторение карточек и поиск по почерку; перо, поднятое вторым пальцем, не оставляет инструмент «висеть».", "Fixed what a code review found: sync no longer deletes a notebook changed on another device; WebDAV never sends the password to another address; formula corrections are not lost at a quick start; replacing a notebook with its copy keeps card reviews and handwriting search; a tool no longer stays \"stuck\" when a second finger lifts."),
