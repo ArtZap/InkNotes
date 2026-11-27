@@ -5,6 +5,7 @@
 Документы: состояние — [docs/STATUS.md](docs/STATUS.md), план — [docs/ROADMAP.md](docs/ROADMAP.md), формулы — [docs/FORMULAS.md](docs/FORMULAS.md), окно исправления и калькулятор — [docs/CORRECTION_WINDOW.md](docs/CORRECTION_WINDOW.md), исследования — [docs/research/](docs/research/). Для нейросети, продолжающей работу, — [CLAUDE.md](CLAUDE.md). Проверки без Android SDK — [tools/jvm/](tools/jvm/README.md).
 
 Сейчас готово:
+- 0.89: расшифровка лекций на устройстве (Vosk, модель скачивается по выбору);
 - 0.88: тема «Лицензии» в справке;
 - 0.87: «=» из крошечных чёрточек находится;
 - 0.86: неравенства с выколотыми точками, производная log_x, sin¹⁰ без аргумента; ответы с единицами вплотную;

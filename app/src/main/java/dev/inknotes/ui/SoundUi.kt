@@ -2,6 +2,14 @@ package dev.inknotes.ui
 
 import dev.inknotes.data.tr
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.RadioButton
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.platform.LocalContext
+import dev.inknotes.data.Recording
+import dev.inknotes.speech.Speech
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -82,6 +90,11 @@ fun SoundBar(c: EditorController) {
 @Composable
 fun RecordingsDialog(c: EditorController, onRecord: () -> Unit, onDismiss: () -> Unit) {
     val dates = remember { java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT) }
+    val context = LocalContext.current
+    var asking by remember { mutableStateOf<Recording?>(null) }
+    var showing by remember { mutableStateOf<Recording?>(null) }
+    asking?.let { rec -> TranscribeDialog(rec, onStart = { m -> c.transcribe(context, rec, m) }, onDismiss = { asking = null }) }
+    showing?.let { rec -> TranscriptDialog(c, rec, onDismiss = { showing = null }) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(tr("Записи звука", "Sound recordings")) },
@@ -104,6 +117,7 @@ fun RecordingsDialog(c: EditorController, onRecord: () -> Unit, onDismiss: () ->
                 } else {
                     LazyColumn(Modifier.heightIn(max = 320.dp)) {
                         items(c.notebook.recordings.reversed()) { rec ->
+                          Column {
                             Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Column(Modifier.weight(1f)) {
                                     Text(dates.format(Date(rec.startedAt)))
@@ -116,9 +130,12 @@ fun RecordingsDialog(c: EditorController, onRecord: () -> Unit, onDismiss: () ->
                                 TextButton(onClick = { c.play(rec) }) { Text("▶") }
                                 TextButton(onClick = { c.deleteRecording(rec) }) { Text("✕", color = MaterialTheme.colorScheme.error) }
                             }
+                            TranscriptRow(c, rec, onAsk = { asking = rec }, onShow = { showing = rec })
+                          }
                         }
                     }
                 }
+                SpeechModels()
             }
         },
         confirmButton = {
@@ -129,4 +146,147 @@ fun RecordingsDialog(c: EditorController, onRecord: () -> Unit, onDismiss: () ->
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(tr("Закрыть", "Close")) } },
     )
+}
+
+/** Under a recording: its transcript (open it), the transcription under way, or a way to make one. */
+@Composable
+private fun TranscriptRow(c: EditorController, rec: Recording, onAsk: () -> Unit, onShow: () -> Unit) {
+    val task = Speech.task
+    val t = c.transcripts[rec.file]
+    Row(Modifier.fillMaxWidth().padding(bottom = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        if (task != null && task.nbId == c.notebook.id && task.file == rec.file) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    if (task.downloading) tr("Скачиваю модель речи… ${(task.progress * 100).toInt()} %", "Downloading the speech model… ${(task.progress * 100).toInt()} %")
+                    else tr("Расшифровка… ${(task.progress * 100).toInt()} %", "Transcribing… ${(task.progress * 100).toInt()} %"),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                LinearProgressIndicator(progress = { task.progress }, modifier = Modifier.fillMaxWidth())
+            }
+            TextButton(onClick = { Speech.cancel() }) { Text(tr("Стоп", "Stop")) }
+        } else {
+            Text(
+                when {
+                    t == null -> tr("Без текста", "No text")
+                    t.complete -> tr("Текст: ${t.phrases.size} фраз", "Text: ${t.phrases.size} phrases")
+                    else -> tr("Текст до ${clock(t.doneMs)}", "Text up to ${clock(t.doneMs)}")
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f),
+            )
+            if (t != null && t.phrases.isNotEmpty()) TextButton(onClick = onShow) { Text(tr("Текст", "Text")) }
+            if (t?.complete != true) TextButton(enabled = task == null, onClick = onAsk) {
+                Text(if (t == null) tr("Расшифровать", "Transcribe") else tr("Продолжить", "Continue"))
+            }
+        }
+    }
+}
+
+/** Which language, and what downloading the model means, before the first transcript. */
+@Composable
+private fun TranscribeDialog(rec: Recording, onStart: (Speech.Model) -> Unit, onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    var model by remember { mutableStateOf(if (dev.inknotes.data.Lang.english) Speech.Model.EN else Speech.Model.RU) }
+    val ready = Speech.version.let { Speech.installed(context, model) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(tr("Расшифровать запись", "Transcribe the recording")) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(tr(
+                    "Запись ${clock(rec.durationMs)} превратится в текст: касание фразы включит звук с неё. Всё делается на этом устройстве, звук никуда не отправляется.",
+                    "The ${clock(rec.durationMs)} recording becomes text: touching a phrase plays the sound from it. All on this device: the sound is sent nowhere.",
+                ))
+                Text(tr("Язык лекции", "Language of the lecture"), fontWeight = FontWeight.Medium)
+                for (m in Speech.Model.entries) {
+                    Row(Modifier.fillMaxWidth().clickable { model = m }, verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(selected = model == m, onClick = { model = m })
+                        Text(
+                            m.title.replaceFirstChar { it.uppercaseChar() } +
+                                if (Speech.installed(context, m)) tr(" · модель скачана", " · model downloaded") else tr(" · модель ${m.mb} МБ", " · model ${m.mb} MB"),
+                        )
+                    }
+                }
+                if (!ready) {
+                    Text(
+                        tr(
+                            "Модель речи скачается один раз (${model.mb} МБ, нужен интернет) и дальше работает без него. Её можно удалить в «Записях звука».",
+                            "The speech model is downloaded once (${model.mb} MB, needs the internet) and then works offline. It can be deleted in “Sound recordings”.",
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Text(
+                    tr(
+                        "Расшифровка может идти долго — сравнимо с длиной записи. Если закрыть приложение, она продолжится с того же места.",
+                        "Transcribing may take long, comparable to the length of the recording. If the app is closed, it goes on from the same place.",
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = {
+                onStart(model)
+                onDismiss()
+            }) { Text(if (ready) tr("Расшифровать", "Transcribe") else tr("Скачать и расшифровать", "Download and transcribe")) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(tr("Отмена", "Cancel")) } },
+    )
+}
+
+/** The transcript: a phrase a line with its time; a touch plays the sound from it. */
+@Composable
+private fun TranscriptDialog(c: EditorController, rec: Recording, onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    val t = c.transcripts[rec.file]
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(tr("Текст записи", "Recording text")) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (t == null || t.phrases.isEmpty()) {
+                    Text(tr("Слов не распознано.", "No words recognized."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                } else {
+                    if (!t.complete) Text(tr("Расшифровано до ${clock(t.doneMs)} из ${clock(rec.durationMs)}", "Transcribed up to ${clock(t.doneMs)} of ${clock(rec.durationMs)}"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(tr("Коснитесь фразы — звук включится с неё. Распознавание без интернета ошибается в терминах и формулах.", "Touch a phrase to play the sound from it. Offline recognition makes mistakes in terms and formulas."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    LazyColumn(Modifier.heightIn(max = 420.dp)) {
+                        items(t.phrases) { p ->
+                            Row(Modifier.fillMaxWidth().clickable { c.play(rec, p.startMs) }.padding(vertical = 4.dp)) {
+                                Text(clock(p.startMs), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(56.dp))
+                                Text(p.text, modifier = Modifier.weight(1f))
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(tr("Закрыть", "Close")) } },
+        dismissButton = {
+            if (t != null && t.phrases.isNotEmpty()) TextButton(onClick = { c.copyTranscript(context, rec) }) { Text(tr("Копировать", "Copy")) }
+        },
+    )
+}
+
+/** Downloaded speech models, with the space they take back on deleting. */
+@Composable
+private fun SpeechModels() {
+    val context = LocalContext.current
+    val installed = Speech.version.let { Speech.Model.entries.filter { Speech.installed(context, it) } }
+    if (installed.isEmpty()) return
+    HorizontalDivider()
+    for (m in installed) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                tr("Модель речи: ${m.title} (${m.mb} МБ)", "Speech model: ${m.title} (${m.mb} MB)"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(enabled = Speech.task?.model != m, onClick = { Speech.deleteModel(context, m) }) { Text(tr("Удалить", "Delete")) }
+        }
+    }
 }

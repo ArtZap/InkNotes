@@ -224,6 +224,8 @@ fun EditorScreen(
         }
         controller.uiRequest = null
     }
+    // Transcripts read again when one was made or changed, or the recordings changed.
+    LaunchedEffect(dev.inknotes.speech.Speech.version, controller.notebook.recordings) { runCatching { controller.refreshTranscripts() } }
     androidx.compose.runtime.LaunchedEffect(StudyTimer.messageId) {
         if (StudyTimer.messageId > 0) StudyTimer.message?.let(controller::showStatus)
     }

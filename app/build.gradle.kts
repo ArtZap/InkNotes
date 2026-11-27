@@ -30,8 +30,8 @@ android {
         applicationId = "dev.inknotes"
         minSdk = 29
         targetSdk = 36
-        versionCode = 67
-        versionName = "0.88"
+        versionCode = 68
+        versionName = "0.89"
         // The device tests in a set language (dev.inknotes.InkTestRunner).
         testInstrumentationRunner = "dev.inknotes.InkTestRunner"
         buildConfigField("String", "GOOGLE_CLIENT_ID", "\"${googleProp("clientId")}\"")
@@ -55,6 +55,10 @@ android {
         resources {
             // Kotlin coroutines' debugger hook: nothing for an app on a phone.
             excludes += "DebugProbesKt.bin"
+        }
+        jniLibs {
+            // Speech recognition (Vosk) for 32-bit x86: no such tablet or phone left; ~7 MB.
+            excludes += listOf("lib/x86/libvosk.so", "lib/x86/libjnidispatch.so")
         }
     }
 
@@ -132,6 +136,11 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     // WebDAV sync (Yandex Disk, Nextcloud): PROPFIND and MKCOL, which HttpURLConnection lacks.
     implementation(libs.okhttp)
+    // Lecture transcripts on the device. Only the engine is in the app: the speech model
+    // (40–45 MB) is downloaded when the user first asks for a transcript. The AARs without
+    // their POM dependencies: Vosk's POM asks for the desktop JNA jar.
+    implementation("net.java.dev.jna:jna:5.13.0@aar")
+    implementation("com.alphacephei:vosk-android:0.3.47@aar")
 
     testImplementation(libs.junit)
     // Android's org.json is only a stub in unit tests: the real one.

@@ -835,6 +835,7 @@ class EditorController(
 
     fun deleteRecording(rec: dev.inknotes.data.Recording) {
         if (playing == rec) stopPlaying()
+        if (dev.inknotes.speech.Speech.task?.let { it.nbId == notebook.id && it.file == rec.file } == true) dev.inknotes.speech.Speech.cancel()
         notebook = repo.deleteRecording(notebook, rec)
         view?.refresh()
     }
@@ -847,7 +848,43 @@ class EditorController(
         val rec = notebook.recordings.firstOrNull { it.file == mark.file } ?: return false
         // A little before the writing began: what was being said then.
         play(rec, (mark.atMs - LISTEN_LEAD_MS).coerceAtLeast(0))
+        // With a transcript: what was said while it was written, in words.
+        transcripts[rec.file]?.phraseAt(mark.atMs)?.let { showStatus("«${it.text}»") }
         return true
+    }
+
+    // ------------------------------------------------------------- transcripts
+
+    /** Transcripts of this notebook's recordings, by file ([refreshTranscripts]). */
+    var transcripts by mutableStateOf<Map<String, dev.inknotes.speech.Transcript>>(emptyMap())
+        private set
+
+    /** Reads the transcripts again (after one was made or changed). */
+    suspend fun refreshTranscripts() {
+        val recs = notebook.recordings.map { it.file }.toSet()
+        if (recs.isEmpty()) {
+            transcripts = emptyMap()
+            return
+        }
+        val id = notebook.id
+        transcripts = repo.io { dev.inknotes.speech.Speech.transcripts(this, id) }.filterKeys { it in recs }
+    }
+
+    /** Turns recording [rec] into text with the [model] (downloaded first if need be). */
+    fun transcribe(context: Context, rec: dev.inknotes.data.Recording, model: dev.inknotes.speech.Speech.Model) {
+        val file = repo.recordingFile(notebook, rec.file) ?: return showStatus(tr("Файл записи не найден", "Recording file not found"))
+        val started = dev.inknotes.speech.Speech.start(context, repo, notebook.id, file, rec.file, rec.durationMs, model) { why ->
+            showStatus(why ?: tr("Расшифровка готова: «Записи звука → Текст»", "The transcript is ready: “Sound recordings → Text”"))
+        }
+        if (!started) showStatus(tr("Уже идёт расшифровка другой записи", "Another recording is being transcribed"))
+    }
+
+    /** The transcript of [rec] as plain text, to the clipboard. */
+    fun copyTranscript(context: Context, rec: dev.inknotes.data.Recording) {
+        val text = transcripts[rec.file]?.text?.takeIf { it.isNotBlank() } ?: return
+        val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        cm.setPrimaryClip(android.content.ClipData.newPlainText(tr("Текст записи", "Recording text"), text))
+        showStatus(tr("Текст скопирован", "Text copied"))
     }
 
     override fun soundMarks(index: Int): List<android.graphics.RectF> {

@@ -17,11 +17,11 @@ export FORMULA_EXPORT=${FORMULA_EXPORT:-/tmp/formulas.tsv}
 rm -rf "$OUT"
 mkdir -p "$OUT"
 # MathNotes needs ML Kit (Android): left out; LayoutTuner is a tool, not a test.
-"$KOTLINC/bin/kotlinc" $(ls $M/math/*.kt | grep -v MathNotes) $M/data/Lang.kt $M/data/Cards.kt $M/data/WebDav.kt $M/data/SyncPlan.kt $M/editor/Tidy.kt $M/editor/Trim.kt $M/search/Spelling.kt \
-  $(ls $T/*.kt | grep -v LayoutTuner) app/src/test/java/dev/inknotes/data/CardsTest.kt app/src/test/java/dev/inknotes/data/WebDavTest.kt app/src/test/java/dev/inknotes/data/SyncPlanTest.kt app/src/test/java/dev/inknotes/editor/TrimTest.kt app/src/sharedTest/java/dev/inknotes/math/*.kt \
+"$KOTLINC/bin/kotlinc" $(ls $M/math/*.kt | grep -v MathNotes) $M/data/Lang.kt $M/data/Cards.kt $M/data/WebDav.kt $M/data/SyncPlan.kt $M/editor/Tidy.kt $M/editor/Trim.kt $M/search/Spelling.kt $M/speech/Transcripts.kt \
+  $(ls $T/*.kt | grep -v LayoutTuner) app/src/test/java/dev/inknotes/data/CardsTest.kt app/src/test/java/dev/inknotes/data/WebDavTest.kt app/src/test/java/dev/inknotes/data/SyncPlanTest.kt app/src/test/java/dev/inknotes/editor/TrimTest.kt app/src/test/java/dev/inknotes/speech/TranscriptsTest.kt app/src/sharedTest/java/dev/inknotes/math/*.kt \
   tools/jvm/junit/Shim.kt tools/jvm/junit/Toggle.kt -d "$OUT" > "$OUT.log" 2>&1 || true
 if grep -q "error:" "$OUT.log"; then grep -E "error" "$OUT.log" | head -20; echo "compile failed: nothing run"; exit 1; fi
-if [ $# -gt 0 ]; then CLASSES="$*"; else CLASSES="$(grep -ho "^class [A-Za-z0-9]*Test\b" $T/*.kt | awk '{print $2}' | sort -u) data.CardsTest data.WebDavTest data.SyncPlanTest editor.TrimTest"; fi
+if [ $# -gt 0 ]; then CLASSES="$*"; else CLASSES="$(grep -ho "^class [A-Za-z0-9]*Test\b" $T/*.kt | awk '{print $2}' | sort -u) data.CardsTest data.WebDavTest data.SyncPlanTest editor.TrimTest speech.TranscriptsTest"; fi
 cd app
 java -Dfile.encoding=UTF-8 -Dstdout.encoding=UTF-8 -cp "$OUT:$KOTLINC/lib/kotlin-stdlib.jar:src/test/resources" org.junit.Runner \
   $(for t in $CLASSES; do case $t in *.*) echo dev.inknotes.$t ;; *) echo dev.inknotes.math.$t ;; esac; done) 2>&1 | grep -v JAVA_TOOL

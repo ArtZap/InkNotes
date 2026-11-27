@@ -36,6 +36,14 @@
 -keep class * implements androidx.startup.Initializer { *; }
 -keep class * extends android.content.ContentProvider { <init>(); }
 
+# Vosk speech recognition calls its native library through JNA, which finds classes, fields
+# and callbacks by name; JNA refers to desktop classes (AWT) never used on Android.
+-keep class com.sun.jna.** { *; }
+-keepclassmembers class * extends com.sun.jna.** { public *; }
+-keep class org.vosk.** { *; }
+-dontwarn java.awt.**
+-dontwarn com.sun.jna.**
+
 # Line numbers in crash traces (with mapping.txt).
 -keepattributes SourceFile,LineNumberTable
 -renamesourcefileattribute SourceFile

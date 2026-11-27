@@ -1915,7 +1915,7 @@ class NotebookRepository(filesDir: File) {
      * by page against the new pages, so old entries are redone, not trusted.
      */
     private fun keepDeviceFiles(staging: File, old: File) {
-        for (name in listOf(CARDS, TEXT_INDEX)) {
+        for (name in listOf(CARDS, TEXT_INDEX, SPEECH)) {
             val from = File(old, name)
             val to = File(staging, name)
             if (from.isFile && !to.exists()) runCatching { from.copyTo(to) }
@@ -1940,6 +1940,21 @@ class NotebookRepository(filesDir: File) {
             val d = dir(nbId)
             if (File(d, META).isFile) runCatching { atomicWrite(File(d, CARDS)) { it.write(text.toByteArray()) } }
         }
+    }
+
+    // ------------------------------------------------- lecture transcripts
+
+    /** The notebook's transcripts ([dev.inknotes.speech.Transcripts.decode]), or null if none yet. */
+    fun loadSpeech(nbId: String): String? = onIo {
+        if (!UUID_RE.matches(nbId)) return@onIo null
+        File(dir(nbId), SPEECH).takeIf { it.isFile && it.length() <= MAX_SPEECH_BYTES }?.let { runCatching { it.readText() }.getOrNull() }
+    }
+
+    /** Written at once (from the transcribing thread); only while the notebook exists. */
+    fun saveSpeech(nbId: String, text: String): Boolean = onIo {
+        if (!UUID_RE.matches(nbId)) return@onIo false
+        val d = dir(nbId)
+        File(d, META).isFile && runCatching { atomicWrite(File(d, SPEECH)) { it.write(text.toByteArray()) } }.isSuccess
     }
 
     // ------------------------------------------------- handwriting text index
@@ -2257,6 +2272,9 @@ class NotebookRepository(filesDir: File) {
         const val DELETED_AT = "deleted-at"
         const val TEXT_INDEX = "text.json"
         const val CARDS = "cards.tsv"
+        /** Lecture transcripts ([dev.inknotes.speech.Transcripts]): this device only, like the text index. */
+        const val SPEECH = "speech.tsv"
+        const val MAX_SPEECH_BYTES = 16L * 1024 * 1024
         const val MAX_TOC = 2000
         const val MAX_LINKS = 5000
 
