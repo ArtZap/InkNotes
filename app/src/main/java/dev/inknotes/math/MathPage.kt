@@ -934,30 +934,11 @@ object MathPage {
             }
             val (lv, lt) = value(left, unitsAfter = false)
             var (rv, rt) = value(right, unitsAfter = true)
-            // The unit close after the number (6,24 см, 13,33 кН/см² at a third of a line): the
-            // longest start that is a bare number, with a shorter rest after a clear gap.
-            if (rv == null && right.size > 1) {
-                val sorted = right.sortedBy { it.left }
-                val cuts = ArrayList<Int>()
-                var reach = sorted[0].right
-                for (k in 1 until sorted.size) {
-                    if (sorted[k].left - reach > UNIT_GAP * eq.h) cuts += k
-                    reach = max(reach, sorted[k].right)
-                }
-                val end = sorted.maxOf { it.right }
-                for (k in cuts.asReversed()) {
-                    val head = sorted.take(k)
-                    val headRight = head.maxOf { it.right }
-                    if (end - sorted[k].left >= headRight - sorted[0].left) continue
-                    val e = runCatching { read(head, eq.h, eq.cy, reader, Prefer.NUMBERS) }.getOrNull()
-                    val bare = e is Expr.Num || (e is Expr.Mul && e.factors.size == 2 && e.factors.all { it is Expr.Num } && (e.factors[0] as Expr.Num).v == -1.0)
-                    if (!bare) continue
-                    val (v, t) = value(head, unitsAfter = false)
-                    if (v != null) {
-                        rv = v
-                        rt = t
-                        break
-                    }
+            if (rv == null) numberBeforeUnit(right, eq.h, eq.cy, reader)?.let { (_, head) ->
+                val (v, t) = value(head, unitsAfter = false)
+                if (v != null) {
+                    rv = v
+                    rt = t
                 }
             }
             // Units written as a fraction (−8,2 кН/см²) leave the side unreadable: the number
@@ -980,6 +961,33 @@ object MathPage {
             out += Equality(eq.left, eq.cy, lv, rv, lt, rt, left, right, eq.h, eq.cy)
         }
         return out
+    }
+
+    /**
+     * A number with its unit close after it (6,24 см, 13,33 кН/см², a third of a line apart):
+     * the longest start of [side] that reads as a bare number, with a shorter rest after a
+     * clear gap; null when there is none. The number and its strokes. Only for reading the
+     * written results ([equalities]): on the page it made answers of J_z = 55680 см⁴ lines.
+     */
+    internal fun numberBeforeUnit(side: List<Ink>, h: Float, cy: Float, reader: RunReader): Pair<Expr, List<Ink>>? {
+        if (Tune.unitClose <= 0f || side.size < 2) return null
+        val sorted = side.sortedBy { it.left }
+        val cuts = ArrayList<Int>()
+        var reach = sorted[0].right
+        for (k in 1 until sorted.size) {
+            if (sorted[k].left - reach > UNIT_GAP * h) cuts += k
+            reach = max(reach, sorted[k].right)
+        }
+        val end = sorted.maxOf { it.right }
+        for (k in cuts.asReversed()) {
+            val head = sorted.take(k)
+            val headRight = head.maxOf { it.right }
+            if (end - sorted[k].left >= headRight - sorted[0].left) continue
+            val e = runCatching { read(head, h, cy, reader, Prefer.NUMBERS) }.getOrNull() ?: continue
+            val bare = e is Expr.Num || (e is Expr.Mul && e.factors.size == 2 && e.factors.all { it is Expr.Num } && (e.factors[0] as Expr.Num).v == -1.0)
+            if (bare) return e to head
+        }
+        return null
     }
 
     /** A small tick under the foot of the digits around it, with digits on both sides: a decimal comma. */
@@ -1562,7 +1570,9 @@ object MathPage {
         if (s.width !in MIN_EQ_WIDTH..MAX_EQ_WIDTH || s.width < 1.25f * max(s.height, 0.5f)) return false
         val dy = s.ys.last() - s.ys[0]
         val dx = s.xs.last() - s.xs[0]
-        return (abs(dy) < 0.4f * abs(dx) && MathLayout.straight(s, 0.3f) && !wavy(s)).also {
+        // A tiny dash (the owner's "=" of 3–5 px) is a couple of points: its slope means little.
+        val slope = if (Tune.tinyEquals > 0f && s.width < 6f) 0.55f else 0.4f
+        return (abs(dy) < slope * abs(dx) && MathLayout.straight(s, 0.3f) && !wavy(s)).also {
             if (!it && s.width < 12f) trace?.invoke("  not a dash: ${s.left.toInt()}..${s.right.toInt()},${s.cy} h=${s.height} dy=$dy dx=$dx")
         }
     }
@@ -1612,7 +1622,7 @@ object MathPage {
 
     /** The two lines of a one-stroke "=", or null. Flat, unlike z and 2. */
     private fun zEquals(s: Ink): Pair<Ink, Ink>? {
-        if (s.width !in MIN_EQ_WIDTH..MAX_EQ_WIDTH || s.height > 0.55f * s.width || s.height < 0.12f * s.width || s.xs.size < 6 || wavy(s)) return null
+        if (s.width !in 3.0f..MAX_EQ_WIDTH || s.height > 0.55f * s.width || s.height < 0.12f * s.width || s.xs.size < 6 || wavy(s)) return null
         val band = 0.3f * s.height
         val top = s.xs.indices.filter { s.ys[it] < s.top + band }
         val bottom = s.xs.indices.filter { s.ys[it] > s.bottom - band }
@@ -1858,7 +1868,7 @@ object MathPage {
     private val GRAPH_LETTERS = setOf("y", "z")
 
     private const val MAX_STROKE = 600f
-    private const val MIN_EQ_WIDTH = 3.0f
+    private val MIN_EQ_WIDTH get() = if (Tune.tinyEquals > 0f) 2.5f else 3.0f
     private const val MAX_EQ_WIDTH = 160f
     private const val MIN_H = 8f
 

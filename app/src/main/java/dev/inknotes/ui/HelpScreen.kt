@@ -45,6 +45,12 @@ private class Topic(val title: String, val entries: List<Pair<String, String>>)
 
 private val TOPICS = listOf(
     Topic(
+        tr("Новое в 0.87", "What's new in 0.87"),
+        listOf(
+            tr("Маленький «=»", "A tiny \"=\"") to tr("«=» из совсем коротких чёрточек (в 3–5 точек, чуть наклонных) теперь находится: значения вроде W = 49,08 после него читаются и используются ниже.", "An \"=\" of very short dashes (3–5 points, a little slanted) is now found: values such as W = 49.08 after it are read and used below."),
+        ),
+    ),
+    Topic(
         tr("Новое в 0.86", "What's new in 0.86"),
         listOf(
             tr("Неравенства", "Inequalities") to tr("Точка, где выражение уходит в бесконечность без смены знака, выкалывается: 1/(x − 1)² > 0 даёт x ∈ (−∞; 1) ∪ (1; +∞), а 1/(x − 1)² > 1 — x ∈ (0; 1) ∪ (1; 2) (раньше — «нет решений»).", "A point where the expression goes to infinity without changing sign is left out: 1/(x − 1)² > 0 gives x ∈ (−∞; 1) ∪ (1; +∞), and 1/(x − 1)² > 1 gives x ∈ (0; 1) ∪ (1; 2) (it was \"no solutions\")."),

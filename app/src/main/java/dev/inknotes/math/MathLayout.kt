@@ -1317,6 +1317,10 @@ object Tune {
     @JvmField var radicalTurns = 1f
     /** A comma seen under a run puts first the reading that has it (MathPage.holeTexts). */
     @JvmField var commaSeen = 1f
+    /** A result with its unit close after it: the number before the unit (6,24 см). */
+    @JvmField var unitClose = 1f
+    /** "=" of tiny dashes (3 px, a little slanted) is still an "=". */
+    @JvmField var tinyEquals = 1f
     /** Strokes whose middles are on the two sides of a long fraction bar are not one symbol. */
     @JvmField var barBetween = 1f
     /** A flat stroke going up and down three times or more is no minus. */
